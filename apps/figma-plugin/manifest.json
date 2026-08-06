@@ -1,0 +1,15 @@
+{
+  "name": "Content Library",
+  "id": "1667158876451857073",
+  "api": "1.0.0",
+  "main": "dist/code.js",
+  "ui": "dist/index.html",
+  "editorType": ["figma"],
+  "documentAccess": "dynamic-page",
+  "enablePrivatePluginApi": true,
+  "networkAccess": {
+    "allowedDomains": ["https://library.example.com"],
+    "devAllowedDomains": ["http://localhost:3000"],
+    "reasoning": "Authenticate approved users and upload selected frames to the private content library."
+  }
+}

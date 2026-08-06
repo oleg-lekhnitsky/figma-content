@@ -1,0 +1,30 @@
+{
+  "name": "@content-library/web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nuxt build --dotenv ../../.env",
+    "dev": "nuxt dev --dotenv ../../.env",
+    "typecheck": "nuxt typecheck --dotenv ../../.env",
+    "lint": "eslint .",
+    "test": "vitest run --passWithNoTests",
+    "postinstall": "nuxt prepare"
+  },
+  "dependencies": {
+    "@content-library/shared": "*",
+    "@supabase/supabase-js": "^2.57.4",
+    "@nuxt/image": "^2.1.0",
+    "nuxt": "^4.5.2",
+    "sharp": "^0.35.3",
+    "vue": "^3.5.40",
+    "vue-router": "^5.2.0",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@nuxt/eslint": "^1.9.0",
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.8",
+    "vue-tsc": "^3.3.9"
+  }
+}

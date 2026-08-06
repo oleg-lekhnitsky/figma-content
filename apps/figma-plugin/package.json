@@ -1,0 +1,24 @@
+{
+  "name": "@content-library/figma-plugin",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "scripts": {
+    "build": "vite build && esbuild src/code.ts --bundle --format=iife --target=es2020 --outfile=dist/code.js",
+    "dev": "vite build --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@content-library/shared": "*",
+    "vue": "^3.5.40"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.117.0",
+    "@vitejs/plugin-vue": "^6.0.1",
+    "esbuild": "^0.28.1",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.0",
+    "vite-plugin-singlefile": "^2.3.0",
+    "vue-tsc": "^3.1.5"
+  }
+}
