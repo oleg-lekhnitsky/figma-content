@@ -284,6 +284,11 @@ h1 {
   margin: var(--space) 0
 }
 
+.primary-actions > :first-child,
+.action-row > :first-child {
+  margin-left: -2px
+}
+
 .button {
   display: inline-flex;
   align-items: center;
