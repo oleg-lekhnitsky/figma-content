@@ -32,7 +32,7 @@ export default defineEventHandler(async (event) => {
   const extension = file.type === 'image/png' ? 'png' : 'jpg'
   const basePath = `${session.user.organization_id}/${id}/versions/${version}`
   const imagePath = `${basePath}/original.${extension}`; const thumbnailPath = `${basePath}/thumbnail.webp`
-  const thumbnail = await image.clone().resize({ width: 960, height: 720, fit: 'inside', withoutEnlargement: true }).webp({ quality: 82 }).toBuffer()
+  const thumbnail = await image.clone().resize({ width: 1920, height: 1440, fit: 'inside', withoutEnlargement: true }).webp({ quality: 100 }).toBuffer()
   const bucket = useSupabaseAdmin().storage.from('assets')
   const originalUpload = await bucket.upload(imagePath, file.data, { contentType: file.type, upsert: false })
   if (originalUpload.error) throw databaseError('upload replacement', originalUpload.error)
