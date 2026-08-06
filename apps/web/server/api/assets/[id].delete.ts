@@ -11,8 +11,8 @@ export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   if (!id) throw appError(400, 'INVALID_ASSET_ID', 'Asset ID is required.')
   const asset = await requireAsset(id, session.user.organization_id)
-  const { data: versions } = await useSupabaseAdmin().from('asset_versions').select('image_path,thumbnail_path').eq('asset_id', id).eq('organization_id', session.user.organization_id)
-  const paths = [...new Set([asset.image_path, asset.thumbnail_path, ...(versions ?? []).flatMap((row: { image_path: string, thumbnail_path: string | null }) => [row.image_path, row.thumbnail_path])].filter(Boolean))] as string[]
+  const { data: versions } = await useSupabaseAdmin().from('asset_versions').select('image_path,thumbnail_path,thumbnail_2x_path').eq('asset_id', id).eq('organization_id', session.user.organization_id)
+  const paths = [...new Set([asset.image_path, asset.thumbnail_path, asset.thumbnail_2x_path, ...(versions ?? []).flatMap((row: { image_path: string, thumbnail_path: string | null, thumbnail_2x_path: string | null }) => [row.image_path, row.thumbnail_path, row.thumbnail_2x_path])].filter(Boolean))] as string[]
   const { error } = await useSupabaseAdmin().from('assets').delete().eq('id', id).eq('organization_id', session.user.organization_id)
   if (error) throw databaseError('delete asset', error)
   if (paths.length) await useSupabaseAdmin().storage.from('assets').remove(paths)

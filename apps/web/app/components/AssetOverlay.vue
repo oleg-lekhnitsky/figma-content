@@ -155,7 +155,7 @@ v-if="role === 'admin'"
   box-shadow: 0 24px 80px rgb(0 0 0/.18);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  overflow: hidden;
+  overflow: visible;
   overscroll-behavior: contain;
   transform: translateY(0);
   transition-property: transform, opacity;
@@ -228,14 +228,14 @@ v-if="role === 'admin'"
   grid-template-columns: minmax(0, 1.7fr) minmax(20rem, .65fr);
   gap: calc(var(--space)*2);
   padding: 0 var(--space) var(--space);
-  overflow: hidden
+  overflow: visible
 }
 
 .asset-visual {
   position: relative;
   min-width: 0;
   min-height: 0;
-  background: var(--color-surface);
+  background: var(--bg);
   border-radius: var(--radius);
   overflow: hidden
 }
@@ -254,7 +254,8 @@ aside {
   padding-right: var(--space);
   padding-bottom: calc(var(--space)*2);
   overflow-y: auto;
-  overscroll-behavior: contain
+  overscroll-behavior: contain;
+  overflow: visible;
 }
 
 .asset-status {
@@ -278,7 +279,7 @@ h1 {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin: var(--space) 0
+  margin: var(--space) 0;
 }
 
 .primary-actions > :first-child,

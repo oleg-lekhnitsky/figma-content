@@ -54,12 +54,13 @@ export const publicAssetsForCollection = async (collection: { id: string; organi
   }
   if (!ids.length) return []
   const { data, error } = await useSupabaseAdmin().from('assets')
-    .select('id,title,thumbnail_path,image_path,width,height,created_at,projects(name),asset_tags(tags(name))')
+    .select('id,title,description,thumbnail_path,thumbnail_2x_path,image_path,width,height,created_at,projects(name),asset_tags(tags(name))')
     .eq('organization_id', collection.organization_id).eq('status', 'approved').in('id', ids)
     .order('created_at', { ascending: false })
   if (error) throw databaseError('load public collection assets', error)
-  return await Promise.all(data.map(async (asset: { thumbnail_path: string | null; image_path: string; [key: string]: unknown }) => ({
+  return await Promise.all(data.map(async (asset: { thumbnail_path: string | null; thumbnail_2x_path: string | null; image_path: string; [key: string]: unknown }) => ({
     ...asset,
-    previewUrl: await signedAssetUrl(asset.thumbnail_path ?? asset.image_path, 3600)
+    previewUrl: await signedAssetUrl(asset.thumbnail_path ?? asset.image_path, 3600),
+    preview2xUrl: asset.thumbnail_2x_path ? await signedAssetUrl(asset.thumbnail_2x_path, 3600) : null
   })))
 }

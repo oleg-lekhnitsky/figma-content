@@ -34,7 +34,11 @@ export default defineEventHandler(async (event) => {
   const basePath = `${session.user.organization_id}/${assetId}`
   const imagePath = `${basePath}/original.${extension}`
   const thumbnailPath = `${basePath}/thumbnail.webp`
-  const thumbnail = await image.clone().resize({ width: 1920, height: 1440, fit: 'inside', withoutEnlargement: true }).webp({ quality: 100 }).toBuffer()
+  const thumbnail2xPath = `${basePath}/thumbnail@2x.webp`
+  const [thumbnail, thumbnail2x] = await Promise.all([
+    image.clone().resize({ width: 640, withoutEnlargement: true }).webp({ quality: 100 }).toBuffer(),
+    image.clone().resize({ width: 1280, withoutEnlargement: true }).webp({ quality: 100 }).toBuffer()
+  ])
   const bucket = useSupabaseAdmin().storage.from('assets')
   const originalUpload = await bucket.upload(imagePath, file.data, { contentType: file.type, upsert: false })
   if (originalUpload.error) throw databaseError('upload original asset', originalUpload.error)
@@ -43,25 +47,30 @@ export default defineEventHandler(async (event) => {
     await bucket.remove([imagePath])
     throw databaseError('upload asset thumbnail', thumbnailUpload.error)
   }
+  const thumbnail2xUpload = await bucket.upload(thumbnail2xPath, thumbnail2x, { contentType: 'image/webp', upsert: false })
+  if (thumbnail2xUpload.error) {
+    await bucket.remove([imagePath, thumbnailPath])
+    throw databaseError('upload retina asset thumbnail', thumbnail2xUpload.error)
+  }
 
   const db = useSupabaseAdmin()
   const status = session.user.role === 'contributor' ? 'draft' : metadata.status
   const { data: asset, error } = await db.from('assets').insert({
     id: assetId, organization_id: session.user.organization_id, title: metadata.title,
     description: metadata.description || null, uploaded_by: session.user.id, image_path: imagePath,
-    thumbnail_path: thumbnailPath, mime_type: file.type, file_size: file.data.byteLength,
+    thumbnail_path: thumbnailPath, thumbnail_2x_path: thumbnail2xPath, mime_type: file.type, file_size: file.data.byteLength,
     width: info.width, height: info.height, image_format: extension, figma_file_key: metadata.figmaFileKey,
     figma_node_id: metadata.figmaNodeId, figma_node_name: metadata.figmaNodeName, figma_url: metadata.figmaUrl,
     project_id: metadata.projectId, campaign_id: metadata.campaignId, language: metadata.language,
     content_type: metadata.contentType, status
   }).select('*').single()
   if (error) {
-    await bucket.remove([imagePath, thumbnailPath])
+    await bucket.remove([imagePath, thumbnailPath, thumbnail2xPath])
     throw databaseError('create asset', error)
   }
   await db.from('asset_versions').insert({
     organization_id: session.user.organization_id, asset_id: assetId, version: 1, image_path: imagePath,
-    thumbnail_path: thumbnailPath, mime_type: file.type, file_size: file.data.byteLength,
+    thumbnail_path: thumbnailPath, thumbnail_2x_path: thumbnail2xPath, mime_type: file.type, file_size: file.data.byteLength,
     width: info.width, height: info.height, metadata, created_by: session.user.id
   })
   for (const name of metadata.tags) {

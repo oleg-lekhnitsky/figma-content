@@ -12,6 +12,10 @@ export interface AllowedUserRow {
   created_at: string
   updated_at: string
   last_login_at: string | null
+  password_hash: string | null
+  must_change_password: boolean
+  failed_login_count: number
+  locked_until: string | null
 }
 
 export interface Database {

@@ -43,11 +43,15 @@ export const assetListQuerySchema = z.object({
   search: z.string().trim().max(200).default(''),
   status: assetStatusSchema.optional(),
   projectId: z.uuid().optional(),
+  dateFrom: isoDateSchema.optional(),
+  dateTo: isoDateSchema.optional(),
   language: z.string().trim().max(35).optional(),
   contentType: z.string().trim().max(80).optional(),
   sort: z.enum(['newest', 'oldest', 'updated', 'title', 'dimensions', 'submitter']).default('newest'),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(60).default(24)
+}).refine(value => !value.dateFrom || !value.dateTo || value.dateFrom <= value.dateTo, {
+  message: 'The start date must be before the end date.', path: ['dateTo']
 })
 
 export const assetUploadFieldsSchema = z.object({

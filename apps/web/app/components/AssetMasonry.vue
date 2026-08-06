@@ -4,7 +4,9 @@ import type { RouteLocationRaw } from 'vue-router'
 interface AssetMasonryItem {
   id: string
   title: string
+  description?: string | null
   previewUrl: string
+  preview2xUrl?: string | null
   width: number
   height: number
   status?: string
@@ -43,12 +45,26 @@ const measureCards = () => {
     root.classList.add('is-masonry')
   })
 }
+const syncLoadedImages = () => {
+  const root = masonry.value
+  if (!root) return
+  let changed = false
+  for (const image of root.querySelectorAll<HTMLImageElement>('.preview img[data-asset-id]')) {
+    const id = image.dataset.assetId
+    if (id && image.complete && image.naturalWidth > 0 && !loadedImages.has(id)) {
+      loadedImages.add(id)
+      changed = true
+    }
+  }
+  if (changed) nextTick(measureCards)
+}
 const observeCards = () => {
   resizeObserver?.disconnect()
   if (!masonry.value) return
   resizeObserver = new ResizeObserver(measureCards)
   resizeObserver.observe(masonry.value)
   for (const card of masonry.value.querySelectorAll('.asset-card')) resizeObserver.observe(card)
+  syncLoadedImages()
   measureCards()
 }
 const markImageLoaded = (id: string) => {
@@ -75,18 +91,18 @@ onBeforeUnmount(() => {
     <article v-for="(asset, index) in assets" :key="asset.id" class="asset-card" :style="{ '--card-stagger': cardStagger(index) }">
       <div class="preview" :class="{ 'is-loading': !loadedImages.has(asset.id) }" :style="{ aspectRatio: `${asset.width} / ${asset.height}` }">
         <NuxtLink v-if="interactive" class="preview-link" :to="assetLink(asset.id)" :aria-label="`View ${asset.title}`">
-          <img :class="{ 'is-loaded': loadedImages.has(asset.id) }" :src="asset.previewUrl" :alt="`Preview of ${asset.title}`" loading="lazy" @load="markImageLoaded(asset.id)">
+          <img :class="{ 'is-loaded': loadedImages.has(asset.id) }" :data-asset-id="asset.id" :src="asset.previewUrl" :srcset="asset.preview2xUrl ? `${asset.previewUrl} 1x, ${asset.preview2xUrl} 2x` : undefined" :width="asset.width" :height="asset.height" :alt="`Preview of ${asset.title}`" :loading="index < 6 ? 'eager' : 'lazy'" :fetchpriority="index < 2 ? 'high' : 'auto'" decoding="async" @load="markImageLoaded(asset.id)">
         </NuxtLink>
-        <img v-else :class="{ 'is-loaded': loadedImages.has(asset.id) }" :src="asset.previewUrl" :alt="asset.title" loading="lazy" @load="markImageLoaded(asset.id)">
+        <img v-else :class="{ 'is-loaded': loadedImages.has(asset.id) }" :data-asset-id="asset.id" :src="asset.previewUrl" :srcset="asset.preview2xUrl ? `${asset.previewUrl} 1x, ${asset.preview2xUrl} 2x` : undefined" :width="asset.width" :height="asset.height" :alt="asset.title" :loading="index < 6 ? 'eager' : 'lazy'" :fetchpriority="index < 2 ? 'high' : 'auto'" decoding="async" @load="markImageLoaded(asset.id)">
         <a v-if="interactive && asset.figma_url" class="figma-button" :href="asset.figma_url" target="_blank" rel="noopener noreferrer">Open in Figma</a>
       </div>
       <div class="card-body">
         <div>
           <h2><NuxtLink v-if="interactive" :to="assetLink(asset.id)">{{ asset.title }}</NuxtLink><template v-else>{{ asset.title }}</template></h2>
-          <p>{{ projectAndTags(asset) }}</p>
+          <p v-if="interactive">{{ projectAndTags(asset) }}</p>
+          <p v-else-if="asset.description">{{ asset.description }}</p>
         </div>
         <span v-if="interactive" class="card-meta card-status">{{ asset.status }}</span>
-        <time v-else-if="asset.created_at" class="card-meta" :datetime="asset.created_at">{{ new Date(asset.created_at).toLocaleDateString() }}</time>
       </div>
     </article>
   </section>
@@ -97,7 +113,7 @@ onBeforeUnmount(() => {
 .asset-card{min-width:0;padding-bottom:calc(var(--space)*2);color:inherit;background:transparent;opacity:1;transform:translateY(0);transition-property:opacity,transform;transition-duration:.18s,.22s;transition-delay:var(--card-stagger,0ms);transition-timing-function:ease-out,cubic-bezier(.16,1.35,.3,1);animation:card-fade-in .42s cubic-bezier(.16,1.35,.3,1) backwards;animation-delay:var(--card-stagger,0ms)}.asset-masonry.is-masonry .asset-card{grid-row-end:span var(--card-rows)}
 .preview{position:relative;overflow:hidden;border-radius:var(--radius);background:transparent;clip-path:inset(0 round var(--radius))}.preview.is-loading{background:var(--color-surface)}
 .preview-link{display:block;width:100%;height:100%}.preview-link:hover,.card-body a:hover{opacity:1}
-.preview img{display:block;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .22s ease-out}.preview img.is-loaded{opacity:1}
+.preview img{display:block;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .12s ease-out}.preview img.is-loaded{opacity:1}
 .card-body{display:flex;justify-content:space-between;align-items:flex-start;gap:var(--space);padding-top:8px}.card-body h2,.card-body p{margin:0;font:inherit}.card-body a{text-decoration:none}.card-body p,.card-meta{opacity:.3}.card-meta{white-space:nowrap}.card-status{text-transform:capitalize}
 .figma-button{position:absolute;z-index:2;left:50%;bottom:10px;min-height:32px;display:inline-flex;align-items:center;justify-content:center;padding:0 13px;border-radius:999px;color:#000;background:#fff;font-size:12px;text-decoration:none;white-space:nowrap;box-shadow:0 1px 3px rgb(0 0 0/.12);opacity:0;transform:translate(-50%,8px);pointer-events:none;transition-property:opacity,transform,scale;transition-duration:150ms;transition-timing-function:cubic-bezier(.2,0,0,1)}
 .asset-card:hover .figma-button,.asset-card:focus-within .figma-button{opacity:1;transform:translate(-50%,0);pointer-events:auto}.figma-button:hover{opacity:.8}.figma-button:active{scale:.96}.figma-button:focus-visible{outline:2px solid var(--color-accent);outline-offset:2px}

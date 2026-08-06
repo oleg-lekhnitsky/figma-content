@@ -16,11 +16,13 @@ export default defineEventHandler(async (event) => {
   } as const
   const standardSort = q.sort === 'submitter' ? null : ordering[q.sort]
   let query = useSupabaseAdmin().from('assets')
-    .select('id,title,thumbnail_path,image_path,width,height,status,figma_url,created_at,updated_at,language,content_type,projects(name),asset_tags(tags(id,name,slug)),allowed_users!assets_uploaded_by_fkey(figma_handle,avatar_url)', { count: 'exact' })
+    .select('id,title,description,thumbnail_path,thumbnail_2x_path,image_path,width,height,status,figma_url,created_at,updated_at,language,content_type,projects(name),asset_tags(tags(id,name,slug)),allowed_users!assets_uploaded_by_fkey(figma_handle,avatar_url)', { count: 'exact' })
     .eq('organization_id', session.user.organization_id).neq('status', 'archived')
   if (session.user.role === 'viewer') query = query.eq('status', 'approved')
   if (q.status) query = query.eq('status', q.status)
   if (q.projectId) query = query.eq('project_id', q.projectId)
+  if (q.dateFrom) query = query.gte('created_at', q.dateFrom)
+  if (q.dateTo) query = query.lte('created_at', q.dateTo)
   if (q.language) query = query.eq('language', q.language)
   if (q.contentType) query = query.eq('content_type', q.contentType)
   if (q.search) query = query.or(`title.ilike.%${q.search.replace(/[%_,()]/g, '')}%,description.ilike.%${q.search.replace(/[%_,()]/g, '')}%`)
@@ -39,9 +41,10 @@ export default defineEventHandler(async (event) => {
     ? await useSupabaseAdmin().from('allowed_users').select('id,figma_handle,avatar_url').in('id', submitterIds).order('figma_handle')
     : { data: [], error: null }
   if (submittersError) throw databaseError('load asset submitters', submittersError)
-  const assets = await Promise.all(data.map(async (asset: { thumbnail_path: string | null, image_path: string, [key: string]: unknown }) => ({
+  const assets = await Promise.all(data.map(async (asset: { thumbnail_path: string | null, thumbnail_2x_path: string | null, image_path: string, [key: string]: unknown }) => ({
     ...asset,
-    previewUrl: await signedAssetUrl(asset.thumbnail_path ?? asset.image_path)
+    previewUrl: await signedAssetUrl(asset.thumbnail_path ?? asset.image_path),
+    preview2xUrl: asset.thumbnail_2x_path ? await signedAssetUrl(asset.thumbnail_2x_path) : null
   })))
   return { data: { assets, submitters, total: count ?? 0, page: q.page, pageSize: q.pageSize } }
 })

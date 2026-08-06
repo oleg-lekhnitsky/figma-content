@@ -10,7 +10,8 @@ export default defineEventHandler(async (event) => {
       email: session.user.email,
       figmaHandle: session.user.figma_handle,
       avatarUrl: session.user.avatar_url,
-      role: session.user.role
+      role: session.user.role,
+      mustChangePassword: session.user.must_change_password
     }
   } : { authenticated: false } }
 })

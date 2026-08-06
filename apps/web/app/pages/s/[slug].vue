@@ -1,6 +1,6 @@
 <script setup lang="ts">
 const route = useRoute()
-interface PublicAsset { id: string; title: string; previewUrl: string; width: number; height: number; created_at: string; projects: { name: string } | null; asset_tags: Array<{ tags: { name: string } | null }> }
+interface PublicAsset { id: string; title: string; description: string|null; previewUrl: string; width: number; height: number; projects: { name: string } | null; asset_tags: Array<{ tags: { name: string } | null }> }
 interface PublicResponse { data: { collection: { title: string; mode: 'dynamic' | 'static'; expiresAt: string | null; updatedAt: string; organization: { name: string } | null }; assets: PublicAsset[] } }
 const { data, status, error } = await useFetch<PublicResponse>(() => `/api/public/collections/${String(route.params.slug)}`)
 const collection = computed(() => data.value?.data.collection)
