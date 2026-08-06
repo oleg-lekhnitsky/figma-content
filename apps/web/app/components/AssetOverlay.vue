@@ -75,7 +75,7 @@ v-model="description" rows="4"
                 maxlength="5000" /></label>
             <div class="action-row"><button
                 @click="patchAsset({ title, description: description || null })">Save</button><button
-class="secondary"
+class="button-secondary"
                 @click="editing = false">Cancel</button></div>
           </template>
           <template v-else>
@@ -85,7 +85,7 @@ class="secondary"
           <div class="primary-actions"><button :disabled="downloading" @click="download">{{
             downloading ? 'Preparing…' :'Download'
               }}</button><a
-class="button secondary" :href="asset.figma_url" target="_blank"
+class="button button-secondary" :href="asset.figma_url" target="_blank"
               rel="noopener noreferrer">Open in
               Figma</a></div>
           <div v-if="canEdit" class="manage-actions"><button class="text-button" @click="editing = true">Edit
@@ -263,10 +263,7 @@ aside {
 }
 
 h1 {
-  margin: .3em 0;
-  font-size: var(--font-size-h1);
-  letter-spacing: -.055em;
-  line-height: .88
+  margin: .3em 0
 }
 
 .description {
@@ -293,11 +290,6 @@ h1 {
   display: inline-flex;
   align-items: center;
   justify-content: center
-}
-
-.secondary {
-  color: #000;
-  background: var(--color-surface)
 }
 
 .text-button {

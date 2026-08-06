@@ -117,10 +117,10 @@ const revoke = async (collection: Collection) => {
 </script>
 
 <template>
-  <button type="button" class="share-trigger" @click="open">Share</button>
+  <button type="button" class="button-plain share-trigger" @click="open">Share</button>
   <dialog ref="dialog" class="share-dialog" aria-labelledby="share-title" @click.self="close">
     <div class="share-panel">
-      <header><div><p>Public collection</p><h2 id="share-title">Share approved work</h2></div><button type="button" class="close-button" aria-label="Close sharing settings" @click="close"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m5 5 14 14M19 5 5 19" /></svg></button></header>
+      <header><div><p>Public collection</p><h2 id="share-title">Share approved work</h2></div><button type="button" class="button-secondary button-icon close-button" aria-label="Close sharing settings" @click="close"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m5 5 14 14M19 5 5 19" /></svg></button></header>
       <form @submit.prevent="createCollection">
         <label>Collection name<input ref="titleInput" v-model="title" name="title" required maxlength="120"></label>
         <fieldset><legend>Updates</legend><label class="choice"><input v-model="mode" type="radio" value="dynamic" name="mode"><span><strong>Dynamic</strong><small>New approved items matching the filters appear automatically.</small></span></label><label class="choice"><input v-model="mode" type="radio" value="static" name="mode"><span><strong>Static</strong><small>Freeze the current results and update the snapshot manually.</small></span></label></fieldset>
@@ -130,13 +130,72 @@ const revoke = async (collection: Collection) => {
         <button type="submit" :disabled="busy">{{ busy ? 'Creating link…' : 'Create public link' }}</button>
       </form>
       <p class="feedback" role="status" aria-live="polite">{{ message }}</p><p v-if="errorMessage" class="feedback error" role="alert">{{ errorMessage }}</p>
-      <section v-if="collections.length" class="existing" aria-labelledby="existing-title"><h3 id="existing-title">Active links</h3><ul><li v-for="collection in collections" :key="collection.id"><div><strong>{{ collection.title }}</strong><span>{{ collection.mode }}<template v-if="collection.expires_at"> · expires {{ new Date(collection.expires_at).toLocaleDateString() }}</template></span></div><div class="actions"><a :href="collectionUrl(collection.slug)" target="_blank" rel="noopener noreferrer">Open</a><button type="button" @click="copyLink(collection)">Copy link</button><button v-if="collection.mode === 'static'" type="button" :disabled="busy" @click="updateSnapshot(collection)">Update snapshot</button><button type="button" :disabled="busy" @click="revoke(collection)">Disable</button></div></li></ul></section>
+      <section v-if="collections.length" class="existing" aria-labelledby="existing-title"><h3 id="existing-title">Active links</h3><ul><li v-for="collection in collections" :key="collection.id"><div><strong>{{ collection.title }}</strong><span>{{ collection.mode }}<template v-if="collection.expires_at"> · expires {{ new Date(collection.expires_at).toLocaleDateString() }}</template></span></div><div class="actions"><a class="button-secondary" :href="collectionUrl(collection.slug)" target="_blank" rel="noopener noreferrer">Open</a><button class="button-secondary" type="button" @click="copyLink(collection)">Copy link</button><button v-if="collection.mode === 'static'" class="button-secondary" type="button" :disabled="busy" @click="updateSnapshot(collection)">Update snapshot</button><button class="button-secondary" type="button" :disabled="busy" @click="revoke(collection)">Disable</button></div></li></ul></section>
     </div>
   </dialog>
 </template>
 
 <style scoped>
-.share-trigger{min-height:44px;padding:0;border:0;color:inherit;background:transparent;font:inherit;cursor:pointer}.share-trigger:hover{opacity:.55}.share-dialog{width:min(720px,calc(100% - var(--space)*2));max-height:calc(100dvh - var(--space)*2);padding:0;border:0;border-radius:12px;color:var(--color-fg);background:var(--color-bg);box-shadow:0 24px 80px rgb(0 0 0/.2);overscroll-behavior:contain}.share-dialog::backdrop{background:rgb(0 0 0/.45);backdrop-filter:blur(8px)}.share-panel{padding:var(--space)}header{display:flex;justify-content:space-between;gap:var(--space);margin-bottom:clamp(2rem,6vw,5rem)}header p,h2{margin:0}header p{color:var(--color-muted)}h2{font-size:clamp(2.5rem,7vw,5.5rem);letter-spacing:-.055em;line-height:.88}.close-button{width:44px;height:44px;flex:0 0 44px;display:grid;place-items:center;padding:0;color:inherit;background:var(--color-surface)}.close-button svg{width:22px;fill:none;stroke:currentColor;stroke-width:1.7}.close-button:active{scale:.96}form{display:grid;gap:var(--space)}label,legend{font-size:12px;color:var(--color-muted)}input,select{width:100%;box-sizing:border-box;min-height:44px;padding:0 8px;border:0;border-bottom:1px solid var(--color-line);border-radius:0;color:var(--color-fg);background:transparent;font:700 16px/1.15 inherit}fieldset{display:grid;grid-template-columns:1fr 1fr;gap:var(--space);margin:0;padding:0;border:0}legend{grid-column:1/-1;margin-bottom:8px}.choice{min-height:64px;display:flex;align-items:flex-start;gap:10px;color:var(--color-fg);cursor:pointer}.choice input{width:18px;min-height:18px;margin:2px 0}.choice span{display:grid;gap:4px}.choice small{color:var(--color-muted);font-size:12px;font-weight:500;line-height:1.3}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--space)}.form-grid label>span{font-weight:500}.custom-dates{margin-top:calc(var(--space)*-1)}.approval-note,.feedback{min-height:1.2em;margin:0;color:var(--color-muted);font-size:12px}.error{color:#a20f0f}form>button{justify-self:start}.existing{margin-top:clamp(2rem,5vw,4rem)}h3{margin:0 0 10px;font-size:12px;color:var(--color-muted)}ul{margin:0;padding:0;list-style:none}li{display:grid;grid-template-columns:1fr auto;gap:var(--space);padding:14px 0;border-top:1px solid var(--color-line)}li>div:first-child{display:grid}li span{color:var(--color-muted);font-size:12px;text-transform:capitalize}.actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:12px}.actions a,.actions button{min-height:24px;padding:0;border:0;color:inherit;background:transparent;font:inherit;text-decoration:none}.actions :is(a,button):hover{opacity:.55}:is(button,a,input,select):focus-visible{outline:2px solid #06f90e;outline-offset:2px}@media(max-width:600px){.share-dialog{width:calc(100% - 16px);max-height:calc(100dvh - 16px)}fieldset,.form-grid{grid-template-columns:1fr}li{grid-template-columns:1fr}.actions{justify-content:flex-start}}@media(prefers-reduced-motion:reduce){.close-button:active{scale:1}}
-input,select{font:inherit;font-size:16px;line-height:1.15}
-form > button { margin-left: -2px; }
+.share-dialog {
+  width: min(720px, calc(100% - var(--space) * 2));
+  max-height: calc(100dvh - var(--space) * 2);
+  padding: 0;
+  border: 0;
+  border-radius: calc(var(--radius) * 1.5);
+  color: var(--color-fg);
+  background: var(--color-bg);
+  box-shadow: 0 24px 80px rgb(0 0 0 / .2);
+  overscroll-behavior: contain;
+}
+
+.share-dialog::backdrop {
+  background: rgb(0 0 0 / .45);
+  backdrop-filter: blur(8px);
+}
+
+.share-panel { padding: var(--space); }
+
+header {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space);
+  margin-bottom: var(--space);
+}
+
+header :is(p, h2) { margin: 0; }
+header p { color: var(--color-muted); }
+.close-button { flex: 0 0 var(--control-height); }
+.close-button svg { width: 22px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+
+form { display: grid; gap: var(--space); }
+label, legend { color: var(--color-muted); font-size: 12px; }
+input, select { width: 100%; min-height: var(--control-height); padding: 0 8px; }
+fieldset { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space); margin: 0; padding: 0; border: 0; }
+legend { grid-column: 1 / -1; margin-bottom: calc(var(--space) / 2); }
+.choice { min-height: 64px; display: flex; align-items: flex-start; gap: calc(var(--space) / 2); color: var(--color-fg); cursor: pointer; }
+.choice input { width: 18px; min-height: 18px; margin: 2px 0; }
+.choice span { display: grid; gap: 4px; }
+.choice small { color: var(--color-muted); font-size: 12px; font-weight: 500; line-height: 1.3; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space); }
+.form-grid label > span { font-weight: 500; }
+.custom-dates { margin-top: calc(var(--space) * -1); }
+.approval-note, .feedback { min-height: 1.2em; margin: 0; color: var(--color-muted); font-size: 12px; }
+.feedback { margin-top: var(--space); }
+.error { color: var(--color-danger); }
+form > button { justify-self: start; margin-left: -2px; }
+
+.existing { margin-top: var(--space); }
+h3 { margin: 0 0 calc(var(--space) / 2); color: var(--color-muted); font-size: 12px; }
+ul { margin: 0; padding: 0; list-style: none; }
+li { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: var(--space); padding: var(--space) 0; border-top: 1px solid var(--color-line); }
+li > div:first-child { display: grid; }
+li span { color: var(--color-muted); font-size: 12px; text-transform: capitalize; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: calc(var(--space) / 2); }
+
+@media (max-width: 600px) {
+  .share-dialog { width: calc(100% - var(--space)); max-height: calc(100dvh - var(--space)); }
+  fieldset, .form-grid { grid-template-columns: 1fr; }
+  li { grid-template-columns: 1fr; }
+  .actions { justify-content: flex-start; }
+}
 </style>

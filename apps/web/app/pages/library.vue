@@ -21,13 +21,6 @@ const query = computed(() => ({ search: search.value, ...(status.value ? { statu
 const { data, status: loadStatus, error, refresh } = await useFetch<AssetList>('/api/assets', { query, watch: [query] })
 const assets = ref<AssetCard[]>([])
 const cardsHidden = ref(false)
-const loadedImages = reactive(new Set<string>())
-const markImageLoaded = (id: string) => loadedImages.add(id)
-const syncLoadedImages = () => {
-  document.querySelectorAll<HTMLImageElement>('.preview img[data-asset-id]').forEach((image) => {
-    if (image.complete && image.naturalWidth > 0 && image.dataset.assetId) markImageLoaded(image.dataset.assetId)
-  })
-}
 let cardSwapTimer: ReturnType<typeof setTimeout> | undefined
 watch(() => data.value?.data.assets, (next) => {
   const incoming = next ?? []
@@ -54,7 +47,6 @@ const closeAsset = () => router.replace({ path: '/library' })
 const toolbarVisible = ref(true)
 let lastScrollY = 0
 let scrollFrame = 0
-const cardStagger = (assetIndex: number) => `${Math.min(assetIndex * 18, 144)}ms`
 const updateToolbar = () => {
   cancelAnimationFrame(scrollFrame)
   scrollFrame = requestAnimationFrame(() => {
@@ -67,8 +59,7 @@ const updateToolbar = () => {
 }
 watch([search, status, sort], () => { page.value = 1; if (assets.value.length) cardsHidden.value = true })
 watch(page, () => { if (assets.value.length) cardsHidden.value = true })
-watch(assets, async () => { await nextTick(); syncLoadedImages() })
-onMounted(async () => { await nextTick(); syncLoadedImages(); lastScrollY = window.scrollY; window.addEventListener('scroll', updateToolbar, { passive: true }) })
+onMounted(() => { lastScrollY = window.scrollY; window.addEventListener('scroll', updateToolbar, { passive: true }) })
 onBeforeUnmount(() => { clearTimeout(cardSwapTimer); cancelAnimationFrame(scrollFrame); window.removeEventListener('scroll', updateToolbar) })
 </script>
 
@@ -85,15 +76,7 @@ onBeforeUnmount(() => { clearTimeout(cardSwapTimer); cancelAnimationFrame(scroll
       <div v-if="loadStatus === 'pending' && assets.length === 0" class="state" role="status">Loading assets…</div>
       <div v-else-if="error" class="state error" role="alert"><strong>Unable to load assets.</strong><span>Check your connection and try again.</span><button type="button" @click="refresh()">Try again</button></div>
       <div v-else-if="assets.length === 0" class="state"><strong>{{ search || status ? 'No matching assets' : 'No assets yet' }}</strong><span>{{ search || status ? 'Change your search or clear the filters.' : 'Upload frames from the Figma plugin to build this library.' }}</span><button v-if="search || status" type="button" @click="search = ''; status = ''">Clear filters</button></div>
-      <section v-else class="masonry" :class="{ 'cards-hidden': cardsHidden }" aria-label="Assets">
-          <article v-for="(asset, assetIndex) in assets" :key="asset.id" class="asset-card" :style="{ '--card-stagger': cardStagger(assetIndex) }">
-            <div class="preview" :class="{ 'is-loading': !loadedImages.has(asset.id) }" :style="{ aspectRatio: `${asset.width} / ${asset.height}` }">
-              <NuxtLink class="preview-link" :to="{ path:'/library', query:{ asset:asset.id } }" :aria-label="`View ${asset.title}`"><img :class="{ 'is-loaded': loadedImages.has(asset.id) }" :data-asset-id="asset.id" :src="asset.previewUrl" :alt="`Preview of ${asset.title}`" loading="lazy" @load="markImageLoaded(asset.id)"></NuxtLink>
-              <a class="figma-button" :href="asset.figma_url" target="_blank" rel="noopener noreferrer">Open in Figma</a>
-            </div>
-            <div class="card-body"><div><h2><NuxtLink :to="{ path:'/library', query:{ asset:asset.id } }">{{ asset.title }}</NuxtLink></h2><p>{{ asset.projects?.name ?? 'No project' }}<template v-if="asset.asset_tags.length"> · {{ asset.asset_tags.slice(0,2).map(link => link.tags?.name).filter(Boolean).join(', ') }}</template></p></div><span>{{ asset.status }}</span></div>
-          </article>
-      </section>
+      <AssetMasonry v-else :assets="assets" :hidden="cardsHidden" interactive />
       <nav v-if="totalPages > 1" class="pagination" aria-label="Pagination"><button :disabled="page === 1" @click="page--">Previous</button><span>Page {{ page }} of {{ totalPages }}</span><button :disabled="page === totalPages" @click="page++">Next</button></nav>
     </main>
     <AssetOverlay v-if="selectedAssetId" :asset-id="selectedAssetId" @close="closeAsset" />

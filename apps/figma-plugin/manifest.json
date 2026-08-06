@@ -8,7 +8,7 @@
   "documentAccess": "dynamic-page",
   "enablePrivatePluginApi": true,
   "networkAccess": {
-    "allowedDomains": ["https://library.example.com"],
+    "allowedDomains": ["https://figma-content-web.vercel.app"],
     "devAllowedDomains": ["http://localhost:3000"],
     "reasoning": "Authenticate approved users and upload selected frames to the private content library."
   }
