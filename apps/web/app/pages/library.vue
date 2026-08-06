@@ -22,7 +22,12 @@ const { data, status: loadStatus, error, refresh } = await useFetch<AssetList>('
 const assets = ref<AssetCard[]>([])
 const cardsHidden = ref(false)
 const loadedImages = reactive(new Set<string>())
-const markImageLoaded = (url: string) => loadedImages.add(url)
+const markImageLoaded = (id: string) => loadedImages.add(id)
+const syncLoadedImages = () => {
+  document.querySelectorAll<HTMLImageElement>('.preview img[data-asset-id]').forEach((image) => {
+    if (image.complete && image.naturalWidth > 0 && image.dataset.assetId) markImageLoaded(image.dataset.assetId)
+  })
+}
 let cardSwapTimer: ReturnType<typeof setTimeout> | undefined
 watch(() => data.value?.data.assets, (next) => {
   const incoming = next ?? []
@@ -45,12 +50,10 @@ const { data: session } = await useFetch<SessionResponse>('/api/auth/session')
 const isAdmin = computed(() => session.value?.data?.user?.role === 'admin')
 const selectedAssetId = computed(() => typeof route.query.asset === 'string' ? route.query.asset : '')
 const closeAsset = () => router.replace({ path: '/library' })
-const columnCount = ref(4)
 const toolbarVisible = ref(true)
 let lastScrollY = 0
 let scrollFrame = 0
-const updateColumns = () => { columnCount.value = window.innerWidth <= 520 ? 1 : window.innerWidth <= 900 ? 2 : window.innerWidth <= 1280 ? 3 : window.innerWidth <= 1680 ? 4 : window.innerWidth <= 2200 ? 5 : 6 }
-const cardStagger = (assetIndex: number, columnIndex: number) => `${Math.min((assetIndex * columnCount.value + columnIndex) * 18, 144)}ms`
+const cardStagger = (assetIndex: number) => `${Math.min(assetIndex * 18, 144)}ms`
 const updateToolbar = () => {
   cancelAnimationFrame(scrollFrame)
   scrollFrame = requestAnimationFrame(() => {
@@ -61,11 +64,11 @@ const updateToolbar = () => {
     lastScrollY = current
   })
 }
-const columns = computed(() => Array.from({ length: columnCount.value }, (_, column) => assets.value.filter((_, index) => index % columnCount.value === column)))
 watch([search, status, sort], () => { page.value = 1; if (assets.value.length) cardsHidden.value = true })
 watch(page, () => { if (assets.value.length) cardsHidden.value = true })
-onMounted(() => { updateColumns(); lastScrollY = window.scrollY; window.addEventListener('resize', updateColumns); window.addEventListener('scroll', updateToolbar, { passive: true }) })
-onBeforeUnmount(() => { clearTimeout(cardSwapTimer); cancelAnimationFrame(scrollFrame); window.removeEventListener('resize', updateColumns); window.removeEventListener('scroll', updateToolbar) })
+watch(assets, async () => { await nextTick(); syncLoadedImages() })
+onMounted(async () => { await nextTick(); syncLoadedImages(); lastScrollY = window.scrollY; window.addEventListener('scroll', updateToolbar, { passive: true }) })
+onBeforeUnmount(() => { clearTimeout(cardSwapTimer); cancelAnimationFrame(scrollFrame); window.removeEventListener('scroll', updateToolbar) })
 </script>
 
 <template>
@@ -81,16 +84,14 @@ onBeforeUnmount(() => { clearTimeout(cardSwapTimer); cancelAnimationFrame(scroll
       <div v-if="loadStatus === 'pending' && assets.length === 0" class="state" role="status">Loading assets…</div>
       <div v-else-if="error" class="state error" role="alert"><strong>Unable to load assets.</strong><span>Check your connection and try again.</span><button type="button" @click="refresh()">Try again</button></div>
       <div v-else-if="assets.length === 0" class="state"><strong>{{ search || status ? 'No matching assets' : 'No assets yet' }}</strong><span>{{ search || status ? 'Change your search or clear the filters.' : 'Upload frames from the Figma plugin to build this library.' }}</span><button v-if="search || status" type="button" @click="search = ''; status = ''">Clear filters</button></div>
-      <section v-else class="masonry" :class="{ 'cards-hidden': cardsHidden }" :style="{ '--columns': columnCount }" aria-label="Assets">
-        <div v-for="(column, columnIndex) in columns" :key="columnIndex" class="masonry-column">
-          <article v-for="(asset, assetIndex) in column" :key="asset.id" class="asset-card" :style="{ '--card-stagger': cardStagger(assetIndex, columnIndex) }">
-            <div class="preview" :class="{ 'is-loading': !loadedImages.has(asset.previewUrl) }" :style="{ aspectRatio: `${asset.width} / ${asset.height}` }">
-              <NuxtLink class="preview-link" :to="{ path:'/library', query:{ asset:asset.id } }" :aria-label="`View ${asset.title}`"><img :class="{ 'is-loaded': loadedImages.has(asset.previewUrl) }" :src="asset.previewUrl" :alt="`Preview of ${asset.title}`" loading="lazy" @load="markImageLoaded(asset.previewUrl)"></NuxtLink>
+      <section v-else class="masonry" :class="{ 'cards-hidden': cardsHidden }" aria-label="Assets">
+          <article v-for="(asset, assetIndex) in assets" :key="asset.id" class="asset-card" :style="{ '--card-stagger': cardStagger(assetIndex) }">
+            <div class="preview" :class="{ 'is-loading': !loadedImages.has(asset.id) }" :style="{ aspectRatio: `${asset.width} / ${asset.height}` }">
+              <NuxtLink class="preview-link" :to="{ path:'/library', query:{ asset:asset.id } }" :aria-label="`View ${asset.title}`"><img :class="{ 'is-loaded': loadedImages.has(asset.id) }" :data-asset-id="asset.id" :src="asset.previewUrl" :alt="`Preview of ${asset.title}`" loading="lazy" @load="markImageLoaded(asset.id)"></NuxtLink>
               <a class="figma-button" :href="asset.figma_url" target="_blank" rel="noopener noreferrer">Open in Figma</a>
             </div>
             <div class="card-body"><div><h2><NuxtLink :to="{ path:'/library', query:{ asset:asset.id } }">{{ asset.title }}</NuxtLink></h2><p>{{ asset.projects?.name ?? 'No project' }}<template v-if="asset.asset_tags.length"> · {{ asset.asset_tags.slice(0,2).map(link => link.tags?.name).filter(Boolean).join(', ') }}</template></p></div><span>{{ asset.status }}</span></div>
           </article>
-        </div>
       </section>
       <nav v-if="totalPages > 1" class="pagination" aria-label="Pagination"><button :disabled="page === 1" @click="page--">Previous</button><span>Page {{ page }} of {{ totalPages }}</span><button :disabled="page === totalPages" @click="page++">Next</button></nav>
     </main>
@@ -99,7 +100,7 @@ onBeforeUnmount(() => { clearTimeout(cardSwapTimer); cancelAnimationFrame(scroll
 </template>
 
 <style scoped>
-.library-shell{--space:clamp(12px,1vw,24px);--muted:.45;min-height:100vh;color:#000;background:#fff;font-family:"Helvetica Now Display","Helvetica Neue",Helvetica,Arial,sans-serif;font-size:16px;font-weight:700;letter-spacing:-.015em;line-height:1.15}main{min-height:100vh;padding:var(--space)}.index-toolbar{position:sticky;z-index:4;top:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-items:start;gap:var(--space);min-height:68px;margin-top:calc(var(--space)*-1);padding:var(--space) 0;background:rgb(255 255 255/.95);backdrop-filter:blur(12px)}.brand{text-decoration:none}.filters{grid-column:span 2;display:flex;flex-wrap:wrap;gap:2px var(--space)}.filters label{min-width:7rem;flex:1}.filters input,.filters select{width:100%;min-height:24px;padding:0;border:0;border-bottom:1px solid rgb(0 0 0/.18);border-radius:0;color:inherit;background:transparent;font:inherit}.filters input::placeholder{color:inherit;opacity:var(--muted)}.count{margin:0;opacity:var(--muted);text-align:right;font-variant-numeric:tabular-nums}.index-toolbar nav{position:absolute;top:calc(var(--space) + 27px);right:0;display:flex;gap:var(--space)}.index-toolbar nav a{text-decoration:none}.masonry{display:grid;grid-template-columns:repeat(var(--columns),minmax(0,1fr));gap:var(--space)}.masonry-column{display:flex;min-width:0;flex-direction:column}.asset-card{display:block;margin-bottom:calc(var(--space)*2);color:inherit;background:transparent;text-decoration:none}.preview{overflow:hidden;border-radius:8px;background:transparent;clip-path:inset(0 round 8px)}.preview img{display:block;width:100%;height:100%;object-fit:cover}.asset-card:hover{opacity:1}.card-body{display:flex;justify-content:space-between;align-items:flex-start;gap:var(--space);padding-top:8px}.card-body h2,.card-body p{margin:0;font:inherit}.card-body p,.card-body>span{opacity:.3}.card-body>span{text-transform:capitalize}.state{min-height:45vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center}.state span{opacity:var(--muted)}button{min-height:44px;padding:0 18px;border:0;border-radius:999px;color:white;background:black;font:inherit;cursor:pointer;transition-property:scale,opacity;transition-duration:150ms}.state button:active,.pagination button:active{scale:.96}.pagination{display:flex;align-items:center;justify-content:center;gap:var(--space);padding:calc(var(--space)*2) 0}.pagination span{opacity:var(--muted)}:is(a,input,select,button):focus-visible{outline:2px solid #06f90e;outline-offset:2px}.sr-only{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}@media(max-width:900px){.index-toolbar{grid-template-columns:1fr 2fr auto}.filters{grid-column:auto}.count{display:none}}@media(max-width:520px){.index-toolbar{grid-template-columns:1fr auto;gap:8px}.brand{grid-column:1}.filters{grid-column:1/-1;grid-row:2}.index-toolbar nav{position:static;grid-column:2;grid-row:1}.card-body{font-size:14px}}@media(prefers-reduced-motion:reduce){.preview img,button{transition:none}.state button:active,.pagination button:active{scale:1}}
+.library-shell{--space:clamp(12px,1vw,24px);--muted:.45;min-height:100vh;color:#000;background:#fff;font-family:"Helvetica Now Display","Helvetica Neue",Helvetica,Arial,sans-serif;font-size:16px;font-weight:700;letter-spacing:-.015em;line-height:1.15}main{min-height:100vh;padding:var(--space)}.index-toolbar{position:sticky;z-index:4;top:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-items:start;gap:var(--space);min-height:68px;margin-top:calc(var(--space)*-1);padding:var(--space) 0;background:rgb(255 255 255/.95);backdrop-filter:blur(12px)}.brand{text-decoration:none}.filters{grid-column:span 2;display:flex;flex-wrap:wrap;gap:2px var(--space)}.filters label{min-width:7rem;flex:1}.filters input,.filters select{width:100%;min-height:24px;padding:0;border:0;border-bottom:1px solid rgb(0 0 0/.18);border-radius:0;color:inherit;background:transparent;font:inherit}.filters input::placeholder{color:inherit;opacity:var(--muted)}.count{margin:0;opacity:var(--muted);text-align:right;font-variant-numeric:tabular-nums}.index-toolbar nav{position:absolute;top:calc(var(--space) + 27px);right:0;display:flex;gap:var(--space)}.index-toolbar nav a{text-decoration:none}.masonry{column-count:6;column-gap:var(--space)}.asset-card{display:inline-block;width:100%;break-inside:avoid;margin-bottom:calc(var(--space)*2);color:inherit;background:transparent;text-decoration:none}.preview{overflow:hidden;border-radius:8px;background:transparent;clip-path:inset(0 round 8px)}.preview img{display:block;width:100%;height:100%;object-fit:cover}.asset-card:hover{opacity:1}.card-body{display:flex;justify-content:space-between;align-items:flex-start;gap:var(--space);padding-top:8px}.card-body h2,.card-body p{margin:0;font:inherit}.card-body p,.card-body>span{opacity:.3}.card-body>span{text-transform:capitalize}.state{min-height:45vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center}.state span{opacity:var(--muted)}button{min-height:44px;padding:0 18px;border:0;border-radius:999px;color:white;background:black;font:inherit;cursor:pointer;transition-property:scale,opacity;transition-duration:150ms}.state button:active,.pagination button:active{scale:.96}.pagination{display:flex;align-items:center;justify-content:center;gap:var(--space);padding:calc(var(--space)*2) 0}.pagination span{opacity:var(--muted)}:is(a,input,select,button):focus-visible{outline:2px solid #06f90e;outline-offset:2px}.sr-only{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}@media(max-width:2200px){.masonry{column-count:5}}@media(max-width:1680px){.masonry{column-count:4}}@media(max-width:1280px){.masonry{column-count:3}}@media(max-width:900px){.index-toolbar{grid-template-columns:1fr 2fr auto}.filters{grid-column:auto}.count{display:none}.masonry{column-count:2}}@media(max-width:520px){.index-toolbar{grid-template-columns:1fr auto;gap:8px}.brand{grid-column:1}.filters{grid-column:1/-1;grid-row:2}.index-toolbar nav{position:static;grid-column:2;grid-row:1}.card-body{font-size:14px}.masonry{column-count:1}}@media(prefers-reduced-motion:reduce){.preview img,button{transition:none}.state button:active,.pagination button:active{scale:1}}
 .index-toolbar{transition:opacity .18s ease-out,transform .24s cubic-bezier(.2,0,0,1)}
 .library-shell{--space:inherit}
 .index-toolbar.toolbar-hidden{pointer-events:none;opacity:0;transform:translateY(calc(-100% - var(--space)))}
