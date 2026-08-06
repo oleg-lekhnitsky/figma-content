@@ -48,6 +48,7 @@ const totalPages = computed(() => Math.max(1, Math.ceil(total.value / 24)))
 const resultMessage = computed(() => loadStatus.value === 'success' ? `${total.value} ${total.value === 1 ? 'asset' : 'assets'}` : '')
 const { data: session } = await useFetch<SessionResponse>('/api/auth/session')
 const isAdmin = computed(() => session.value?.data?.user?.role === 'admin')
+const canShare = computed(() => ['editor', 'admin'].includes(session.value?.data?.user?.role ?? ''))
 const selectedAssetId = computed(() => typeof route.query.asset === 'string' ? route.query.asset : '')
 const closeAsset = () => router.replace({ path: '/library' })
 const toolbarVisible = ref(true)
@@ -78,7 +79,7 @@ onBeforeUnmount(() => { clearTimeout(cardSwapTimer); cancelAnimationFrame(scroll
         <NuxtLink class="brand" to="/library">Content Library</NuxtLink>
         <form class="filters" role="search" @submit.prevent><label class="search-field"><span class="sr-only">Search assets</span><input v-model="search" type="search" name="search" placeholder="Search"></label><label><span class="sr-only">Status</span><select v-model="status" name="status"><option value="">All statuses</option><option value="approved">Approved</option><option value="draft">Draft</option></select></label><label><span class="sr-only">Sort</span><select v-model="sort" name="sort"><option value="newest">Newest</option><option value="oldest">Oldest</option><option value="updated">Recently updated</option><option value="title">Title</option><option value="dimensions">Dimensions</option><option value="submitter">Submitter</option></select></label><div v-if="submitters.length" class="submitter-stack" role="list" aria-label="People who submitted assets"><span v-for="submitter in visibleSubmitters" :key="submitter.id" class="submitter-avatar" role="listitem" :title="submitterName(submitter)"><img v-if="submitter.avatar_url" :src="submitter.avatar_url" alt=""><span v-else aria-hidden="true">{{ submitterInitial(submitter) }}</span><span class="sr-only">{{ submitterName(submitter) }}</span></span><span v-if="submitters.length > visibleSubmitters.length" class="submitter-more" :title="`${submitters.length-visibleSubmitters.length} more submitters`">+{{ submitters.length-visibleSubmitters.length }}</span></div></form>
         <p class="count sr-only" role="status" aria-live="polite">{{ resultMessage }}</p>
-        <nav aria-label="Account"><NuxtLink v-if="isAdmin" to="/admin/users">Admin</NuxtLink><NuxtLink to="/login">Account</NuxtLink></nav>
+        <nav aria-label="Account"><ShareCollection v-if="canShare" :current-search="search" /><NuxtLink v-if="isAdmin" to="/admin/users">Admin</NuxtLink><NuxtLink to="/login">Account</NuxtLink></nav>
       </header>
 
       <div v-if="loadStatus === 'pending' && assets.length === 0" class="state" role="status">Loading assets…</div>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assetMetadataSchema, hasPermission, roleSchema, userInviteSchema, userUpdateSchema } from './index'
+import { assetMetadataSchema, createPublicCollectionSchema, hasPermission, roleSchema, userInviteSchema, userUpdateSchema } from './index'
 
 describe('shared authorization contracts', () => {
   it('keeps role permissions least-privileged', () => {
@@ -33,5 +33,20 @@ describe('shared authorization contracts', () => {
   it('requires an explicit user-management change', () => {
     expect(userUpdateSchema.safeParse({}).success).toBe(false)
     expect(userUpdateSchema.safeParse({ isActive: false }).success).toBe(true)
+  })
+
+  it('validates dynamic and static public collection settings', () => {
+    const base = { title: 'August approvals', filters: { search: '', projectId: null, tagId: null, dateFrom: null, dateTo: null }, expiresAt: null }
+    expect(createPublicCollectionSchema.safeParse({ ...base, mode: 'dynamic' }).success).toBe(true)
+    expect(createPublicCollectionSchema.safeParse({ ...base, mode: 'static' }).success).toBe(true)
+    expect(createPublicCollectionSchema.safeParse({ ...base, title: ' ', mode: 'static' }).success).toBe(false)
+  })
+
+  it('rejects public collection date ranges in reverse order', () => {
+    const result = createPublicCollectionSchema.safeParse({
+      title: 'Invalid range', mode: 'dynamic', expiresAt: null,
+      filters: { search: '', projectId: null, tagId: null, dateFrom: '2026-08-10T00:00:00.000Z', dateTo: '2026-08-01T00:00:00.000Z' }
+    })
+    expect(result.success).toBe(false)
   })
 })
