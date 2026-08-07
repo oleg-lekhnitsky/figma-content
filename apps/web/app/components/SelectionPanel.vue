@@ -3,11 +3,13 @@ withDefaults(defineProps<{
   visible?: boolean
   label: string
   wide?: boolean
+  bare?: boolean
   closeLabel?: string
   closeDisabled?: boolean
 }>(), {
   visible: true,
   wide: false,
+  bare: false,
   closeLabel: '',
   closeDisabled: false
 })
@@ -19,7 +21,7 @@ defineEmits<{ close: [] }>()
   <Teleport to="body">
     <Transition name="selection-panel">
       <div
-        v-if="visible" class="selection-panel" :class="{ 'selection-panel--wide': wide }" role="region"
+        v-if="visible" class="selection-panel" :class="{ 'selection-panel--wide': wide, 'selection-panel--bare': bare }" role="region"
         :aria-label="label">
         <slot />
         <button
@@ -58,6 +60,14 @@ defineEmits<{ close: [] }>()
 .selection-panel--wide {
   width: max-content;
   overflow-x: auto
+}
+
+.selection-panel--bare {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none
 }
 
 .selection-panel :slotted(strong) {
