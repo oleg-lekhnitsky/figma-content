@@ -1,0 +1,100 @@
+<script setup lang="ts">
+withDefaults(defineProps<{
+  visible?: boolean
+  label: string
+  wide?: boolean
+  closeLabel?: string
+  closeDisabled?: boolean
+}>(), {
+  visible: true,
+  wide: false,
+  closeLabel: '',
+  closeDisabled: false
+})
+
+defineEmits<{ close: [] }>()
+</script>
+
+<template>
+  <Teleport to="body">
+    <Transition name="selection-panel">
+      <div
+        v-if="visible" class="selection-panel" :class="{ 'selection-panel--wide': wide }" role="region"
+        :aria-label="label">
+        <slot />
+        <button
+          v-if="closeLabel" class="selection-panel-close" type="button" :disabled="closeDisabled"
+          :aria-label="closeLabel" @click="$emit('close')">
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="m6 6 12 12M18 6 6 18" />
+          </svg>
+        </button>
+      </div>
+    </Transition>
+  </Teleport>
+</template>
+
+<style scoped>
+.selection-panel {
+  position: fixed;
+  z-index: 30;
+  left: 50%;
+  bottom: var(--space);
+  max-width: calc(100vw - var(--space)*2);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 999px;
+  color: var(--color-fg);
+  background: rgb(0 0 0/.14);
+  box-shadow: 0 18px 64px rgb(0 0 0/.18);
+  backdrop-filter: blur(80px) saturate(140%);
+  -webkit-backdrop-filter: blur(40px) saturate(140%);
+  transform: translateX(-50%);
+  background: var(--color-bg);
+}
+
+.selection-panel--wide {
+  width: max-content;
+  overflow-x: auto
+}
+
+.selection-panel :slotted(strong) {
+  padding: 0 10px;
+  white-space: nowrap
+}
+
+.selection-panel :slotted(button),
+.selection-panel-close {
+  min-height: 36px;
+  padding: 0 14px;
+  color: var(--color-bg);
+  background: var(--color-fg)
+}
+
+.selection-panel-close {
+  width: 36px;
+  padding: 0;
+  display: grid;
+  place-items: center
+}
+
+.selection-panel-close svg {
+  width: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7
+}
+
+.selection-panel-enter-active,
+.selection-panel-leave-active {
+  transition: opacity 150ms ease, transform 180ms cubic-bezier(.2, 0, 0, 1)
+}
+
+.selection-panel-enter-from,
+.selection-panel-leave-to {
+  opacity: 0;
+  transform: translate(-50%, 12px)
+}
+</style>

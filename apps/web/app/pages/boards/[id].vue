@@ -226,7 +226,7 @@ const removeMember = async (member:Member) => {
         </div>
         <AssetPresentation v-else-if="visibleReviewAssets.length" :assets="visibleReviewAssets" label="Submitted work presentation" selectable :selected-ids="[...selectedAssetIds]" @toggle-selection="toggleSelection"><template #details="{asset}"><div class="card-submitter"><span class="card-submitter-avatar"><img v-if="asset.allowed_users?.avatar_url" :src="asset.allowed_users.avatar_url" alt=""><span v-else aria-hidden="true">{{ submitterName(asset).charAt(0).toUpperCase() }}</span></span><span>{{ submitterName(asset) }}</span></div><p>{{ asset.projects?.name ? `${asset.projects.name} · ` : '' }}{{ asset.status }} · {{ asset.submission?.review_status ?? 'ready' }}</p></template><template #previewActions="{asset}"><div class="card-actions"><button v-if="canApprove&&asset.status==='draft'" class="button-secondary approve-button" type="button" :disabled="contentBusy" @click="applyDecision([asset],'approve')">Approve</button><button v-if="canEdit&&(asset.submission?.review_status??'ready')==='ready'&&asset.status==='draft'" class="button-secondary" type="button" :disabled="contentBusy" @click="applyDecision([asset],'pass')">Pass</button><button v-if="canEdit&&(asset.submission?.review_status??'ready')==='ready'&&asset.status==='approved'" class="button-secondary" type="button" :disabled="contentBusy" @click="applyDecision([asset],'pass')">Complete</button><button v-if="canEdit&&(asset.submission?.review_status??'ready')==='reviewed'" class="button-secondary" type="button" :disabled="contentBusy" @click="applyDecision([asset],'reopen')">Reopen</button><button v-if="canRemoveAsset(asset)" class="button-secondary remove-icon" type="button" :disabled="contentBusy" :aria-label="`Remove ${asset.title}`" title="Remove" @click="removeAsset(asset)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v5m4-5v5" /></svg></button></div></template></AssetPresentation>
         <div v-else class="review-empty"><strong>{{ boardAssets.length ? `No ${reviewFilter} submissions` : 'No submissions yet' }}</strong><span class="muted">{{ boardAssets.length ? 'Choose another filter to see submitted work.' : 'Designers can select this board as a destination in the Figma plugin.' }}</span></div>
-        <Teleport to="body"><Transition name="selection-panel"><div v-if="selectedAssets.length" class="selection-panel" role="region" aria-label="Selected submission actions"><strong>{{ selectedAssets.length }} selected</strong><button v-if="canApprove&&selectedHasDraft" type="button" :disabled="contentBusy" @click="applyDecision(selectedAssets,'approve')">Approve</button><button v-if="selectedHasReady" type="button" :disabled="contentBusy" @click="applyDecision(selectedAssets,'pass')">Pass</button><button v-if="selectedHasReviewed" type="button" :disabled="contentBusy" @click="applyDecision(selectedAssets,'reopen')">Reopen</button><button class="selection-panel-close" type="button" :disabled="contentBusy" aria-label="Clear selection" @click="selectedAssetIds.clear()"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></svg></button></div></Transition></Teleport>
+        <SelectionPanel :visible="Boolean(selectedAssets.length)" label="Selected submission actions" close-label="Clear selection" :close-disabled="contentBusy" @close="selectedAssetIds.clear()"><strong>{{ selectedAssets.length }} selected</strong><button v-if="canApprove&&selectedHasDraft" type="button" :disabled="contentBusy" @click="applyDecision(selectedAssets,'approve')">Approve</button><button v-if="selectedHasReady" type="button" :disabled="contentBusy" @click="applyDecision(selectedAssets,'pass')">Pass</button><button v-if="selectedHasReviewed" type="button" :disabled="contentBusy" @click="applyDecision(selectedAssets,'reopen')">Reopen</button></SelectionPanel>
       </section>
       <section v-if="collection.purpose !== 'review' || activeView === 'settings'" class="settings" aria-labelledby="settings-title">
         <div><p class="section-label">Settings</p><h2 id="settings-title">Manage board</h2></div>
@@ -497,60 +497,6 @@ const removeMember = async (member:Member) => {
 
 .select-visible {
   min-height: 36px;
-}
-
-.selection-panel {
-  position: fixed;
-  z-index: 30;
-  left: 50%;
-  bottom: var(--space);
-  max-width: calc(100vw - var(--space) * 2);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px;
-  border-radius: 999px;
-  color: var(--color-bg);
-  background: var(--color-fg);
-  box-shadow: 0 12px 40px rgb(0 0 0 / .2);
-  transform: translateX(-50%);
-}
-
-.selection-panel strong {
-  padding: 0 10px;
-  white-space: nowrap;
-}
-
-.selection-panel button {
-  min-height: 36px;
-  padding: 0 14px;
-  color: var(--color-fg);
-  background: var(--color-bg);
-}
-
-.selection-panel .selection-panel-close {
-  width: 36px;
-  padding: 0;
-  display: grid;
-  place-items: center;
-}
-
-.selection-panel-close svg {
-  width: 18px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.7;
-}
-
-.selection-panel-enter-active,
-.selection-panel-leave-active {
-  transition: opacity 150ms ease, transform 180ms cubic-bezier(.2, 0, 0, 1);
-}
-
-.selection-panel-enter-from,
-.selection-panel-leave-to {
-  opacity: 0;
-  transform: translate(-50%, 12px);
 }
 
 .review-controls button span {
