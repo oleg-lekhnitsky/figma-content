@@ -6,7 +6,7 @@ import { requireAuth } from '../../../utils/session'
 export default defineEventHandler(async (event) => {
   const session = await requireAuth(event)
   const id = getRouterParam(event, 'id') ?? ''
-  await requireBoardRole(id, session.user.organization_id, session.user.id, ['owner', 'editor', 'contributor', 'viewer'])
+  await requireBoardRole(id, session.user.organization_id, session.user.id, ['owner', 'editor', 'contributor', 'viewer'], session.user.role)
   const { data, error } = await useSupabaseAdmin().from('public_collection_members')
     .select('user_id,role,created_at,allowed_users!public_collection_members_user_id_organization_id_fkey(email,figma_handle,avatar_url)')
     .eq('collection_id', id).eq('organization_id', session.user.organization_id).order('created_at')

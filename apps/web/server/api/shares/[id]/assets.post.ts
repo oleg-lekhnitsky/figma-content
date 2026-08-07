@@ -9,7 +9,7 @@ export default defineEventHandler(async (event) => {
   requireTrustedMutation(event)
   const session = await requireAuth(event)
   const id = getRouterParam(event, 'id') ?? ''
-  const { collection, role } = await requireBoardRole(id, session.user.organization_id, session.user.id, ['owner', 'editor', 'contributor'])
+  const { collection, role } = await requireBoardRole(id, session.user.organization_id, session.user.id, ['owner', 'editor', 'contributor'], session.user.role)
   if (collection.mode !== 'static') throw appError(409, 'DYNAMIC_BOARD', 'Items are controlled by filters on a dynamic board.')
   const input = await readValidatedBody(event, value => boardAssetSchema.safeParse(value))
   if (!input.success) throw appError(400, 'INVALID_BOARD_ASSET', 'Choose an asset to add.')

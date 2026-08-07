@@ -2,9 +2,8 @@
 const props = defineProps<{ currentSearch?: string }>()
 
 interface Option { id: string; name: string }
-type BoardRole = 'owner'|'editor'|'contributor'|'viewer'
+type BoardRole = 'owner'|'editor'|'contributor'|'viewer'|'admin'
 interface Collection { id: string; slug: string; title: string; mode: 'dynamic' | 'static'; role: BoardRole; expires_at: string | null; created_at: string; updated_at: string }
-interface Member { user_id:string; role:BoardRole; allowed_users:{email:string|null;figma_handle:string|null;avatar_url:string|null}|null }
 interface ListResponse { data: { collections: Collection[] } }
 interface OptionsResponse<T extends string> { data: Record<T, Option[]> }
 interface CreateResponse { data: { collection: Collection & { itemCount: number | null } } }
@@ -23,14 +22,31 @@ const projects = ref<Option[]>([])
 const tags = ref<Option[]>([])
 const collections = ref<Collection[]>([])
 const busy = ref(false)
+const opening = ref(false)
 const message = ref('')
 const errorMessage = ref('')
-const selectedBoardId = ref('')
-const members = ref<Member[]>([])
-const memberEmail = ref('')
-const memberRole = ref<'editor'|'contributor'|'viewer'>('contributor')
+const boardFeedback = reactive<Record<string, { text: string; error: boolean }>>({})
+let previousBodyOverflow = ''
+let previousRootOverflow = ''
+let scrollLocked = false
 
-const collectionUrl = (slug: string) => `${window.location.origin}/s/${slug}`
+const lockPageScroll = () => {
+  if (scrollLocked) return
+  previousBodyOverflow = document.body.style.overflow
+  previousRootOverflow = document.documentElement.style.overflow
+  document.body.style.overflow = 'hidden'
+  document.documentElement.style.overflow = 'hidden'
+  scrollLocked = true
+}
+const unlockPageScroll = () => {
+  if (!scrollLocked) return
+  document.body.style.overflow = previousBodyOverflow
+  document.documentElement.style.overflow = previousRootOverflow
+  scrollLocked = false
+}
+onBeforeUnmount(unlockPageScroll)
+
+const collectionUrl = (slug: string) => `/s/${slug}`
 const isoAt = (value: string, end = false) => {
   if (!value) return null
   const date = new Date(`${value}T${end ? '23:59:59.999' : '00:00:00.000'}`)
@@ -67,15 +83,19 @@ const loadCollections = async () => {
   tags.value = tagResponse.data.tags
 }
 const open = async () => {
+  if (opening.value) return
+  opening.value = true
   message.value = ''
   errorMessage.value = ''
   title.value ||= defaultTitle()
+  try { await loadCollections() } catch { errorMessage.value = 'Unable to load sharing settings. Check your connection and try again.' }
+  lockPageScroll()
   dialog.value?.showModal()
   await nextTick()
   titleInput.value?.focus()
-  try { await loadCollections() } catch { errorMessage.value = 'Unable to load sharing settings. Check your connection and try again.' }
+  opening.value = false
 }
-const close = () => dialog.value?.close()
+const close = () => { dialog.value?.close(); unlockPageScroll() }
 const createCollection = async () => {
   busy.value = true
   message.value = ''
@@ -97,18 +117,9 @@ const createCollection = async () => {
 }
 const copyLink = async (collection: Collection) => {
   try {
-    await navigator.clipboard.writeText(collectionUrl(collection.slug))
+    await navigator.clipboard.writeText(`${window.location.origin}${collectionUrl(collection.slug)}`)
     message.value = `Link copied for ${collection.title}.`
   } catch { errorMessage.value = 'Unable to copy automatically. Open the link and copy it from the address bar.' }
-}
-const updateSnapshot = async (collection: Collection) => {
-  busy.value = true
-  errorMessage.value = ''
-  try {
-    const response = await $fetch<{ data: { itemCount: number } }>(`/api/shares/${collection.id}`, { method: 'PATCH', body: { action: 'refresh' } })
-    message.value = `${collection.title} now contains ${response.data.itemCount} approved items.`
-  } catch { errorMessage.value = 'Unable to update the snapshot. Try again.' }
-  finally { busy.value = false }
 }
 const revoke = async (collection: Collection) => {
   busy.value = true
@@ -121,39 +132,24 @@ const revoke = async (collection: Collection) => {
   finally { busy.value = false }
 }
 const renameBoard = async (collection:Collection,event:Event) => {
-  const nextTitle=(event.target as HTMLInputElement).value.trim()
+  message.value=''
+  errorMessage.value=''
+  boardFeedback[collection.id]={text:'',error:false}
+  const input=event.target as HTMLInputElement
+  const nextTitle=input.value.trim()
   if(!nextTitle || nextTitle===collection.title)return
-  busy.value=true; errorMessage.value=''
-  try { await $fetch(`/api/shares/${collection.id}`,{method:'PATCH',body:{action:'rename',title:nextTitle}}); collection.title=nextTitle; message.value='Board renamed.' }
-  catch { (event.target as HTMLInputElement).value=collection.title; errorMessage.value='Unable to rename this board.' }
-  finally { busy.value=false }
-}
-const loadMembers = async (collection:Collection) => {
-  errorMessage.value=''; selectedBoardId.value=collection.id
-  try { const response=await $fetch<{data:{members:Member[]}}>(`/api/shares/${collection.id}/members`); members.value=response.data.members }
-  catch { errorMessage.value='Unable to load board members.' }
-}
-const saveMember = async () => {
-  if (!selectedBoardId.value) return
-  busy.value=true; errorMessage.value=''
-  try { await $fetch(`/api/shares/${selectedBoardId.value}/members`,{method:'POST',body:{email:memberEmail.value,role:memberRole.value}}); memberEmail.value=''; const board=collections.value.find(item=>item.id===selectedBoardId.value); if(board) await loadMembers(board); message.value='Board access saved.' }
-  catch { errorMessage.value='Unable to add this person. Add them to the team first, then try again.' }
-  finally { busy.value=false }
-}
-const removeMember = async (member:Member) => {
-  if (!selectedBoardId.value) return
-  busy.value=true; errorMessage.value=''
-  try { await $fetch(`/api/shares/${selectedBoardId.value}/members/${member.user_id}`,{method:'DELETE'}); members.value=members.value.filter(item=>item.user_id!==member.user_id); message.value='Board access removed.' }
-  catch { errorMessage.value='Unable to remove this board member.' }
-  finally { busy.value=false }
+  const previousTitle=collection.title
+  collection.title=nextTitle
+  try { await $fetch(`/api/shares/${collection.id}`,{method:'PATCH',body:{action:'rename',title:nextTitle}}); boardFeedback[collection.id]={text:'Saved',error:false} }
+  catch { collection.title=previousTitle; input.value=previousTitle; boardFeedback[collection.id]={text:'Unable to rename. Try a different name.',error:true} }
 }
 </script>
 
 <template>
-  <button type="button" class="button-plain share-trigger" @click="open">Boards</button>
-  <dialog ref="dialog" class="share-dialog" aria-labelledby="share-title" @click.self="close">
+  <button type="button" class="button-plain share-trigger" :disabled="opening" @click="open">Boards</button>
+  <dialog ref="dialog" class="share-dialog" aria-labelledby="share-title" @click.self="close" @cancel.prevent="close" @close="unlockPageScroll">
     <div class="share-panel">
-      <header><div><p>Collaborative boards</p><h2 id="share-title">Build and share boards</h2></div><button type="button" class="button-secondary button-icon close-button" aria-label="Close board settings" @click="close"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m5 5 14 14M19 5 5 19" /></svg></button></header>
+      <header><h2 id="share-title" class="display-title">Build and share boards</h2><button type="button" class="button-secondary button-icon close-button" aria-label="Close board settings" @click="close"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m5 5 14 14M19 5 5 19" /></svg></button></header>
       <form @submit.prevent="createCollection">
         <label>Board name<input ref="titleInput" v-model="title" name="title" required maxlength="120"></label>
         <fieldset><legend>Updates</legend><label class="choice"><input v-model="mode" type="radio" value="dynamic" name="mode"><span><strong>Dynamic</strong><small>New approved items matching the filters appear automatically.</small></span></label><label class="choice"><input v-model="mode" type="radio" value="static" name="mode"><span><strong>Static</strong><small>Freeze the current results and update the snapshot manually.</small></span></label></fieldset>
@@ -163,8 +159,7 @@ const removeMember = async (member:Member) => {
         <button type="submit" :disabled="busy">{{ busy ? 'Creating board…' : 'Create board' }}</button>
       </form>
       <p class="feedback" role="status" aria-live="polite">{{ message }}</p><p v-if="errorMessage" class="feedback error" role="alert">{{ errorMessage }}</p>
-      <section v-if="collections.length" class="existing" aria-labelledby="existing-title"><h3 id="existing-title">My boards and shared with me</h3><ul><li v-for="collection in collections" :key="collection.id"><div><label v-if="['owner','editor'].includes(collection.role)" class="board-title"><span class="sr-only">Board name</span><input :value="collection.title" maxlength="120" @change="renameBoard(collection,$event)"></label><strong v-else>{{ collection.title }}</strong><span>{{ collection.role }} · {{ collection.mode }}<template v-if="collection.expires_at"> · expires {{ new Date(collection.expires_at).toLocaleDateString() }}</template></span></div><div class="actions"><a class="button-secondary" :href="collectionUrl(collection.slug)" target="_blank" rel="noopener noreferrer">Open</a><button class="button-secondary" type="button" @click="copyLink(collection)">Copy link</button><button class="button-secondary" type="button" @click="loadMembers(collection)">Members</button><button v-if="collection.mode === 'static' && ['owner','editor'].includes(collection.role)" class="button-secondary" type="button" :disabled="busy" @click="updateSnapshot(collection)">Update snapshot</button><button v-if="['owner','editor'].includes(collection.role)" class="button-secondary" type="button" :disabled="busy" @click="revoke(collection)">Disable</button></div></li></ul></section>
-      <section v-if="selectedBoardId" class="members" aria-labelledby="members-title"><h3 id="members-title">Board members</h3><form v-if="collections.find(item=>item.id===selectedBoardId)?.role==='owner'" class="member-form" @submit.prevent="saveMember"><label>Email<input v-model="memberEmail" required type="email" autocomplete="email"></label><label>Board role<select v-model="memberRole"><option value="contributor">Contributor</option><option value="editor">Editor</option><option value="viewer">Viewer</option></select></label><button class="button-secondary" type="submit" :disabled="busy">Save access</button></form><ul class="member-list"><li v-for="member in members" :key="member.user_id"><div><strong>{{ member.allowed_users?.email ?? member.allowed_users?.figma_handle ?? 'Team member' }}</strong><span>{{ member.role }}</span></div><button v-if="collections.find(item=>item.id===selectedBoardId)?.role==='owner' && member.role!=='owner'" class="button-secondary" type="button" :disabled="busy" @click="removeMember(member)">Remove</button></li></ul></section>
+      <section v-if="collections.length" class="existing" aria-labelledby="existing-title"><h3 id="existing-title">My boards and shared with me</h3><ul><li v-for="collection in collections" :key="collection.id"><div><label v-if="['owner','editor','admin'].includes(collection.role)" class="board-title"><span class="sr-only">Board name</span><textarea :value="collection.title" rows="1" maxlength="120" :aria-describedby="`board-feedback-${collection.id}`" :aria-invalid="boardFeedback[collection.id]?.error || undefined" @change="renameBoard(collection,$event)" /><span :id="`board-feedback-${collection.id}`" class="field-message" :class="{error:boardFeedback[collection.id]?.error}" role="status" aria-live="polite">{{ boardFeedback[collection.id]?.text }}</span></label><template v-else><strong>{{ collection.title }}</strong><span class="field-message" aria-hidden="true" /></template><span>{{ collection.role }} · {{ collection.mode }}<template v-if="collection.expires_at"> · expires {{ new Date(collection.expires_at).toLocaleDateString() }}</template></span></div><div class="actions"><NuxtLink class="button-secondary" :to="`/boards/${collection.id}`">{{ ['owner','editor','admin'].includes(collection.role) ? 'Edit board' : 'Open board' }}</NuxtLink><a class="button-secondary" :href="collectionUrl(collection.slug)" target="_blank" rel="noopener noreferrer">View public page</a><button class="button-secondary" type="button" @click="copyLink(collection)">Copy public link</button><button v-if="['owner','editor','admin'].includes(collection.role)" class="button-secondary" type="button" :disabled="busy" @click="revoke(collection)">Disable</button></div></li></ul></section>
     </div>
   </dialog>
 </template>
@@ -180,7 +175,10 @@ const removeMember = async (member:Member) => {
   background: var(--color-bg);
   box-shadow: 0 24px 80px rgb(0 0 0 / .2);
   overscroll-behavior: contain;
+  scrollbar-width: none;
 }
+
+.share-dialog::-webkit-scrollbar { display: none; }
 
 .share-dialog::backdrop {
   background: rgb(0 0 0 / .45);
@@ -193,40 +191,37 @@ header {
   display: flex;
   justify-content: space-between;
   gap: var(--space);
-  margin-bottom: var(--space);
+  margin-bottom: var(--section-gap-compact);
 }
 
-header :is(p, h2) { margin: 0; }
-header p { color: var(--color-muted); }
+header h2 { width: 75%; }
 .close-button { flex: 0 0 var(--control-height); }
 .close-button svg { width: 22px; fill: none; stroke: currentColor; stroke-width: 1.7; }
 
 form { display: grid; gap: var(--space); }
-label, legend { color: var(--color-muted); font-size: 12px; }
+label, legend { color: var(--color-muted); }
 input, select { width: 100%; min-height: var(--control-height); padding: 0 8px; }
 fieldset { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space); margin: 0; padding: 0; border: 0; }
-legend { grid-column: 1 / -1; margin-bottom: calc(var(--space) / 2); }
-.choice { min-height: 64px; display: flex; align-items: flex-start; gap: calc(var(--space) / 2); color: var(--color-fg); cursor: pointer; }
+legend { grid-column: 1 / -1; margin-bottom: var(--cluster-gap); }
+.choice { min-height: 64px; display: flex; align-items: flex-start; gap: var(--cluster-gap); color: var(--color-fg); cursor: pointer; }
 .choice input { width: 18px; min-height: 18px; margin: 2px 0; }
 .choice span { display: grid; gap: 4px; }
-.choice small { color: var(--color-muted); font-size: 12px; font-weight: 500; line-height: 1.3; }
+.choice small { color: var(--color-muted); }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space); }
-.form-grid label > span { font-weight: 500; }
 .custom-dates { margin-top: calc(var(--space) * -1); }
-.approval-note, .feedback { min-height: 1.2em; margin: 0; color: var(--color-muted); font-size: 12px; }
-.feedback { margin-top: var(--space); }
+.approval-note, .feedback { min-height: 1.2em; margin: 0; color: var(--color-muted); }
+.feedback { margin-top: var(--cluster-gap); }
 .error { color: var(--color-danger); }
 form > button { justify-self: start; margin-left: -2px; }
 
-.existing { margin-top: var(--space); }
-h3 { margin: 0 0 calc(var(--space) / 2); color: var(--color-muted); font-size: 12px; }
+.existing { margin-top: var(--section-gap-compact); }
+h3 { margin: 0 0 var(--cluster-gap); color: var(--color-muted); }
 ul { margin: 0; padding: 0; list-style: none; }
-li { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: var(--space); padding: var(--space) 0; border-top: 1px solid var(--color-line); }
+li { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: var(--cluster-gap); padding: var(--space) 0; border-top: 1px solid var(--color-line); }
 li > div:first-child { display: grid; }
-li span { color: var(--color-muted); font-size: 12px; text-transform: capitalize; }
-.actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: calc(var(--space) / 2); }
-.board-title{display:block}.board-title input{min-height:28px;padding:0;border-bottom-color:transparent;color:var(--color-fg);font-weight:700}.board-title input:hover{border-bottom-color:var(--color-line)}.sr-only{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
-.members{margin-top:calc(var(--space)*2);padding-top:var(--space);border-top:1px solid var(--color-line)}.member-form{grid-template-columns:1fr 11rem auto;align-items:end;margin-bottom:var(--space)}.member-form .button-secondary{margin:0}.member-list li{grid-template-columns:1fr auto}.member-list li>div{display:grid}.member-list li span{text-transform:capitalize}
+li span { color: var(--color-muted); }
+.actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: var(--cluster-gap); }
+.board-title{display:block;min-width:0}.board-title textarea{width:100%;min-height:28px;padding:0;overflow:hidden;resize:none;field-sizing:content;border-bottom-color:transparent;color:var(--color-fg)}.board-title textarea:hover{border-bottom-color:var(--color-line)}.field-message{height:1em;display:block;margin-top:4px;color:var(--color-muted)}.field-message.error{color:var(--color-danger)}.sr-only{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
 
 @media (max-width: 600px) {
   .share-dialog { width: calc(100% - var(--space)); max-height: calc(100dvh - var(--space)); }

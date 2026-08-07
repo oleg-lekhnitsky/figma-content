@@ -27,6 +27,7 @@ export const createPublicCollectionSchema = z.object({
 
 export const updatePublicCollectionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('rename'), title: z.string().trim().min(1).max(120) }),
+  z.object({ action: z.literal('settings'), filters: publicCollectionFiltersSchema }),
   z.object({ action: z.literal('refresh') }),
   z.object({ action: z.literal('revoke') })
 ])

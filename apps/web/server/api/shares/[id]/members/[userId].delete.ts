@@ -9,7 +9,7 @@ export default defineEventHandler(async (event) => {
   const session = await requireAuth(event)
   const id = getRouterParam(event, 'id') ?? ''
   const userId = getRouterParam(event, 'userId') ?? ''
-  await requireBoardRole(id, session.user.organization_id, session.user.id, ['owner'])
+  await requireBoardRole(id, session.user.organization_id, session.user.id, ['owner'], session.user.role)
   if (!userId || userId === session.user.id) throw appError(400, 'OWNER_REQUIRED', 'The board owner cannot be removed.')
   const { error } = await useSupabaseAdmin().from('public_collection_members').delete()
     .eq('collection_id', id).eq('organization_id', session.user.organization_id).eq('user_id', userId).neq('role', 'owner')

@@ -1,4 +1,4 @@
-import type { BoardRole } from '@content-library/shared'
+import type { BoardRole, Role } from '@content-library/shared'
 import { appError, databaseError } from './app-error'
 
 const rank: Record<BoardRole, number> = { viewer: 0, contributor: 1, editor: 2, owner: 3 }
@@ -7,7 +7,8 @@ export const requireBoardRole = async (
   collectionId: string,
   organizationId: string,
   userId: string,
-  allowed: readonly BoardRole[]
+  allowed: readonly BoardRole[],
+  workspaceRole?: Role
 ) => {
   const db = useSupabaseAdmin()
   const { data: collection, error: collectionError } = await db.from('public_collections')
@@ -18,7 +19,7 @@ export const requireBoardRole = async (
   const { data: membership, error } = await db.from('public_collection_members')
     .select('role').eq('collection_id', collectionId).eq('organization_id', organizationId).eq('user_id', userId).maybeSingle()
   if (error) throw databaseError('read board membership', error)
-  const role = (membership?.role ?? (collection.created_by === userId ? 'owner' : null)) as BoardRole | null
+  const role = (membership?.role ?? (collection.created_by === userId ? 'owner' : workspaceRole === 'admin' ? 'owner' : null)) as BoardRole | null
   if (!role || !allowed.includes(role)) throw appError(403, 'BOARD_FORBIDDEN', 'You do not have permission to change this board.')
   return { collection, role }
 }

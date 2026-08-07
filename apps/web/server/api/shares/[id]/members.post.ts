@@ -9,7 +9,7 @@ export default defineEventHandler(async (event) => {
   requireTrustedMutation(event)
   const session = await requireAuth(event)
   const id = getRouterParam(event, 'id') ?? ''
-  await requireBoardRole(id, session.user.organization_id, session.user.id, ['owner'])
+  await requireBoardRole(id, session.user.organization_id, session.user.id, ['owner'], session.user.role)
   const input = await readValidatedBody(event, value => boardMemberSchema.safeParse(value))
   if (!input.success) throw appError(400, 'INVALID_BOARD_MEMBER', 'Enter a team member and board role.', input.error.flatten())
   const db = useSupabaseAdmin()

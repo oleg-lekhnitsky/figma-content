@@ -9,7 +9,7 @@ export default defineEventHandler(async (event) => {
   const session = await requireAuth(event)
   const id = getRouterParam(event, 'id') ?? ''
   const assetId = getRouterParam(event, 'assetId') ?? ''
-  const { collection, role } = await requireBoardRole(id, session.user.organization_id, session.user.id, ['owner', 'editor', 'contributor'])
+  const { collection, role } = await requireBoardRole(id, session.user.organization_id, session.user.id, ['owner', 'editor', 'contributor'], session.user.role)
   if (collection.mode !== 'static') throw appError(409, 'DYNAMIC_BOARD', 'Items are controlled by filters on a dynamic board.')
   let query = useSupabaseAdmin().from('public_collection_assets').delete()
     .eq('collection_id', id).eq('asset_id', assetId)
