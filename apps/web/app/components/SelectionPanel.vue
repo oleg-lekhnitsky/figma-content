@@ -49,12 +49,11 @@ defineEmits<{ close: [] }>()
   padding: 8px;
   border-radius: 999px;
   color: var(--color-fg);
-  background: rgb(0 0 0/.14);
+  background: var(--color-bg);
   box-shadow: 0 18px 64px rgb(0 0 0/.18);
   backdrop-filter: blur(80px) saturate(140%);
   -webkit-backdrop-filter: blur(40px) saturate(140%);
   transform: translateX(-50%);
-  background: var(--color-bg);
 }
 
 .selection-panel--wide {
@@ -99,12 +98,12 @@ defineEmits<{ close: [] }>()
 
 .selection-panel-enter-active,
 .selection-panel-leave-active {
-  transition: opacity 150ms ease, transform 180ms cubic-bezier(.2, 0, 0, 1)
+  transition: opacity 150ms ease
 }
 
 .selection-panel-enter-from,
 .selection-panel-leave-to {
-  opacity: 0;
-  transform: translate(-50%, 12px)
+  opacity: 0
 }
+
 </style>
