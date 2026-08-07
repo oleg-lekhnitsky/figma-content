@@ -19,10 +19,10 @@ onMounted(() => {
       <p class="muted">Copy this one-time code, return to the Content Library plugin, and paste it there within one minute.</p>
       <code>{{ code }}</code>
       <button type="button" @click="copyCode">{{ copied ? 'Code copied' : 'Copy one-time code' }}</button>
-      <p role="status" aria-live="polite">{{ copied ? 'The code is ready to paste in Figma.' : '' }}</p>
+      <p class="copy-status" role="status" aria-live="polite">{{ copied ? 'The code is ready to paste in Figma.' : '' }}</p>
     </template>
     <p v-else class="muted">No plugin authorization code was provided. Return to Figma and try again.</p>
   </section></main>
 </template>
 
-<style scoped>code{display:block;overflow-wrap:anywhere;margin:calc(var(--space)*2) 0;padding:var(--space);border-radius:var(--radius);background:var(--color-surface);font-family:ui-monospace,monospace;font-weight:500}</style>
+<style scoped>code{display:block;overflow-wrap:anywhere;margin:calc(var(--space)*2) 0;padding:var(--space);border-radius:var(--radius);background:var(--color-surface);font-family:ui-monospace,monospace;font-weight:500}.copy-status{min-height:1.15em}</style>

@@ -19,6 +19,20 @@ export default defineEventHandler(async (event) => {
     organization_id: collection.organization_id,
     mode: collection.mode as 'dynamic' | 'static',
     filters: publicCollectionFiltersSchema.parse(collection.filters)
-  })
-  return { data: { assets } }
+  }, { includeUnapproved: collection.purpose === 'review' })
+  if (collection.purpose !== 'review' || !assets.length) return { data: { assets } }
+  const { data: submissions, error } = await useSupabaseAdmin().from('public_collection_assets')
+    .select('asset_id,review_status,created_at,reviewed_at')
+    .eq('collection_id', id)
+    .in('asset_id', assets.map((asset: { id: string }) => asset.id))
+  if (error) throw createError({ statusCode: 500, statusMessage: 'Unable to load review status.' })
+  const submissionByAsset = new Map(submissions.map((submission: { asset_id: string; [key: string]: unknown }) => [submission.asset_id, submission]))
+  return {
+    data: {
+      assets: assets.map((asset: { id: string; [key: string]: unknown }) => ({
+        ...asset,
+        submission: submissionByAsset.get(asset.id) ?? null
+      }))
+    }
+  }
 })

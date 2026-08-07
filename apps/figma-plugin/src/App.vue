@@ -6,6 +6,7 @@ interface Item extends SelectedFrame { title: string; progress: 'idle'|'exportin
 interface Project { id: string; name: string }
 interface Tag { id: string; name: string; slug: string }
 interface Workspace { id: string; name: string; slug: string; role: string }
+interface ReviewBoard { id: string; title: string; review_month: string | null; submission_deadline: string | null; role: string }
 const appUrl = __APP_URL__.replace(/\/$/, '')
 const token = ref('')
 const authCode = ref('')
@@ -23,6 +24,8 @@ const tagBusy = ref(false)
 const workspaces = ref<Workspace[]>([])
 const workspaceId = ref('')
 const workspaceBusy = ref(false)
+const reviewBoards = ref<ReviewBoard[]>([])
+const reviewBoardId = ref('')
 const settings = reactive<ExportSettings>({ format: 'PNG', scale: 2, jpgQuality: 90 })
 const shared = reactive({ tags: '', projectId: '', campaignId: '', language: '', contentType: '', description: '', status: 'draft' })
 const busy = ref(false)
@@ -36,7 +39,11 @@ const eligible = computed(() => frames.value.filter(frame => frame.existingActio
 const selectedTags = computed(() => shared.tags.split(',').map(value => value.trim()).filter(Boolean))
 const suggestedTags = computed(() => availableTags.value.filter(tag => !selectedTags.value.some(selected => selected.toLocaleLowerCase() === tag.name.toLocaleLowerCase())))
 const currentWorkspace = computed(() => workspaces.value.find(workspace => workspace.id === workspaceId.value))
+const selectedReviewBoard = computed(() => reviewBoards.value.find(board => board.id === reviewBoardId.value))
 const canCreateProjects = computed(() => ['editor','admin'].includes(currentWorkspace.value?.role ?? ''))
+const reviewBoardLabel = (board: ReviewBoard) => board.review_month
+  ? `${board.title} · ${new Intl.DateTimeFormat(undefined, { month: 'short', year: 'numeric' }).format(new Date(`${board.review_month}T12:00:00`))}`
+  : board.title
 const post = (message: UiMessage) => parent.postMessage({ pluginMessage: message }, '*')
 const createRequestId = () => {
   requestSequence += 1
@@ -101,7 +108,14 @@ const loadWorkspaces = async () => {
   workspaces.value = payload.data.workspaces
   workspaceId.value = payload.data.currentId
 }
-const loadWorkspace = async () => { await loadWorkspaces(); await Promise.all([loadProjects(),loadTags()]) }
+const loadReviewBoards = async () => {
+  const response = await fetch(`${appUrl}/api/plugin/boards`, { headers: { Authorization: `Bearer ${token.value}` } })
+  if (!response.ok) throw new Error('Unable to load monthly review boards.')
+  const payload = await response.json() as { data: { boards: ReviewBoard[] } }
+  reviewBoards.value = payload.data.boards
+  if (!reviewBoards.value.some(board => board.id === reviewBoardId.value)) reviewBoardId.value = ''
+}
+const loadWorkspace = async () => { await loadWorkspaces(); await Promise.all([loadProjects(),loadTags(),loadReviewBoards()]) }
 const switchWorkspace = async () => {
   if (!workspaceId.value) return
   workspaceBusy.value = true; globalError.value = ''
@@ -109,7 +123,7 @@ const switchWorkspace = async () => {
     const response = await fetch(`${appUrl}/api/plugin/workspaces`, { method: 'POST', headers: { Authorization: `Bearer ${token.value}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ workspaceId: workspaceId.value }) })
     const payload = await response.json().catch(() => null) as { data?: { token?: string }; error?: { message?: string } } | null
     if (!response.ok || !payload?.data?.token) throw new Error(payload?.error?.message || 'Unable to switch workspace.')
-    token.value = payload.data.token; post({ type: 'save-session', token: token.value }); shared.projectId = ''; shared.tags = ''; projects.value = []; availableTags.value = []; await loadWorkspace(); announcement.value = 'Workspace changed.'
+    token.value = payload.data.token; post({ type: 'save-session', token: token.value }); shared.projectId = ''; shared.tags = ''; reviewBoardId.value = ''; projects.value = []; availableTags.value = []; reviewBoards.value = []; await loadWorkspace(); announcement.value = 'Workspace changed.'
   } catch (error) { globalError.value = error instanceof Error ? error.message : 'Unable to switch workspace.'; await loadWorkspaces().catch(() => undefined) }
   finally { workspaceBusy.value = false }
 }
@@ -139,7 +153,7 @@ const passwordLogin = async () => {
   } catch (error) { globalError.value = error instanceof Error ? error.message : 'Unable to sign in. Check your email and password.' }
   finally { authBusy.value = false }
 }
-const signOut = () => { post({ type: 'save-session', token: null }); token.value = ''; projects.value = []; availableTags.value = []; workspaces.value = []; workspaceId.value = ''; authState.value = 'signed-out' }
+const signOut = () => { post({ type: 'save-session', token: null }); token.value = ''; projects.value = []; availableTags.value = []; reviewBoards.value = []; reviewBoardId.value = ''; workspaces.value = []; workspaceId.value = ''; authState.value = 'signed-out' }
 
 const reencodeJpg = async (bytes: Uint8Array, quality: number) => {
   const bitmap = await createImageBitmap(new Blob([new Uint8Array(bytes)], { type: 'image/png' }))
@@ -165,10 +179,24 @@ const upload = async () => {
       const response = await fetch(`${appUrl}${endpoint}`, { method: 'POST', headers: { Authorization: `Bearer ${token.value}` }, body: form })
       if (!response.ok) { const body = await response.json().catch(() => null) as { data?: { error?: { message?: string } } } | null; throw new Error(body?.data?.error?.message || 'Upload failed.') }
       const payload = await response.json() as { data: { asset: { id: string } } }
-      post({ type: 'bind-asset', nodeId: frame.id, assetId: payload.data.asset.id }); frame.progress = 'done'; completed++
+      frame.assetId = payload.data.asset.id
+      frame.existingAction = 'version'
+      post({ type: 'bind-asset', nodeId: frame.id, assetId: payload.data.asset.id })
+      if (reviewBoardId.value) {
+        const submission = await fetch(`${appUrl}/api/plugin/boards/${reviewBoardId.value}/assets`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token.value}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ assetId: payload.data.asset.id })
+        })
+        if (!submission.ok) {
+          const body = await submission.json().catch(() => null) as { error?: { message?: string }; data?: { error?: { message?: string } } } | null
+          throw new Error(body?.error?.message || body?.data?.error?.message || 'Uploaded to the library, but could not submit to the review board.')
+        }
+      }
+      frame.progress = 'done'; completed++
     } catch (error) { frame.progress = 'error'; frame.error = error instanceof Error ? error.message : 'Upload failed.' }
   }
-  busy.value = false; announcement.value = `${completed} of ${eligible.value.length} frames uploaded.`; post({ type: 'save-state', value: { settings: { ...settings }, shared: { tags: shared.tags, projectId: shared.projectId, language: shared.language, contentType: shared.contentType } } })
+  busy.value = false; announcement.value = `${completed} of ${eligible.value.length} frames ${reviewBoardId.value ? 'submitted' : 'uploaded'}.`; post({ type: 'save-state', value: { settings: { ...settings }, shared: { tags: shared.tags, projectId: shared.projectId, language: shared.language, contentType: shared.contentType } } })
 }
 
 window.onmessage = (event: MessageEvent<{ pluginMessage?: ControllerMessage }>) => {
@@ -193,14 +221,16 @@ onMounted(() => { post({ type: 'load-state' }); post({ type: 'refresh-selection'
     <section v-if="authState === 'checking'" class="center" role="status">Checking your session…</section>
     <section v-else-if="authState === 'signed-out'" class="auth" aria-labelledby="auth-title"><p class="eyebrow">Private library</p><h1 id="auth-title">Connect your account</h1><p>Use the email and password provided by a library administrator.</p><form class="password-form" @submit.prevent="passwordLogin"><label for="plugin-email">Email</label><input id="plugin-email" v-model="email" name="email" type="email" autocomplete="username" required><label for="plugin-password">Password</label><input id="plugin-password" v-model="password" name="password" type="password" autocomplete="current-password" required><button class="primary" type="submit" :disabled="authBusy">{{ authBusy ? 'Signing in…' : 'Sign in' }}</button></form><div class="auth-divider"><span>or</span></div><p>Team members can connect through Figma OAuth and paste the one-time code.</p><button class="oauth-button" type="button" @click="openLogin">Continue with Figma</button><label for="auth-code">One-time code</label><div class="code-row"><input id="auth-code" v-model="authCode" autocomplete="one-time-code" placeholder="Paste code"><button :disabled="!authCode.trim()" @click="exchangeCode">Connect</button></div><p v-if="globalError" class="error" role="alert">{{ globalError }}</p></section>
     <template v-else>
-      <header><h1>Upload frames</h1><button class="quiet" @click="signOut">Sign out</button></header>
+      <header><h1>{{ reviewBoardId ? 'Submit frames' : 'Upload frames' }}</h1><button class="quiet" @click="signOut">Sign out</button></header>
       <label v-if="workspaces.length" class="workspace-field" for="plugin-workspace">Workspace<select id="plugin-workspace" v-model="workspaceId" :disabled="workspaceBusy || busy" @change="switchWorkspace"><option v-for="workspace in workspaces" :key="workspace.id" :value="workspace.id">{{ workspace.name }} · {{ workspace.role }}</option></select></label>
+      <label class="destination-field" for="plugin-destination">Destination<select id="plugin-destination" v-model="reviewBoardId" :disabled="busy"><option value="">Library only</option><option v-for="board in reviewBoards" :key="board.id" :value="board.id">{{ reviewBoardLabel(board) }}</option></select></label>
+      <p v-if="selectedReviewBoard" class="destination-note">Frames will be uploaded to the library and submitted to this review.<template v-if="selectedReviewBoard.submission_deadline"> Deadline {{ new Date(selectedReviewBoard.submission_deadline).toLocaleDateString() }}.</template></p>
       <section v-if="!frames.length" class="center"><strong>Select one or more frames to upload.</strong><p>Frames, components, and instances are supported.</p><button @click="post({ type: 'refresh-selection' })">Check selection</button></section>
       <form v-else @submit.prevent="upload">
         <section aria-labelledby="selected-title"><div class="section-title"><h2 id="selected-title">Selected frames</h2><span>{{ frames.length }}</span></div><ul class="frames"><li v-for="frame in frames" :key="frame.id"><img :src="previewUrl(frame)" alt=""><div class="frame-fields"><label :for="`title-${frame.id}`">Title</label><input :id="`title-${frame.id}`" v-model="frame.title" required maxlength="200"><p>{{ frame.width }} × {{ frame.height }} · {{ frame.pageName }}</p><p v-if="!frame.fileKey" class="error">Reload this private plugin to enable a direct link to the file.</p><p v-if="frame.assetId" class="existing">This frame already exists in the library.</p><label v-if="frame.assetId" :for="`action-${frame.id}`">Upload choice</label><select v-if="frame.assetId" :id="`action-${frame.id}`" v-model="frame.existingAction"><option value="version">Upload new version</option><option value="separate">Create separate asset</option><option value="cancel">Skip this frame</option></select><p v-if="frame.progress !== 'idle'" class="progress" :data-state="frame.progress">{{ frame.progress === 'done' ? 'Uploaded' : frame.progress === 'error' ? frame.error : frame.progress === 'exporting' ? 'Exporting…' : 'Uploading…' }}</p></div></li></ul></section>
         <section aria-labelledby="metadata-title"><h2 id="metadata-title">Shared metadata</h2><div class="tag-field"><span class="field-label">Tags</span><div v-if="selectedTags.length" class="selected-tags" aria-label="Selected tags"><button v-for="tag in selectedTags" :key="tag" class="tag-chip selected" type="button" :aria-label="`Remove ${tag}`" @click="removeTag(tag)"><span>{{ tag }}</span><span aria-hidden="true">×</span></button></div><div class="tag-entry"><input v-model="tagDraft" maxlength="80" aria-label="Add a tag" placeholder="Add a tag" @keydown="handleTagKeydown"><button type="button" :disabled="tagBusy || !tagDraft.trim()" @click="createTag">{{ tagBusy ? 'Adding…' : 'Add' }}</button></div><div v-if="suggestedTags.length" class="tag-suggestions"><span>Available</span><div><button v-for="tag in suggestedTags" :key="tag.id" class="tag-chip" type="button" @click="selectTag(tag.name)">{{ tag.name }}</button></div></div></div><div class="project-field"><label for="plugin-project">Project</label><select id="plugin-project" v-model="shared.projectId"><option value="">No project</option><option v-for="project in projects" :key="project.id" :value="project.id">{{ project.name }}</option></select><div v-if="canCreateProjects" class="project-entry"><input v-model="projectDraft" maxlength="120" aria-label="New project name" placeholder="New project" @keydown.enter.prevent="createProject"><button type="button" :disabled="projectBusy||!projectDraft.trim()" @click="createProject">{{ projectBusy?'Creating…':'Create' }}</button></div><p v-else class="field-note">Editors and admins can create projects.</p></div><div class="grid"><label>Language <input v-model="shared.language" placeholder="en-US"></label><label>Content type <input v-model="shared.contentType" placeholder="Social post"></label></div><label>Description <textarea v-model="shared.description" rows="3" placeholder="Describe how this asset should be used"></textarea></label></section>
         <section aria-labelledby="export-title"><h2 id="export-title">Export</h2><div class="settings"><label>Format <select v-model="settings.format"><option>PNG</option><option>JPG</option></select></label><label>Scale <select v-model.number="settings.scale"><option :value="1">1×</option><option :value="2">2×</option><option :value="3">3×</option></select></label><label v-if="settings.format === 'JPG'">JPG quality <input v-model.number="settings.jpgQuality" type="number" min="10" max="100" step="5"></label></div></section>
-        <p v-if="globalError" class="error" role="alert">{{ globalError }}</p><footer><span>{{ eligible.length }} ready</span><button class="primary" type="submit" :disabled="busy || !eligible.length">{{ busy ? 'Uploading…' : `Upload ${eligible.length} ${eligible.length === 1 ? 'frame' : 'frames'}` }}</button></footer>
+        <p v-if="globalError" class="error" role="alert">{{ globalError }}</p><footer><span>{{ eligible.length }} ready</span><button class="primary" type="submit" :disabled="busy || !eligible.length">{{ busy ? reviewBoardId ? 'Submitting…' : 'Uploading…' : `${reviewBoardId ? 'Submit' : 'Upload'} ${eligible.length} ${eligible.length === 1 ? 'frame' : 'frames'}` }}</button></footer>
       </form>
     </template>
   </main>
@@ -209,6 +239,7 @@ onMounted(() => { post({ type: 'load-state' }); post({ type: 'refresh-selection'
 <style>
 *{box-sizing:border-box}body{margin:0;color:var(--figma-color-text,#222);background:var(--figma-color-bg,#fff);font:12px/1.4 Inter,system-ui,sans-serif}main{min-height:100vh;padding:16px}h1{margin:2px 0;font-size:20px;letter-spacing:-.03em}h2{margin:18px 0 8px;font-size:12px}.eyebrow{margin:0;color:var(--figma-color-text-secondary,#666);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}header{display:flex;align-items:start;justify-content:space-between;margin-bottom:12px}.quiet{border:0;background:transparent;color:var(--figma-color-text-secondary,#666)}button,input,select,textarea{font:inherit;color:inherit}button{min-height:32px;padding:0 10px;border:1px solid var(--figma-color-border,#ccc);border-radius:6px;background:var(--figma-color-bg,#fff);cursor:pointer}button:active{scale:.96}button:disabled{cursor:default;opacity:.45;scale:1}.primary{border-color:#111;color:#fff;background:#111;font-weight:650}label{display:block;margin-top:8px;color:var(--figma-color-text-secondary,#666);font-size:10px;font-weight:650}input,select,textarea{width:100%;margin-top:4px;padding:7px 8px;border:1px solid var(--figma-color-border,#ccc);border-radius:5px;background:var(--figma-color-bg,#fff)}:is(button,input,select,textarea):focus-visible{outline:2px solid #1684ff;outline-offset:2px}.auth{padding-top:24px}.auth>p:not(.eyebrow){color:var(--figma-color-text-secondary,#666)}.password-form{display:grid}.auth .password-form .primary{width:100%;margin:12px 0 0}.oauth-button{width:100%;margin:4px 0}.auth-divider{display:flex;align-items:center;gap:8px;margin:16px 0;color:var(--figma-color-text-secondary,#666);font-size:10px}.auth-divider::before,.auth-divider::after{height:1px;flex:1;background:var(--figma-color-border,#ddd);content:""}.code-row{display:grid;grid-template-columns:1fr auto;gap:6px}.code-row button{align-self:end}.center{min-height:300px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:var(--figma-color-text-secondary,#666)}.center strong{color:var(--figma-color-text,#222)}.section-title{display:flex;align-items:center;justify-content:space-between}.section-title span{color:var(--figma-color-text-secondary,#666)}.frames{display:grid;gap:8px;margin:0;padding:0;list-style:none}.frames li{display:grid;grid-template-columns:88px 1fr;gap:10px;padding:8px;border-radius:9px;background:var(--figma-color-bg-secondary,#f5f5f5)}.frames img{width:88px;height:88px;object-fit:cover;border-radius:5px;outline:1px solid oklch(0 0 0/.1)}.frame-fields label:first-child{margin-top:0}.frame-fields p{margin:4px 0;color:var(--figma-color-text-secondary,#666);font-size:10px}.existing{color:#9b6400!important}.progress[data-state=done]{color:#14733b!important}.progress[data-state=error],.error{color:#b42318!important}.grid,.settings{display:grid;grid-template-columns:1fr 1fr;gap:0 8px}footer{position:sticky;bottom:-16px;display:flex;align-items:center;justify-content:space-between;margin:18px -16px -16px;padding:10px 16px;background:var(--figma-color-bg,#fff);border-top:1px solid var(--figma-color-border,#ddd)}.sr-only{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}@media(prefers-reduced-motion:reduce){button:active{scale:1}}
 .workspace-field{margin:0 0 14px}.workspace-field select{color:var(--figma-color-text,#222);font-weight:600}
+.destination-field{margin:0 0 8px}.destination-field select{color:var(--figma-color-text,#222);font-weight:600}.destination-note{margin:0 0 14px;color:var(--figma-color-text-secondary,#666);font-size:10px}
 .tag-field{margin-top:8px}.field-label,.tag-suggestions>span{color:var(--figma-color-text-secondary,#666);font-size:10px;font-weight:650}.selected-tags,.tag-suggestions>div{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px}.tag-chip{min-height:26px;display:inline-flex;align-items:center;gap:5px;padding:0 9px;border:0;border-radius:999px;background:var(--figma-color-bg-secondary,#eee);font-weight:600;transition-property:scale,opacity;transition-duration:150ms}.tag-chip.selected{color:var(--figma-color-bg,#fff);background:var(--figma-color-text,#222)}.tag-entry{display:grid;grid-template-columns:1fr auto;gap:6px;margin-top:6px}.tag-entry input{margin:0}.tag-entry button{align-self:stretch}.tag-suggestions{margin-top:8px}
 .project-field{margin-top:12px}.project-field>label{margin-top:0}.project-field>select{margin-top:4px}.project-entry{display:grid;grid-template-columns:1fr auto;gap:6px;margin-top:6px}.project-entry input{margin:0}.project-entry button{align-self:stretch}.field-note{margin:5px 0 0;color:var(--figma-color-text-secondary,#666);font-size:10px}
 </style>

@@ -19,6 +19,7 @@ export default defineEventHandler(async (event) => {
     .select('id,title,description,thumbnail_path,thumbnail_2x_path,image_path,width,height,status,figma_url,created_at,updated_at,language,content_type,projects(name),asset_tags(tags(id,name,slug)),allowed_users!assets_uploaded_by_fkey(figma_handle,avatar_url)', { count: 'exact' })
     .eq('organization_id', session.user.organization_id).neq('status', 'archived')
   if (session.user.role === 'viewer') query = query.eq('status', 'approved')
+  if (q.mine) query = query.eq('uploaded_by', session.user.id)
   if (q.status) query = query.eq('status', q.status)
   if (q.projectId) query = query.eq('project_id', q.projectId)
   if (q.dateFrom) query = query.gte('created_at', q.dateFrom)
@@ -34,6 +35,7 @@ export default defineEventHandler(async (event) => {
   let submitterAssetsQuery = useSupabaseAdmin().from('assets')
     .select('uploaded_by').eq('organization_id', session.user.organization_id).neq('status', 'archived')
   if (session.user.role === 'viewer') submitterAssetsQuery = submitterAssetsQuery.eq('status', 'approved')
+  if (q.mine) submitterAssetsQuery = submitterAssetsQuery.eq('uploaded_by', session.user.id)
   const { data: submitterAssets, error: submitterAssetsError } = await submitterAssetsQuery
   if (submitterAssetsError) throw databaseError('list asset submitters', submitterAssetsError)
   const submitterIds = [...new Set(submitterAssets.map((item: { uploaded_by: string }) => item.uploaded_by))]

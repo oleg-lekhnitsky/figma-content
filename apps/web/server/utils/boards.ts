@@ -12,7 +12,7 @@ export const requireBoardRole = async (
 ) => {
   const db = useSupabaseAdmin()
   const { data: collection, error: collectionError } = await db.from('public_collections')
-    .select('id,organization_id,created_by,title,mode,filters,slug,expires_at,revoked_at,publication_enabled,content_strategy,created_at,updated_at')
+    .select('id,organization_id,created_by,title,purpose,review_month,submission_deadline,mode,filters,slug,expires_at,revoked_at,publication_enabled,content_strategy,layout,created_at,updated_at')
     .eq('id', collectionId).eq('organization_id', organizationId).maybeSingle()
   if (collectionError) throw databaseError('read board', collectionError)
   if (!collection) throw appError(404, 'BOARD_NOT_FOUND', 'Board not found.')

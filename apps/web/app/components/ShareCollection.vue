@@ -3,7 +3,7 @@ const props = defineProps<{ currentSearch?: string }>()
 
 interface Option { id: string; name: string }
 type BoardRole = 'owner' | 'editor' | 'contributor' | 'viewer' | 'admin'
-interface Collection { id: string; slug: string; title: string; mode: 'dynamic' | 'static'; role: BoardRole; expires_at: string | null; publication_enabled: boolean; content_strategy: 'dynamic' | 'snapshot' | 'manual'; created_at: string; updated_at: string }
+interface Collection { id: string; slug: string; title: string; purpose: 'showcase' | 'review'; review_month: string | null; submission_deadline: string | null; mode: 'dynamic' | 'static'; layout: 'masonry' | 'column' | 'presentation'; role: BoardRole; expires_at: string | null; publication_enabled: boolean; content_strategy: 'dynamic' | 'snapshot' | 'manual'; created_at: string; updated_at: string }
 interface ListResponse { data: { collections: Collection[] } }
 interface OptionsResponse<T extends string> { data: Record<T, Option[]> }
 interface CreateResponse { data: { collection: Collection & { itemCount: number | null } } }
@@ -11,6 +11,7 @@ interface CreateResponse { data: { collection: Collection & { itemCount: number 
 const dialog = ref<HTMLDialogElement | null>(null)
 const titleInput = ref<HTMLInputElement | null>(null)
 const title = ref('')
+const purpose = ref<'showcase' | 'review'>('showcase')
 const mode = ref<'dynamic' | 'static'>('dynamic')
 const range = ref<'all' | 'day' | 'month' | 'custom'>('month')
 const dateFrom = ref('')
@@ -18,6 +19,8 @@ const dateTo = ref('')
 const projectId = ref('')
 const tagId = ref('')
 const expiry = ref('')
+const reviewMonth = ref(new Date().toISOString().slice(0, 7))
+const submissionDeadline = ref('')
 const projects = ref<Option[]>([])
 const tags = ref<Option[]>([])
 const collections = ref<Collection[]>([])
@@ -71,6 +74,8 @@ const defaultTitle = () => range.value === 'day'
   : range.value === 'month'
     ? new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' }).format(new Date())
     : 'Shared collection'
+const reviewTitle = () => new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' })
+  .format(new Date(`${reviewMonth.value}-01T12:00:00`))
 
 const loadCollections = async () => {
   const [shareResponse, projectResponse, tagResponse] = await Promise.all([
@@ -101,17 +106,27 @@ const createCollection = async () => {
   message.value = ''
   errorMessage.value = ''
   try {
+    const review = purpose.value === 'review'
+    const reviewStart = review ? new Date(`${reviewMonth.value}-01T00:00:00.000`) : null
+    const reviewEnd = reviewStart ? new Date(reviewStart.getFullYear(), reviewStart.getMonth() + 1, 0, 23, 59, 59, 999) : null
     const response = await $fetch<CreateResponse>('/api/shares', {
       method: 'POST', body: {
-        title: title.value,
-        mode: mode.value,
-        filters: { search: props.currentSearch ?? '', projectId: projectId.value || null, tagId: tagId.value || null, ...datesForRange() },
-        expiresAt: isoAt(expiry.value, true)
+        title: title.value || (review ? reviewTitle() : defaultTitle()),
+        purpose: purpose.value,
+        mode: review ? 'static' : mode.value,
+        filters: review
+          ? { search: '', projectId: null, tagId: null, uploadedBy: null, dateFrom: reviewStart?.toISOString(), dateTo: reviewEnd?.toISOString() }
+          : { search: props.currentSearch ?? '', projectId: projectId.value || null, tagId: tagId.value || null, ...datesForRange() },
+        expiresAt: review ? null : isoAt(expiry.value, true),
+        reviewMonth: review ? `${reviewMonth.value}-01` : null,
+        submissionDeadline: review ? isoAt(submissionDeadline.value, true) : null
       }
     })
     collections.value.unshift(response.data.collection)
-    await copyLink(response.data.collection)
-    message.value = response.data.collection.mode === 'static'
+    if (response.data.collection.purpose !== 'review') await copyLink(response.data.collection)
+    message.value = response.data.collection.purpose === 'review'
+      ? 'Monthly review created. Add contributors so they can submit their work.'
+      : response.data.collection.mode === 'static'
       ? `Link copied. The snapshot contains ${response.data.collection.itemCount ?? 0} approved items.`
       : 'Link copied. New approved items matching these filters will appear automatically.'
   } catch { errorMessage.value = 'Unable to create the public link. Check the settings and try again.' }
@@ -168,8 +183,15 @@ type="button"
           </svg></button>
       </header>
       <form @submit.prevent="createCollection">
-        <label>Board name<input ref="titleInput" v-model="title" name="title" required maxlength="120"></label>
         <fieldset>
+          <legend>Board type</legend><label class="choice"><input
+v-model="purpose" type="radio" value="showcase"
+              name="purpose"><span><strong>Showcase</strong><small>Curate work for a public link or portfolio.</small></span></label><label class="choice"><input
+v-model="purpose" type="radio"
+              value="review" name="purpose"><span><strong>Monthly review</strong><small>Collect work privately from invited contributors.</small></span></label>
+        </fieldset>
+        <label>Board name<input ref="titleInput" v-model="title" name="title" required maxlength="120"></label>
+        <fieldset v-if="purpose === 'showcase'">
           <legend>Updates</legend><label class="choice"><input
 v-model="mode" type="radio" value="dynamic"
               name="mode"><span><strong>Dynamic</strong><small>New approved items matching the filters appear
@@ -178,7 +200,7 @@ v-model="mode" type="radio"
               value="static" name="mode"><span><strong>Static</strong><small>Freeze the current results and update the
                 snapshot manually.</small></span></label>
         </fieldset>
-        <div class="form-grid"><label>Date range<select v-model="range" name="range">
+        <div v-if="purpose === 'showcase'" class="form-grid"><label>Date range<select v-model="range" name="range">
               <option value="month">This month</option>
               <option value="day">Today</option>
               <option value="all">Any date</option>
@@ -192,13 +214,17 @@ v-model="mode" type="radio"
             </select></label><label>Link expiry <span>(optional)</span><input
 v-model="expiry" type="date"
               name="expiry"></label></div>
-        <div v-if="range === 'custom'" class="form-grid custom-dates"><label>Start date<input
+        <div v-else class="form-grid"><label>Review month<input
+v-model="reviewMonth" type="month" required
+              name="review-month"></label><label>Submission deadline <span>(optional)</span><input
+v-model="submissionDeadline" type="date" name="submission-deadline"></label></div>
+        <div v-if="purpose === 'showcase' && range === 'custom'" class="form-grid custom-dates"><label>Start date<input
 v-model="dateFrom"
               type="date" name="dateFrom" required></label><label>End date<input
 v-model="dateTo" type="date"
               name="dateTo" required></label></div>
-        <p class="approval-note">Only approved items can appear on a public link.</p>
-        <button type="submit" :disabled="busy">{{ busy ? 'Creating board…' : 'Create board' }}</button>
+        <p class="approval-note">{{ purpose === 'review' ? 'Review boards start private. Contributors can add their own work.' : 'Only approved items can appear on a public link.' }}</p>
+        <button type="submit" :disabled="busy">{{ busy ? 'Creating board…' : purpose === 'review' ? 'Create monthly review' : 'Create board' }}</button>
       </form>
       <p class="feedback" role="status" aria-live="polite">{{ message }}</p>
       <p v-if="errorMessage" class="feedback error" role="alert">{{ errorMessage }}</p>
@@ -216,7 +242,7 @@ v-model="dateTo" type="date"
                   class="field-message" :class="{ error: boardFeedback[collection.id]?.error }" role="status"
                   aria-live="polite">{{ boardFeedback[collection.id]?.text }}</span></label><template v-else><strong>{{
                   collection.title }}</strong><span class="field-message" aria-hidden="true" /></template><span>{{
-                collection.role }} · {{ collection.mode }} · {{ collection.publication_enabled ? 'public' : 'private'
+                collection.role }} · {{ collection.purpose === 'review' ? 'monthly review' : collection.mode }} · {{ collection.publication_enabled ? 'public' : 'private'
                 }}<template v-if="collection.expires_at"> · expires {{ new
                   Date(collection.expires_at).toLocaleDateString() }}</template></span>
             </div>
@@ -259,8 +285,8 @@ v-model="dateTo" type="date"
 }
 
 .share-dialog::backdrop {
-  background: rgb(0 0 0 / .45);
-  backdrop-filter: blur(8px);
+  background: rgb(0 0 0 / .15);
+  backdrop-filter: blur(48px);
 }
 
 .share-panel {
@@ -386,6 +412,8 @@ h3 {
 }
 
 ul {
+  display: grid;
+  row-gap: var(--space);
   margin: 0;
   padding: 0;
   list-style: none;

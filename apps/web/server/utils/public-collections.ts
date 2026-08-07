@@ -45,7 +45,10 @@ export const replaceCollectionSnapshot = async (collectionId: string, organizati
   return ids.length
 }
 
-export const publicAssetsForCollection = async (collection: { id: string; organization_id: string; mode: 'dynamic' | 'static'; filters: PublicCollectionFilters }) => {
+export const publicAssetsForCollection = async (
+  collection: { id: string; organization_id: string; mode: 'dynamic' | 'static'; filters: PublicCollectionFilters },
+  options: { includeUnapproved?: boolean } = {}
+) => {
   let ids: string[]
   if (collection.mode === 'dynamic') {
     ids = await matchingApprovedAssetIds(collection.organization_id, collection.filters)
@@ -56,10 +59,14 @@ export const publicAssetsForCollection = async (collection: { id: string; organi
     ids = data.map((item: { asset_id: string }) => item.asset_id)
   }
   if (!ids.length) return []
-  const { data, error } = await useSupabaseAdmin().from('assets')
-    .select('id,title,description,thumbnail_path,thumbnail_2x_path,image_path,width,height,created_at,projects(name),asset_tags(tags(name))')
-    .eq('organization_id', collection.organization_id).eq('status', 'approved').in('id', ids)
-    .order('created_at', { ascending: false })
+  const selection = options.includeUnapproved
+    ? 'id,title,description,thumbnail_path,thumbnail_2x_path,image_path,width,height,status,uploaded_by,created_at,projects(name),asset_tags(tags(name)),allowed_users!assets_uploaded_by_fkey(email,figma_handle,avatar_url)'
+    : 'id,title,description,thumbnail_path,thumbnail_2x_path,image_path,width,height,created_at,projects(name),asset_tags(tags(name))'
+  let query = useSupabaseAdmin().from('assets')
+    .select(selection)
+    .eq('organization_id', collection.organization_id).in('id', ids)
+  query = options.includeUnapproved ? query.neq('status', 'archived') : query.eq('status', 'approved')
+  const { data, error } = await query.order('created_at', { ascending: false })
   if (error) throw databaseError('load public collection assets', error)
   return await Promise.all(data.map(async (asset: { thumbnail_path: string | null; thumbnail_2x_path: string | null; image_path: string; [key: string]: unknown }) => ({
     ...asset,

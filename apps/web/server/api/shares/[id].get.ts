@@ -16,6 +16,8 @@ export default defineEventHandler(async (event) => {
     data: {
       collection,
       role,
+      currentUserId: session.user.id,
+      workspaceRole: session.user.role,
       workspaceAdmin: session.user.role === 'admin'
     }
   }

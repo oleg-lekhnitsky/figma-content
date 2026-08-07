@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assetListQuerySchema, assetMetadataSchema, boardMemberSchema, createPublicCollectionSchema, hasPermission, passwordChangeSchema, passwordLoginSchema, roleSchema, userInviteSchema, userUpdateSchema } from './index'
+import { assetListQuerySchema, assetMetadataSchema, boardMemberSchema, createPublicCollectionSchema, hasPermission, passwordChangeSchema, passwordLoginSchema, reviewDecisionSchema, reviewSubmissionSchema, roleSchema, updatePublicCollectionSchema, userInviteSchema, userUpdateSchema } from './index'
 
 describe('shared authorization contracts', () => {
   it('keeps role permissions least-privileged', () => {
@@ -49,6 +49,23 @@ describe('shared authorization contracts', () => {
     expect(createPublicCollectionSchema.safeParse({ ...base, title: ' ', mode: 'static' }).success).toBe(false)
   })
 
+  it('accepts only supported board layouts', () => {
+    expect(updatePublicCollectionSchema.safeParse({ action: 'layout', layout: 'presentation' }).success).toBe(true)
+    expect(updatePublicCollectionSchema.safeParse({ action: 'layout', layout: 'column' }).success).toBe(true)
+    expect(updatePublicCollectionSchema.safeParse({ action: 'layout', layout: 'grid' }).success).toBe(false)
+  })
+
+  it('requires monthly reviews to use a review month and manual collection', () => {
+    const base = {
+      title: 'August review', purpose: 'review', mode: 'static', expiresAt: null,
+      reviewMonth: '2026-08-01', submissionDeadline: null,
+      filters: { search: '', projectId: null, tagId: null, uploadedBy: null, dateFrom: null, dateTo: null }
+    }
+    expect(createPublicCollectionSchema.safeParse(base).success).toBe(true)
+    expect(createPublicCollectionSchema.safeParse({ ...base, reviewMonth: null }).success).toBe(false)
+    expect(createPublicCollectionSchema.safeParse({ ...base, mode: 'dynamic' }).success).toBe(false)
+  })
+
   it('rejects public collection date ranges in reverse order', () => {
     const result = createPublicCollectionSchema.safeParse({
       title: 'Invalid range', mode: 'dynamic', expiresAt: null,
@@ -65,5 +82,14 @@ describe('shared authorization contracts', () => {
   it('keeps board ownership out of member invitations', () => {
     expect(boardMemberSchema.safeParse({ email: 'friend@example.com', role: 'contributor' }).success).toBe(true)
     expect(boardMemberSchema.safeParse({ email: 'friend@example.com', role: 'owner' }).success).toBe(false)
+  })
+
+  it('accepts only review workflow statuses', () => {
+    expect(reviewSubmissionSchema.safeParse({ status: 'ready' }).success).toBe(true)
+    expect(reviewSubmissionSchema.safeParse({ status: 'reviewed' }).success).toBe(true)
+    expect(reviewSubmissionSchema.safeParse({ status: 'approved' }).success).toBe(false)
+    expect(reviewDecisionSchema.safeParse({ assetIds: ['45c6ba30-9638-4a98-b42d-1d9313e8d9f7'], decision: 'approve' }).success).toBe(true)
+    expect(reviewDecisionSchema.safeParse({ assetIds: [], decision: 'approve' }).success).toBe(false)
+    expect(reviewDecisionSchema.safeParse({ assetIds: ['45c6ba30-9638-4a98-b42d-1d9313e8d9f7'], decision: 'publish' }).success).toBe(false)
   })
 })

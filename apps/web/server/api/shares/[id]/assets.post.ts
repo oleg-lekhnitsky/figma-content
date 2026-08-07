@@ -15,13 +15,15 @@ export default defineEventHandler(async (event) => {
   if (!input.success) throw appError(400, 'INVALID_BOARD_ASSET', 'Choose an asset to add.')
   const db = useSupabaseAdmin()
   let query = db.from('assets').select('id,uploaded_by').eq('id', input.data.assetId)
-    .eq('organization_id', session.user.organization_id).eq('status', 'approved')
+    .eq('organization_id', session.user.organization_id)
+  query = collection.purpose === 'review' ? query.neq('status', 'archived') : query.eq('status', 'approved')
   if (role === 'contributor') query = query.eq('uploaded_by', session.user.id)
   const { data: asset, error: assetError } = await query.maybeSingle()
   if (assetError) throw databaseError('read board asset', assetError)
   if (!asset) throw appError(403, 'BOARD_ASSET_FORBIDDEN', 'Contributors can add only their own approved assets.')
   const { error } = await db.from('public_collection_assets').upsert({
-    collection_id: id, asset_id: asset.id, added_by: session.user.id, source: 'manual'
+    collection_id: id, asset_id: asset.id, added_by: session.user.id, source: 'manual',
+    ...(collection.purpose === 'review' ? { review_status: 'ready', reviewed_at: null, reviewed_by: null } : {})
   }, { onConflict: 'collection_id,asset_id' })
   if (error) throw databaseError('add board asset', error)
   const { error: strategyError } = await db.from('public_collections').update({ content_strategy: 'manual' }).eq('id', id).eq('organization_id', session.user.organization_id)
