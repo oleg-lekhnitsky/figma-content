@@ -1,7 +1,7 @@
 import { getHeader, getRequestURL, sendNoContent, setHeader } from 'h3'
 
 const isAllowedPluginPath = (pathname: string) =>
-  pathname.startsWith('/api/plugin/') || pathname === '/api/assets' || pathname.startsWith('/api/assets/') || pathname === '/api/projects'
+  pathname.startsWith('/api/plugin/') || pathname === '/api/assets' || pathname.startsWith('/api/assets/') || pathname === '/api/projects' || pathname === '/api/tags'
 
 export default defineEventHandler((event) => {
   const origin = getHeader(event, 'origin')

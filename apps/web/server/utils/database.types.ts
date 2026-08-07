@@ -16,12 +16,24 @@ export interface AllowedUserRow {
   must_change_password: boolean
   failed_login_count: number
   locked_until: string | null
+  account_id: string
+}
+
+export interface AccountRow {
+  id: string
+  email: string | null
+  figma_user_id: string | null
+  password_hash: string | null
+  must_change_password: boolean
+  failed_login_count: number
+  locked_until: string | null
 }
 
 export interface Database {
   public: {
     Tables: {
       allowed_users: { Row: AllowedUserRow, Insert: Partial<AllowedUserRow>, Update: Partial<AllowedUserRow>, Relationships: [] }
+      accounts: { Row: AccountRow, Insert: Partial<AccountRow>, Update: Partial<AccountRow>, Relationships: [] }
       sessions: { Row: Record<string, unknown>, Insert: Record<string, unknown>, Update: Record<string, unknown>, Relationships: [] }
       oauth_states: { Row: Record<string, unknown>, Insert: Record<string, unknown>, Update: Record<string, unknown>, Relationships: [] }
       plugin_auth_codes: { Row: Record<string, unknown>, Insert: Record<string, unknown>, Update: Record<string, unknown>, Relationships: [] }

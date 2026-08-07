@@ -3,14 +3,18 @@ const props = defineProps<{ assetId: string }>()
 const emit = defineEmits<{ close: [] }>()
 interface AssetDetail { id: string; uploaded_by: string; title: string; description: string | null; previewUrl: string; width: number; height: number; file_size: number; mime_type: string; status: string; version: number; created_at: string; updated_at: string; figma_url: string; language: string | null; content_type: string | null; projects: { name: string } | null; campaigns: { name: string } | null; asset_tags: Array<{ tags: { id: string; name: string } | null }>; allowed_users: { figma_handle: string | null } | null; versions: Array<{ id: string; version: number; width: number; height: number; file_size: number; created_at: string }> }
 interface SessionResponse { data: { authenticated: boolean; user?: { id: string; role: string } } }
+interface Board { id:string; title:string; mode:'dynamic'|'static'; role:'owner'|'editor'|'contributor'|'viewer' }
 const dialog = ref<HTMLDialogElement>()
 const { data, status, error, refresh } = await useFetch<{ data: { asset: AssetDetail } }>(() => `/api/assets/${props.assetId}`)
 const { data: session } = await useFetch<SessionResponse>('/api/auth/session')
+const { data: boardData } = await useFetch<{data:{collections:Board[]}}>('/api/shares')
 const asset = computed(() => data.value?.data.asset)
 const role = computed(() => session.value?.data.user?.role)
 const canEdit = computed(() => ['editor', 'admin'].includes(role.value ?? '') || (role.value === 'contributor' && asset.value?.uploaded_by === session.value?.data.user?.id))
 const canApprove = computed(() => ['editor', 'admin'].includes(role.value ?? ''))
-const editing = ref(false); const title = ref(''); const description = ref(''); const actionError = ref(''); const downloading = ref(false)
+const eligibleBoards = computed(() => (boardData.value?.data.collections ?? []).filter(board => board.mode==='static' && ['owner','editor','contributor'].includes(board.role) && (board.role!=='contributor' || asset.value?.uploaded_by===session.value?.data.user?.id)))
+const boardId = ref('')
+const editing = ref(false); const title = ref(''); const description = ref(''); const actionError = ref(''); const actionMessage = ref(''); const downloading = ref(false)
 const isClosing = ref(false)
 let previousBodyOverflow = ''
 let previousRootOverflow = ''
@@ -47,6 +51,7 @@ const close = () => {
 const patchAsset = async (body: Record<string, unknown>) => { actionError.value = ''; try { await $fetch(`/api/assets/${props.assetId}`, { method: 'PATCH', body }); await refresh(); editing.value = false } catch { actionError.value = 'Unable to update this asset.' } }
 const download = async () => { if (!asset.value) return; downloading.value = true; try { const response = await $fetch<{ data: { url: string } }>(`/api/assets/${props.assetId}/download-url`, { method: 'POST' }); window.location.assign(response.data.url) } catch { actionError.value = 'Unable to prepare the download.' } finally { downloading.value = false } }
 const remove = async () => { if (!confirm('Permanently delete this asset and every version?')) return; try { await $fetch(`/api/assets/${props.assetId}`, { method: 'DELETE' }); close() } catch { actionError.value = 'Unable to delete this asset.' } }
+const addToBoard = async () => { if(!boardId.value)return; actionError.value=''; actionMessage.value=''; try { await $fetch(`/api/shares/${boardId.value}/assets`,{method:'POST',body:{assetId:props.assetId}}); actionMessage.value='Added to board.' } catch { actionError.value='Unable to add this asset to the board.' } }
 const formatBytes = (bytes: number) => `${(bytes / 1_048_576).toFixed(1)} MB`
 </script>
 
@@ -88,6 +93,7 @@ class="button-secondary"
 class="button button-secondary" :href="asset.figma_url" target="_blank"
               rel="noopener noreferrer">Open in
               Figma</a></div>
+          <div v-if="asset.status==='approved' && eligibleBoards.length" class="board-action"><label><span>Add to board</span><select v-model="boardId"><option value="">Choose a static board</option><option v-for="board in eligibleBoards" :key="board.id" :value="board.id">{{ board.title }}</option></select></label><button class="button-secondary" type="button" :disabled="!boardId" @click="addToBoard">Add</button></div>
           <div v-if="canEdit" class="manage-actions"><button class="text-button" @click="editing = true">Edit
               details</button><button
 v-if="canApprove && asset.status !== 'approved'" class="text-button"
@@ -97,6 +103,7 @@ v-if="asset.status !== 'archived'"
 v-if="role === 'admin'"
               class="text-button danger" @click="remove">Delete</button></div>
           <p v-if="actionError" class="error" role="alert">{{ actionError }}</p>
+          <p v-if="actionMessage" class="success" role="status">{{ actionMessage }}</p>
           <dl>
             <div>
               <dt>Project</dt>
@@ -307,6 +314,9 @@ h1 {
 .error {
   color: var(--color-danger)
 }
+
+.success { color: var(--color-muted) }
+.board-action{display:flex;align-items:end;gap:8px;margin:var(--space) 0}.board-action label{min-width:0;flex:1;margin:0}.board-action label span{display:block;margin-bottom:4px}.board-action select{width:100%;min-height:36px}.board-action button{flex:0 0 auto}
 
 label {
   display: block;

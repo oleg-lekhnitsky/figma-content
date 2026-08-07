@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assetListQuerySchema, assetMetadataSchema, createPublicCollectionSchema, hasPermission, passwordChangeSchema, passwordLoginSchema, roleSchema, userInviteSchema, userUpdateSchema } from './index'
+import { assetListQuerySchema, assetMetadataSchema, boardMemberSchema, createPublicCollectionSchema, hasPermission, passwordChangeSchema, passwordLoginSchema, roleSchema, userInviteSchema, userUpdateSchema } from './index'
 
 describe('shared authorization contracts', () => {
   it('keeps role permissions least-privileged', () => {
@@ -60,5 +60,10 @@ describe('shared authorization contracts', () => {
   it('validates asset list date filters', () => {
     expect(assetListQuerySchema.safeParse({ dateFrom: '2026-08-01T00:00:00.000Z' }).success).toBe(true)
     expect(assetListQuerySchema.safeParse({ dateFrom: '2026-08-10T00:00:00.000Z', dateTo: '2026-08-01T00:00:00.000Z' }).success).toBe(false)
+  })
+
+  it('keeps board ownership out of member invitations', () => {
+    expect(boardMemberSchema.safeParse({ email: 'friend@example.com', role: 'contributor' }).success).toBe(true)
+    expect(boardMemberSchema.safeParse({ email: 'friend@example.com', role: 'owner' }).success).toBe(false)
   })
 })

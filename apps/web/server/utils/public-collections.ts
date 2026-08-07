@@ -18,6 +18,7 @@ export const matchingApprovedAssetIds = async (organizationId: string, filters: 
   let query = useSupabaseAdmin().from('assets').select('id')
     .eq('organization_id', organizationId).eq('status', 'approved')
   if (filters.projectId) query = query.eq('project_id', filters.projectId)
+  if (filters.uploadedBy) query = query.eq('uploaded_by', filters.uploadedBy)
   if (filters.dateFrom) query = query.gte('created_at', filters.dateFrom)
   if (filters.dateTo) query = query.lte('created_at', filters.dateTo)
   if (filters.search) {
@@ -30,13 +31,13 @@ export const matchingApprovedAssetIds = async (organizationId: string, filters: 
   return data.map((item: { id: string }) => item.id)
 }
 
-export const replaceCollectionSnapshot = async (collectionId: string, organizationId: string, filters: PublicCollectionFilters) => {
+export const replaceCollectionSnapshot = async (collectionId: string, organizationId: string, filters: PublicCollectionFilters, addedBy?: string) => {
   const ids: string[] = await matchingApprovedAssetIds(organizationId, filters)
   const db = useSupabaseAdmin()
-  const { error: deleteError } = await db.from('public_collection_assets').delete().eq('collection_id', collectionId)
+  const { error: deleteError } = await db.from('public_collection_assets').delete().eq('collection_id', collectionId).eq('source', 'snapshot')
   if (deleteError) throw databaseError('clear collection snapshot', deleteError)
   if (ids.length) {
-    const { error } = await db.from('public_collection_assets').insert(ids.map(assetId => ({ collection_id: collectionId, asset_id: assetId })))
+    const { error } = await db.from('public_collection_assets').upsert(ids.map(assetId => ({ collection_id: collectionId, asset_id: assetId, added_by: addedBy ?? null, source: 'snapshot' })), { onConflict: 'collection_id,asset_id', ignoreDuplicates: true })
     if (error) throw databaseError('save collection snapshot', error)
   }
   return ids.length

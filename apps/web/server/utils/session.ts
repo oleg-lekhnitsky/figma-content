@@ -1,7 +1,7 @@
 import type { H3Event } from 'h3'
 import { deleteCookie, getCookie, getHeader, setCookie } from 'h3'
 import type { Role } from '@content-library/shared'
-import type { AllowedUserRow } from './database.types'
+import type { AccountRow, AllowedUserRow } from './database.types'
 import { appError, databaseError } from './app-error'
 import { hashToken, randomToken } from './crypto'
 
@@ -14,6 +14,8 @@ export interface AppSession {
   user: AllowedUserRow
   expiresAt: string
 }
+
+type SessionMember = Omit<AllowedUserRow, 'password_hash' | 'must_change_password' | 'failed_login_count' | 'locked_until'> & { accounts: AccountRow }
 
 export const createAppSession = async (allowedUserId: string) => {
   const config = useRuntimeConfig()
@@ -45,12 +47,14 @@ export const getAppSession = async (event: H3Event): Promise<AppSession | null> 
   if (!token) return null
   const now = new Date().toISOString()
   const { data, error } = await useSupabaseAdmin().from('sessions')
-    .select('id, expires_at, allowed_users(*)')
+    .select('id, expires_at, allowed_users(*,accounts(*))')
     .eq('token_hash', hashToken(token)).is('revoked_at', null).gt('expires_at', now).maybeSingle()
   if (error) throw databaseError('read session', error)
   if (!data) return null
-  const user = data.allowed_users as unknown as AllowedUserRow
-  if (!user?.is_active) return null
+  const member = data.allowed_users as unknown as SessionMember
+  if (!member?.is_active || !member.accounts) return null
+  const { accounts, ...membership } = member
+  const user = { ...membership, ...accounts, id: membership.id, email: accounts.email ?? membership.email } as AllowedUserRow
   void useSupabaseAdmin().from('sessions').update({ last_used_at: now }).eq('id', data.id)
   return { id: data.id as string, expiresAt: data.expires_at as string, user }
 }

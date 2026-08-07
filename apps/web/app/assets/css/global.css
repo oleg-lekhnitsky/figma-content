@@ -10,6 +10,9 @@
   --color-danger: #a21b14;
   --radius: 8px;
   --control-height: 44px;
+  --page-padding: var(--space);
+  --page-top: clamp(4rem, 9vw, 9rem);
+  --section-gap: clamp(3rem, 7vw, 7rem);
   --font-size-h1: clamp(2.75rem, 4vw, 6rem);
   --font-size-h2: clamp(2.5rem, 7vw, 5.5rem);
   --font-size-h1-mobile: clamp(2.75rem, 13vw, 4.5rem);
@@ -32,7 +35,7 @@ a { color: inherit; text-decoration: none; }
 a:hover { opacity: .55; }
 button, input, select, textarea { color: inherit; font: inherit; }
 button, .button { min-height: var(--control-height); padding: 0 1.25rem; overflow: visible; border: 0; border-radius: 999px; color: #fff; background: #000; font-weight: 700; cursor: pointer; transition-property: scale, opacity; transition-duration: 150ms; transition-timing-function: ease-out; }
-.button-secondary.button-secondary:not(.button-icon) { width: max-content; max-width: 100%; min-height: 36px; display: inline-flex; align-items: center; justify-content: center; justify-self: start; padding: 0 14px; border: 0; border-radius: 999px; color: var(--color-fg); background: var(--color-surface); font: inherit; line-height: 1; text-decoration: none; white-space: nowrap; cursor: pointer; }
+.button-secondary.button-secondary:not(.button-icon) { width: max-content; max-width: 100%; min-height: 36px; display: inline-flex; align-items: center; justify-content: center; justify-self: start; margin-left: -4px; padding: 0 14px; border: 0; border-radius: 999px; color: var(--color-fg); background: var(--color-surface); font: inherit; line-height: 1; text-decoration: none; white-space: nowrap; cursor: pointer; }
 .button-plain.button-plain { min-height: var(--control-height); padding: 0; border: 0; border-radius: 0; color: inherit; background: transparent; font: inherit; }
 .button-icon.button-icon { width: var(--control-height); height: var(--control-height); min-height: var(--control-height); display: grid; place-items: center; padding: 0; }
 button:hover, .button:hover, .button-secondary.button-secondary:not(.button-icon):hover { opacity: .8; }
@@ -40,6 +43,7 @@ button:active, .button:active, .button-secondary.button-secondary:not(.button-ic
 button:disabled { cursor: default; opacity: .45; scale: 1; }
 input, select, textarea { border: 0; border-bottom: 1px solid var(--color-line); border-radius: 0; background: transparent; }
 :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+:is(input, select, textarea):focus-visible { outline: 0; border-bottom: 1px solid var(--color-fg); }
 .page-shell { min-height: 100vh; display: grid; padding: var(--space); }
 .message-panel { width: min(100%, 42rem); align-self: center; justify-self: center; }
 .message-panel > :is(button, .button) { margin-left: -2px; }
@@ -48,6 +52,40 @@ input, select, textarea { border: 0; border-bottom: 1px solid var(--color-line);
 .admin-shell.admin-shell.admin-shell { --ink: var(--color-fg); --muted: var(--color-muted); --admin-columns: repeat(4, minmax(0, 1fr)); background: var(--color-bg); }
 .admin-shell.admin-shell .toolbar { background: rgb(255 255 255 / .94); }
 .admin-shell.admin-shell .close { background: var(--color-surface); }
+.admin-shell { min-height: 100vh; }
+.admin-shell > .toolbar {
+  position: sticky;
+  z-index: 3;
+  top: 0;
+  display: grid;
+  grid-template-columns: var(--admin-columns);
+  align-items: start;
+  gap: var(--space);
+  padding: var(--page-padding);
+  backdrop-filter: blur(14px);
+}
+.admin-shell > .toolbar .identity { font-weight: 760; letter-spacing: -.025em; }
+.admin-shell > .toolbar .close {
+  width: var(--control-height);
+  height: var(--control-height);
+  display: grid;
+  place-items: center;
+  justify-self: end;
+  margin-top: -10px;
+  border-radius: 50%;
+  transition-property: scale, opacity;
+  transition-duration: 150ms;
+}
+.admin-shell > .toolbar .close svg { width: 22px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+.admin-shell > main { padding: var(--page-top) var(--page-padding) 6rem; }
+.admin-shell > main > .intro {
+  display: grid;
+  grid-template-columns: var(--admin-columns);
+  gap: var(--space);
+  margin-bottom: clamp(5rem, 11vw, 11rem);
+}
+.admin-shell > main > .intro p { margin: 0; color: var(--color-muted); }
+.admin-shell > main > .intro h1 { grid-column: 2 / 5; }
 .admin-shell.admin-shell.admin-shell h1 { font-size: var(--font-size-h1); letter-spacing: -.055em; line-height: .9; }
 .admin-shell.admin-shell.admin-shell h2 { font-size: var(--font-size-h2); letter-spacing: -.055em; line-height: .88; }
 .library-shell.library-shell { color: var(--color-fg); background: var(--color-bg); }
@@ -55,9 +93,16 @@ input, select, textarea { border: 0; border-bottom: 1px solid var(--color-line);
 @media (max-width: 720px) {
   h1 { font-size: var(--font-size-h1-mobile); }
   .admin-shell.admin-shell.admin-shell h1 { font-size: var(--font-size-h1-mobile); }
+  .admin-shell > .toolbar { grid-template-columns: 1fr auto; }
+  .admin-shell > main > .intro { grid-template-columns: 1fr; }
+  .admin-shell > main > .intro h1 { grid-column: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   button, .button { transition-duration: .01ms; }
   button:active, .button:active, .button-secondary.button-secondary:not(.button-icon):active { scale: 1; }
+}
+
+@media (forced-colors: active) {
+  :is(input, select, textarea):focus-visible { outline: 2px solid CanvasText; outline-offset: 2px; }
 }
