@@ -24,5 +24,7 @@ export default defineEventHandler(async (event) => {
     collection_id: id, asset_id: asset.id, added_by: session.user.id, source: 'manual'
   }, { onConflict: 'collection_id,asset_id' })
   if (error) throw databaseError('add board asset', error)
+  const { error: strategyError } = await db.from('public_collections').update({ content_strategy: 'manual' }).eq('id', id).eq('organization_id', session.user.organization_id)
+  if (strategyError) throw databaseError('update board content strategy', strategyError)
   return { data: { added: true } }
 })

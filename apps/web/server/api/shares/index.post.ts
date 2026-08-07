@@ -16,9 +16,11 @@ export default defineEventHandler(async (event) => {
     created_by: session.user.id,
     title: input.title,
     mode: input.mode,
+    content_strategy: input.mode === 'dynamic' ? 'dynamic' : 'snapshot',
+    publication_enabled: true,
     filters,
     expires_at: input.expiresAt
-  }).select('id,slug,title,mode,filters,expires_at,created_at,updated_at').single()
+  }).select('id,slug,title,mode,filters,expires_at,publication_enabled,content_strategy,created_at,updated_at').single()
   if (error) throw databaseError('create public collection', error)
   const { error: ownerError } = await db.from('public_collection_members').insert({
     collection_id: data.id, organization_id: session.user.organization_id,

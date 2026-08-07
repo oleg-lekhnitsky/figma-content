@@ -34,12 +34,14 @@ export const matchingApprovedAssetIds = async (organizationId: string, filters: 
 export const replaceCollectionSnapshot = async (collectionId: string, organizationId: string, filters: PublicCollectionFilters, addedBy?: string) => {
   const ids: string[] = await matchingApprovedAssetIds(organizationId, filters)
   const db = useSupabaseAdmin()
-  const { error: deleteError } = await db.from('public_collection_assets').delete().eq('collection_id', collectionId).eq('source', 'snapshot')
+  const { error: deleteError } = await db.from('public_collection_assets').delete().eq('collection_id', collectionId)
   if (deleteError) throw databaseError('clear collection snapshot', deleteError)
   if (ids.length) {
     const { error } = await db.from('public_collection_assets').upsert(ids.map(assetId => ({ collection_id: collectionId, asset_id: assetId, added_by: addedBy ?? null, source: 'snapshot' })), { onConflict: 'collection_id,asset_id', ignoreDuplicates: true })
     if (error) throw databaseError('save collection snapshot', error)
   }
+  const { error: strategyError } = await db.from('public_collections').update({ content_strategy: 'snapshot' }).eq('id', collectionId).eq('organization_id', organizationId)
+  if (strategyError) throw databaseError('save collection content strategy', strategyError)
   return ids.length
 }
 

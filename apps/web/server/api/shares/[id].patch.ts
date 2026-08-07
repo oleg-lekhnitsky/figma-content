@@ -14,7 +14,6 @@ export default defineEventHandler(async (event) => {
   if (!parsed.success) throw appError(400, 'INVALID_ACTION', 'Choose a valid collection action.')
   const db = useSupabaseAdmin()
   const { collection } = await requireBoardRole(id, session.user.organization_id, session.user.id, ['owner', 'editor'], session.user.role)
-  if (collection.revoked_at) throw appError(404, 'COLLECTION_NOT_FOUND', 'Public collection not found.')
   if (parsed.data.action === 'rename') {
     const { data, error: renameError } = await db.from('public_collections').update({ title: parsed.data.title })
       .eq('id', id).eq('organization_id', session.user.organization_id).select('id,title,updated_at').single()
@@ -31,9 +30,14 @@ export default defineEventHandler(async (event) => {
     return { data: { collection: data } }
   }
   if (parsed.data.action === 'revoke') {
-    const { error: revokeError } = await db.from('public_collections').update({ revoked_at: new Date().toISOString() }).eq('id', id)
+    const { error: revokeError } = await db.from('public_collections').update({ publication_enabled: false, revoked_at: new Date().toISOString() }).eq('id', id)
     if (revokeError) throw databaseError('disable public collection', revokeError)
     return { data: { revoked: true } }
+  }
+  if (parsed.data.action === 'publish') {
+    const { error: publishError } = await db.from('public_collections').update({ publication_enabled: true, revoked_at: null }).eq('id', id)
+    if (publishError) throw databaseError('publish board', publishError)
+    return { data: { published: true } }
   }
   if (collection.mode !== 'static') throw appError(409, 'DYNAMIC_COLLECTION', 'Dynamic collections update automatically.')
   const filters = publicCollectionFiltersSchema.parse(collection.filters)

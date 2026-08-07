@@ -16,5 +16,7 @@ export default defineEventHandler(async (event) => {
   if (role === 'contributor') query = query.eq('added_by', session.user.id)
   const { error } = await query
   if (error) throw databaseError('remove board asset', error)
+  const { error: strategyError } = await useSupabaseAdmin().from('public_collections').update({ content_strategy: 'manual' }).eq('id', id).eq('organization_id', session.user.organization_id)
+  if (strategyError) throw databaseError('update board content strategy', strategyError)
   return { data: { removed: true } }
 })

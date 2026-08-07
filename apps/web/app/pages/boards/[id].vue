@@ -2,7 +2,7 @@
 definePageMeta({ middleware: 'auth' })
 
 type BoardRole = 'owner' | 'editor' | 'contributor' | 'viewer'
-interface Collection { id:string; slug:string; title:string; mode:'dynamic'|'static'; expires_at:string|null; updated_at:string }
+interface Collection { id:string; slug:string; title:string; mode:'dynamic'|'static'; expires_at:string|null; publication_enabled:boolean; content_strategy:'dynamic'|'snapshot'|'manual'; updated_at:string }
 interface Member { user_id:string; role:BoardRole; allowed_users:{email:string|null;figma_handle:string|null;avatar_url:string|null}|null }
 interface Filters { search:string; projectId:string|null; tagId:string|null; uploadedBy:string|null; dateFrom:string|null; dateTo:string|null }
 interface Asset { id:string; title:string; description:string|null; previewUrl:string; preview2xUrl?:string|null; width:number; height:number }
@@ -42,7 +42,7 @@ const loadMembers = async () => {
   members.value = response.data.members
 }
 const loadContent = async () => {
-  const response = await $fetch<{data:{assets:Asset[]}}>(`/api/public/collections/${collection.slug}`)
+  const response = await $fetch<{data:{assets:Asset[]}}>(`/api/shares/${id}/content`)
   boardAssets.value=response.data.assets
 }
 const loadOptions = async () => {
@@ -74,9 +74,15 @@ const copyLink = async () => {
   await navigator.clipboard.writeText(`${window.location.origin}${publicUrl.value}`)
   feedback.text='Public link copied.'; feedback.error=false
 }
+const setPublication = async (enabled:boolean) => {
+  busy.value=true;feedback.text='';feedback.error=false
+  try { await $fetch(`/api/shares/${id}`,{method:'PATCH',body:{action:enabled?'publish':'revoke'}});collection.publication_enabled=enabled;feedback.text=enabled?'Public link enabled.':'Public link disabled. The board remains available to its members.' }
+  catch { feedback.text='Unable to update public access.';feedback.error=true }
+  finally { busy.value=false }
+}
 const refreshSnapshot = async () => {
   busy.value=true; feedback.text=''; feedback.error=false
-  try { const response=await $fetch<{data:{itemCount:number}}>(`/api/shares/${id}`,{method:'PATCH',body:{action:'refresh'}}); await loadContent(); feedback.text=`Snapshot updated with ${response.data.itemCount} items.` }
+  try { const response=await $fetch<{data:{itemCount:number}}>(`/api/shares/${id}`,{method:'PATCH',body:{action:'refresh'}}); collection.content_strategy='snapshot'; await loadContent(); feedback.text=`Snapshot updated with ${response.data.itemCount} items.` }
   catch { feedback.text='Unable to update the snapshot.'; feedback.error=true }
   finally { busy.value=false }
 }
@@ -96,13 +102,13 @@ const saveFilters = async () => {
 const hasAsset = (assetId:string) => boardAssets.value.some(asset=>asset.id===assetId)
 const addAsset = async (asset:Asset) => {
   contentBusy.value=true
-  try { await $fetch(`/api/shares/${id}/assets`,{method:'POST',body:{assetId:asset.id}}); await loadContent(); feedback.text=`${asset.title} added.`; feedback.error=false }
+  try { await $fetch(`/api/shares/${id}/assets`,{method:'POST',body:{assetId:asset.id}}); collection.content_strategy='manual'; await loadContent(); feedback.text=`${asset.title} added.`; feedback.error=false }
   catch { feedback.text='Unable to add this item.'; feedback.error=true }
   finally { contentBusy.value=false }
 }
 const removeAsset = async (asset:Asset) => {
   contentBusy.value=true
-  try { await $fetch(`/api/shares/${id}/assets/${asset.id}`,{method:'DELETE'}); await loadContent(); feedback.text=`${asset.title} removed.`; feedback.error=false }
+  try { await $fetch(`/api/shares/${id}/assets/${asset.id}`,{method:'DELETE'}); collection.content_strategy='manual'; await loadContent(); feedback.text=`${asset.title} removed.`; feedback.error=false }
   catch { feedback.text='Unable to remove this item.'; feedback.error=true }
   finally { contentBusy.value=false }
 }
@@ -125,7 +131,7 @@ const removeMember = async (member:Member) => {
     <header class="toolbar">
       <NuxtLink class="identity" to="/library">Content Library</NuxtLink>
       <span>Board settings</span>
-      <span class="muted">{{ role }}</span>
+      <span class="muted">{{ workspaceAdmin ? 'workspace admin' : role }}</span>
       <NuxtLink class="close" to="/library" aria-label="Close board settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19" /></svg></NuxtLink>
     </header>
     <main>
@@ -134,14 +140,14 @@ const removeMember = async (member:Member) => {
         <div><p class="section-label">Settings</p><h2 id="settings-title">Manage board</h2></div>
         <div class="settings-content">
           <label class="title-field"><span>Board name</span><input :value="collection.title" :readonly="!canEdit" maxlength="120" :aria-describedby="'board-title-feedback'" @change="rename"><small id="board-title-feedback" :class="{error:feedback.error}" role="status" aria-live="polite">{{ feedback.text }}</small></label>
-          <dl><div><dt>Updates</dt><dd>{{ collection.mode === 'dynamic' ? 'Dynamic' : 'Static snapshot' }}</dd></div><div><dt>Access</dt><dd>Anyone with the public link can view</dd></div></dl>
-          <div class="actions"><NuxtLink class="button-secondary" :to="publicUrl" target="_blank">View public page</NuxtLink><button class="button-secondary" type="button" @click="copyLink">Copy public link</button><button v-if="collection.mode==='static' && canEdit" class="button-secondary" type="button" :disabled="busy" @click="refreshSnapshot">Update snapshot</button></div>
+          <dl><div><dt>Updates</dt><dd>{{ collection.mode === 'dynamic' ? 'Dynamic' : collection.content_strategy==='manual'?'Manual selection':'Filter snapshot' }}</dd></div><div><dt>Public access</dt><dd>{{ collection.publication_enabled?'Anyone with the link can view':'Disabled' }}</dd></div></dl>
+          <div class="actions"><NuxtLink v-if="collection.publication_enabled" class="button-secondary" :to="publicUrl" target="_blank">View public page</NuxtLink><button v-if="collection.publication_enabled" class="button-secondary" type="button" @click="copyLink">Copy public link</button><button v-if="canEdit" class="button-secondary" type="button" :disabled="busy" @click="setPublication(!collection.publication_enabled)">{{ collection.publication_enabled?'Disable public link':'Enable public link' }}</button></div>
         </div>
       </section>
       <section class="content" aria-labelledby="content-title">
         <div><p class="section-label">Content</p><h2 id="content-title">{{ collection.mode==='dynamic' ? 'Choose what appears' : 'Manage snapshot' }}</h2></div>
         <div class="content-settings">
-          <p class="muted content-explanation">{{ collection.mode==='dynamic' ? 'Approved items matching these filters appear on the public board automatically.' : 'Add or remove approved items manually, or use the saved filters to rebuild the complete snapshot.' }}</p>
+          <p class="muted content-explanation">{{ collection.mode==='dynamic' ? 'Approved items matching these filters appear on the public board automatically.' : collection.content_strategy==='manual' ? 'This board uses a manual selection. Rebuilding from filters will replace it.' : 'This frozen snapshot was generated from the saved filters. Adding or removing one item switches it to manual selection.' }}</p>
           <form v-if="canEdit" class="filter-form" @submit.prevent="saveFilters">
             <label>Search<input v-model="filters.search" type="search" placeholder="Any title or description"></label>
             <label>Project<select v-model="filters.projectId"><option value="">Any project</option><option v-for="project in projects" :key="project.id" :value="project.id">{{ project.name }}</option></select></label>
@@ -150,7 +156,7 @@ const removeMember = async (member:Member) => {
             <label>To<input v-model="filters.dateTo" type="date" :min="filters.dateFrom||undefined"></label>
             <button class="button-secondary" type="submit" :disabled="contentBusy">Save filters</button>
           </form>
-          <div class="content-heading"><strong>{{ boardAssets.length }} {{ boardAssets.length===1?'item':'items' }} on this board</strong><button v-if="collection.mode==='static'&&canEdit" class="button-secondary" type="button" :disabled="busy" @click="refreshSnapshot">Rebuild from filters</button></div>
+          <div class="content-heading"><strong>{{ boardAssets.length }} {{ boardAssets.length===1?'item':'items' }} on this board</strong><button v-if="collection.mode==='static'&&canEdit" class="button-secondary" type="button" :disabled="busy" @click="refreshSnapshot">Replace with filter snapshot</button></div>
           <div v-if="boardAssets.length" class="asset-grid">
             <article v-for="asset in boardAssets" :key="asset.id" class="content-card"><div class="image-wrap" :style="{aspectRatio:`${asset.width}/${asset.height}`}"><img :src="asset.previewUrl" :srcset="asset.preview2xUrl?`${asset.previewUrl} 1x, ${asset.preview2xUrl} 2x`:undefined" :alt="asset.title"></div><div><strong>{{ asset.title }}</strong><button v-if="collection.mode==='static'&&canEdit" class="button-secondary" type="button" :disabled="contentBusy" @click="removeAsset(asset)">Remove</button></div></article>
           </div>
@@ -164,7 +170,7 @@ const removeMember = async (member:Member) => {
       <section class="members" aria-labelledby="members-title">
         <div><p class="section-label">Private access</p><h2 id="members-title">Board members</h2></div>
         <div>
-          <p class="muted member-explanation">Members manage this board after signing in. They do not control who can view its public link.</p>
+          <p class="muted member-explanation">Members manage this board after signing in. They do not control who can view its public link. Workspace admins can manage every board without being added here.</p>
           <form v-if="canManageMembers" class="member-form" @submit.prevent="saveMember"><label>Email<input v-model="memberEmail" required type="email" autocomplete="email"></label><label>Board role<select v-model="memberRole"><option value="editor">Editor</option><option value="contributor">Contributor</option><option value="viewer">Viewer</option></select></label><button class="button-secondary" type="submit" :disabled="busy">Save access</button></form>
           <ul><li v-for="member in members" :key="member.user_id"><div><strong>{{ member.allowed_users?.email ?? member.allowed_users?.figma_handle ?? 'Workspace member' }}</strong><span class="muted">{{ member.role }}</span></div><button v-if="canManageMembers && member.role!=='owner'" class="button-secondary" type="button" :disabled="busy" @click="removeMember(member)">Remove</button></li></ul>
         </div>

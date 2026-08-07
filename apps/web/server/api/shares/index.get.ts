@@ -9,8 +9,8 @@ export default defineEventHandler(async (event) => {
   const roles = new Map(memberships.map((membership: { collection_id: string; role: string }) => [membership.collection_id, membership.role]))
   if (!memberships.length && session.user.role !== 'admin') return { data: { collections: [] } }
   let query = useSupabaseAdmin().from('public_collections')
-    .select('id,slug,title,mode,filters,expires_at,revoked_at,created_at,updated_at')
-    .eq('organization_id', session.user.organization_id).is('revoked_at', null)
+    .select('id,slug,title,mode,filters,expires_at,revoked_at,publication_enabled,content_strategy,created_at,updated_at')
+    .eq('organization_id', session.user.organization_id)
   if (session.user.role !== 'admin') query = query.in('id', [...roles.keys()])
   const { data, error } = await query.order('created_at', { ascending: false }).limit(50)
   if (error) throw databaseError('list public collections', error)
