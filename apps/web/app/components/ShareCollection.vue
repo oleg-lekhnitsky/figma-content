@@ -155,11 +155,13 @@ const renameBoard = async (collection: Collection, event: Event) => {
 
 <template>
   <button type="button" class="button-plain share-trigger" :disabled="opening" @click="open">Boards</button>
-  <dialog ref="dialog" class="share-dialog" aria-labelledby="share-title" @click.self="close" @cancel.prevent="close"
+  <dialog
+ref="dialog" class="share-dialog" aria-labelledby="share-title" @click.self="close" @cancel.prevent="close"
     @close="unlockPageScroll">
     <div class="share-panel">
       <header>
-        <h2 id="share-title" class="display-title">Build and share boards</h2><button type="button"
+        <h2 id="share-title" class="display-title">Build and share boards</h2><button
+type="button"
           class="button-secondary button-icon close-button" aria-label="Close board settings" @click="close"><svg
             aria-hidden="true" viewBox="0 0 24 24">
             <path d="m5 5 14 14M19 5 5 19" />
@@ -168,9 +170,11 @@ const renameBoard = async (collection: Collection, event: Event) => {
       <form @submit.prevent="createCollection">
         <label>Board name<input ref="titleInput" v-model="title" name="title" required maxlength="120"></label>
         <fieldset>
-          <legend>Updates</legend><label class="choice"><input v-model="mode" type="radio" value="dynamic"
+          <legend>Updates</legend><label class="choice"><input
+v-model="mode" type="radio" value="dynamic"
               name="mode"><span><strong>Dynamic</strong><small>New approved items matching the filters appear
-                automatically.</small></span></label><label class="choice"><input v-model="mode" type="radio"
+                automatically.</small></span></label><label class="choice"><input
+v-model="mode" type="radio"
               value="static" name="mode"><span><strong>Static</strong><small>Freeze the current results and update the
                 snapshot manually.</small></span></label>
         </fieldset>
@@ -185,10 +189,13 @@ const renameBoard = async (collection: Collection, event: Event) => {
             </select></label><label>Tag<select v-model="tagId" name="tag">
               <option value="">Any tag</option>
               <option v-for="tag in tags" :key="tag.id" :value="tag.id">{{ tag.name }}</option>
-            </select></label><label>Link expiry <span>(optional)</span><input v-model="expiry" type="date"
+            </select></label><label>Link expiry <span>(optional)</span><input
+v-model="expiry" type="date"
               name="expiry"></label></div>
-        <div v-if="range === 'custom'" class="form-grid custom-dates"><label>Start date<input v-model="dateFrom"
-              type="date" name="dateFrom" required></label><label>End date<input v-model="dateTo" type="date"
+        <div v-if="range === 'custom'" class="form-grid custom-dates"><label>Start date<input
+v-model="dateFrom"
+              type="date" name="dateFrom" required></label><label>End date<input
+v-model="dateTo" type="date"
               name="dateTo" required></label></div>
         <p class="approval-note">Only approved items can appear on a public link.</p>
         <button type="submit" :disabled="busy">{{ busy ? 'Creating board…' : 'Create board' }}</button>
@@ -200,10 +207,12 @@ const renameBoard = async (collection: Collection, event: Event) => {
         <ul>
           <li v-for="collection in collections" :key="collection.id">
             <div><label v-if="['owner', 'editor', 'admin'].includes(collection.role)" class="board-title"><span
-                  class="sr-only">Board name</span><textarea :value="collection.title" rows="1" maxlength="120"
+                  class="sr-only">Board name</span><textarea
+:value="collection.title" rows="1" maxlength="120"
                   :aria-describedby="`board-feedback-${collection.id}`"
                   :aria-invalid="boardFeedback[collection.id]?.error || undefined"
-                  @change="renameBoard(collection, $event)" /><span :id="`board-feedback-${collection.id}`"
+                  @change="renameBoard(collection, $event)" /><span
+:id="`board-feedback-${collection.id}`"
                   class="field-message" :class="{ error: boardFeedback[collection.id]?.error }" role="status"
                   aria-live="polite">{{ boardFeedback[collection.id]?.text }}</span></label><template v-else><strong>{{
                   collection.title }}</strong><span class="field-message" aria-hidden="true" /></template><span>{{
