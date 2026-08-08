@@ -5,7 +5,7 @@
   "version": "0.0.0",
   "scripts": {
     "build": "vite build && esbuild src/code.ts --bundle --format=iife --target=es2020 --outfile=dist/code.js",
-    "dev": "vite build --watch",
+    "dev": "vite build --watch --mode development",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
