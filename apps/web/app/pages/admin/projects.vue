@@ -1,7 +1,7 @@
 <script setup lang="ts">
 definePageMeta({ middleware: 'auth' })
 interface Project { id:string; name:string; slug:string; archived_at:string|null; created_at:string; assetCount:number }
-interface SessionResponse { data:{ authenticated:boolean; user?:{ role:string } } }
+interface SessionResponse { data:{ authenticated:boolean; user?:{ role:string; workspace?:{ name:string }|null } } }
 const { data: session } = await useFetch<SessionResponse>('/api/auth/session')
 const role = session.value?.data.user?.role
 if (!['editor','admin'].includes(role ?? '')) await navigateTo('/library')
@@ -40,7 +40,7 @@ const setArchived = async (project:Project) => {
 <template>
   <div class="admin-shell projects-shell">
     <header class="toolbar">
-      <NuxtLink class="identity" to="/library">Content Library</NuxtLink>
+      <WorkspaceSwitcher class="identity" />
       <nav aria-label="Administration"><NuxtLink v-if="role==='admin'" to="/admin/users">Users</NuxtLink><NuxtLink to="/admin/projects" aria-current="page">Projects</NuxtLink><NuxtLink v-if="role==='admin'" to="/admin/audit-log">Audit log</NuxtLink></nav>
       <span class="count">{{ projects.filter(project=>!project.archived_at).length }} active</span>
       <NuxtLink class="close" to="/library" aria-label="Close administration"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19" /></svg></NuxtLink>

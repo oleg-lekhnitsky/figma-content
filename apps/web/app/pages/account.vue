@@ -12,7 +12,7 @@ const current=computed(()=>data.value?.data.workspaces.find(item=>item.id===data
 <template>
   <div class="admin-shell account-shell">
     <header class="toolbar">
-      <NuxtLink class="identity" to="/library">Content Library</NuxtLink>
+      <WorkspaceSwitcher class="identity" />
       <span>Workspace</span>
       <span class="current-name">{{ current?.name }}</span>
       <NuxtLink class="close" to="/library" aria-label="Close account">
@@ -32,7 +32,7 @@ const current=computed(()=>data.value?.data.workspaces.find(item=>item.id===data
         </ul>
       </section>
 
-      <form class="settings-section settings-form" @submit.prevent="createWorkspace">
+      <form id="new-workspace" class="settings-section settings-form" @submit.prevent="createWorkspace">
         <div class="section-heading"><p>New workspace</p><h3>Create your own</h3></div>
         <label><span>Name</span><input v-model="name" required maxlength="120" placeholder="Studio name"></label>
         <button class="button-secondary" :disabled="busy">Create workspace</button>

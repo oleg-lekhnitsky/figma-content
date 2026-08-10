@@ -258,7 +258,7 @@ const deleteBoard = async () => {
 <template>
   <div class="admin-shell board-shell">
     <header class="toolbar">
-      <NuxtLink class="identity" to="/library">Content Library</NuxtLink>
+      <WorkspaceSwitcher class="identity" />
       <span>{{ collection.purpose === 'review' ? activeView === 'review' ? 'Board review' : activeView === 'members' ? 'Board members' : 'Board settings' : 'Board settings' }}</span>
       <span class="muted">{{ workspaceAdmin ? 'workspace admin' : role }}</span>
       <NuxtLink class="close" to="/library" aria-label="Close board settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19" /></svg></NuxtLink>

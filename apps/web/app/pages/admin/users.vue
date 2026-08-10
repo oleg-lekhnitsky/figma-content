@@ -2,7 +2,7 @@
 definePageMeta({ middleware: 'auth' })
 type Role = 'viewer'|'contributor'|'editor'|'admin'
 interface User { id:string; email:string|null; figma_handle:string|null; role:Role; is_active:boolean; last_login_at:string|null; has_password:boolean; must_change_password:boolean }
-interface SessionResponse { data: { authenticated:boolean; user?: { role:string } } }
+interface SessionResponse { data: { authenticated:boolean; user?: { role:string; workspace?:{ name:string }|null } } }
 const { data: session } = await useFetch<SessionResponse>('/api/auth/session')
 if (session.value?.data?.user?.role !== 'admin') await navigateTo('/library')
 const { data, refresh } = await useFetch<{data:{users:User[]}}>('/api/admin/users')
@@ -14,7 +14,7 @@ const revoke = async (user:User) => { await $fetch(`/api/admin/users/${user.id}/
 <template>
   <div class="admin-shell">
     <header class="toolbar">
-      <NuxtLink class="identity" to="/library">Content Library</NuxtLink>
+      <WorkspaceSwitcher class="identity" />
       <nav aria-label="Administration"><NuxtLink to="/admin/users" aria-current="page">Users</NuxtLink><NuxtLink to="/admin/projects">Projects</NuxtLink><NuxtLink to="/admin/audit-log">Audit log</NuxtLink></nav>
       <span class="count">{{ data?.data.users.length ?? 0 }} approved</span>
       <NuxtLink class="close" to="/library" aria-label="Close administration"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19" /></svg></NuxtLink>

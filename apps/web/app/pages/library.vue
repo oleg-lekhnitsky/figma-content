@@ -12,7 +12,7 @@ interface AssetCard {
 interface Submitter { id: string; figma_handle: string | null; avatar_url: string | null }
 interface Project { id: string; name: string; slug: string }
 interface AssetList { data: { assets: AssetCard[]; submitters: Submitter[]; total: number; page: number; pageSize: number } }
-interface SessionResponse { data: { authenticated: boolean; user?: { role: string } } }
+interface SessionResponse { data: { authenticated: boolean; user?: { role: string; workspace?: { name: string } | null } } }
 
 const search = ref('')
 const status = ref('')
@@ -130,7 +130,7 @@ onBeforeUnmount(() => {
   <div class="library-shell">
     <main id="main-content">
       <header class="index-toolbar" :class="{ 'toolbar-hidden': !toolbarVisible }">
-        <NuxtLink class="brand" to="/library">Content Library</NuxtLink>
+        <WorkspaceSwitcher class="brand" />
         <form class="toolbar-search" role="search" @submit.prevent><label><span class="sr-only">Search assets</span><input v-model="search" type="search" name="search" placeholder="Search"></label></form>
         <p class="count sr-only" role="status" aria-live="polite">{{ resultMessage }}</p>
         <nav aria-label="Library controls"><ShareCollection v-if="canShare" :current-filters="currentBoardFilters" /><NuxtLink v-if="isAdmin" to="/admin/users">Admin</NuxtLink><NuxtLink v-else-if="canManageProjects" to="/admin/projects">Projects</NuxtLink><NuxtLink to="/account">Account</NuxtLink></nav>
