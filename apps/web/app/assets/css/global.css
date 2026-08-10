@@ -9,6 +9,7 @@
   --color-accent: #666;
   --color-danger: #a21b14;
   --radius: 8px;
+  --radius-mobile: calc(var(--radius) * 1.5);
   --control-height: 44px;
   --page-padding: var(--space);
   --page-top: clamp(4rem, 9vw, 9rem);

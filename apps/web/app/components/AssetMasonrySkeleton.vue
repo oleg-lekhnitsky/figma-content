@@ -29,5 +29,5 @@ const ratios = ['4 / 5', '1 / 1', '3 / 4', '4 / 5', '1 / 1', '3 / 4', '4 / 5', '
 @media(max-width:1680px){.asset-skeleton-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
 @media(max-width:1280px){.asset-skeleton-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:900px){.asset-skeleton-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:520px){.asset-skeleton-grid{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:520px){.asset-skeleton-grid{width:calc(100% + var(--space));margin-inline:calc(var(--space)/-2);grid-template-columns:repeat(2,minmax(0,1fr));gap:calc(var(--space)/2)}.asset-skeleton-preview{border-radius:var(--radius-mobile)}}
 </style>

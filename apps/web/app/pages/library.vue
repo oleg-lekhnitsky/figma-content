@@ -228,6 +228,7 @@ onBeforeUnmount(() => {
 .index-toolbar{transition:opacity .18s ease-out,transform .24s cubic-bezier(.2,0,0,1)}
 .board-tabs{display:flex;gap:var(--space);margin-bottom:calc(var(--space)*2);overflow-x:auto;overscroll-behavior-inline:contain;scrollbar-width:none}.board-tabs::-webkit-scrollbar{display:none}.board-tabs button{position:relative;min-height:44px;max-width:18ch;flex:0 0 auto;overflow:hidden;padding:0;color:inherit;background:transparent;border-radius:0;text-overflow:ellipsis;white-space:nowrap}.board-tabs button:first-child{max-width:none}.board-tabs button[aria-pressed=true]::after{content:"";position:absolute;right:0;bottom:4px;left:0;height:2px;background:currentColor}.board-tabs button:hover{opacity:.5}
 .library-shell{--space:inherit}
+@media(max-width:520px){.library-shell :deep(.asset-masonry .card-body p),.library-shell :deep(.asset-masonry .card-meta){display:none}}
 .index-toolbar.toolbar-hidden{pointer-events:none;opacity:0;transform:translateY(calc(-100% - var(--space)))}
 .index-toolbar{min-height:0}
 .brand,.index-toolbar nav,.toolbar-search,.filters{min-height:44px;align-items:center}.brand{display:flex}
