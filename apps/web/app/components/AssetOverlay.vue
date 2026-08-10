@@ -1,21 +1,40 @@
 <script setup lang="ts">
-const props = defineProps<{ assetId: string }>()
-const emit = defineEmits<{ close: []; deleted: [id: string] }>()
-interface AssetDetail { id: string; uploaded_by: string; title: string; description: string | null; previewUrl: string; width: number; height: number; file_size: number; mime_type: string; status: string; version: number; created_at: string; updated_at: string; figma_url: string; language: string | null; content_type: string | null; project_id: string | null; campaign_id: string | null; projects: { name: string } | null; campaigns: { name: string } | null; asset_tags: Array<{ tags: { id: string; name: string } | null }>; allowed_users: { figma_handle: string | null } | null; versions: Array<{ id: string; version: number; width: number; height: number; file_size: number; created_at: string }> }
+const props = withDefaults(defineProps<{ assetId: string; assetIds?: string[]; previewUrl?: string }>(), { assetIds: () => [], previewUrl: '' })
+const emit = defineEmits<{ close: []; deleted: [id: string]; navigate: [id: string] }>()
+interface AssetDetail { id: string; uploaded_by: string; title: string; description: string | null; width: number; height: number; file_size: number; mime_type: string; status: string; version: number; created_at: string; updated_at: string; figma_url: string; language: string | null; content_type: string | null; project_id: string | null; campaign_id: string | null; projects: { name: string } | null; campaigns: { name: string } | null; asset_tags: Array<{ tags: { id: string; name: string } | null }>; allowed_users: { figma_handle: string | null } | null; versions: Array<{ id: string; version: number; width: number; height: number; file_size: number; created_at: string }> }
 interface SessionResponse { data: { authenticated: boolean; user?: { id: string; role: string } } }
 interface Board { id:string; title:string; mode:'dynamic'|'static'; role:'owner'|'editor'|'contributor'|'viewer' }
 interface Option { id:string; name:string }
 const dialog = ref<HTMLDialogElement>()
 const { data, status, error, refresh } = await useFetch<{ data: { asset: AssetDetail } }>(() => `/api/assets/${props.assetId}`)
+const { data: previewData } = await useFetch<{ data: { id: string; url: string } }>(() => `/api/assets/${props.assetId}/preview`)
 const { data: session } = await useFetch<SessionResponse>('/api/auth/session')
 const { data: boardData } = await useFetch<{data:{collections:Board[]}}>('/api/shares')
 const { data: projectData } = await useFetch<{data:{projects:Option[]}}>('/api/projects')
 const { data: campaignData } = await useFetch<{data:{campaigns:Option[]}}>('/api/campaigns')
 const asset = computed(() => data.value?.data.asset)
+const displayedPreviewUrl = ref(props.previewUrl)
+watch(() => [props.assetId, props.previewUrl], () => { displayedPreviewUrl.value = props.previewUrl }, { immediate: true })
+watch(() => previewData.value?.data, async (preview) => {
+  if (!preview || preview.id !== props.assetId || !import.meta.client) return
+  const requestedAssetId = props.assetId
+  const image = new Image()
+  const loaded = new Promise<void>((resolve, reject) => {
+    image.onload = () => resolve()
+    image.onerror = () => reject(new Error('Unable to load preview.'))
+  }).catch(() => undefined)
+  image.src = preview.url
+  try { await image.decode() } catch { await loaded }
+  if (props.assetId === requestedAssetId && image.complete && image.naturalWidth > 0) displayedPreviewUrl.value = preview.url
+}, { immediate: true })
+const resolvedPreviewUrl = computed(() => displayedPreviewUrl.value)
 const role = computed(() => session.value?.data.user?.role)
 const canEdit = computed(() => ['editor', 'admin'].includes(role.value ?? '') || (role.value === 'contributor' && asset.value?.uploaded_by === session.value?.data.user?.id))
 const canApprove = computed(() => ['editor', 'admin'].includes(role.value ?? ''))
 const eligibleBoards = computed(() => (boardData.value?.data.collections ?? []).filter(board => board.mode==='static' && ['owner','editor','contributor'].includes(board.role) && (board.role!=='contributor' || asset.value?.uploaded_by===session.value?.data.user?.id)))
+const assetIndex = computed(() => props.assetIds.indexOf(props.assetId))
+const previousAssetId = computed(() => assetIndex.value > 0 ? props.assetIds[assetIndex.value - 1] : undefined)
+const nextAssetId = computed(() => assetIndex.value >= 0 && assetIndex.value < props.assetIds.length - 1 ? props.assetIds[assetIndex.value + 1] : undefined)
 const boardId = ref('')
 const editing = ref(false); const title = ref(''); const description = ref(''); const projectId = ref(''); const campaignId = ref(''); const tagsText = ref(''); const language = ref(''); const contentType = ref(''); const actionError = ref(''); const actionMessage = ref(''); const downloading = ref(false); const saving = ref(false)
 const isClosing = ref(false)
@@ -84,24 +103,54 @@ const download = async () => { if (!asset.value) return; downloading.value = tru
 const remove = async () => { if (!confirm('Permanently delete this asset and every version?')) return; try { await $fetch(`/api/assets/${props.assetId}`, { method: 'DELETE' }); emit('deleted', props.assetId); close() } catch { actionError.value = 'Unable to delete this asset.' } }
 const addToBoard = async () => { if(!boardId.value)return; actionError.value=''; actionMessage.value=''; try { await $fetch(`/api/shares/${boardId.value}/assets`,{method:'POST',body:{assetId:props.assetId}}); actionMessage.value='Added to board.' } catch { actionError.value='Unable to add this asset to the board.' } }
 const formatBytes = (bytes: number) => `${(bytes / 1_048_576).toFixed(1)} MB`
+const navigateAsset = (id?: string) => {
+  if (!id || editing.value) return
+  actionError.value = ''
+  actionMessage.value = ''
+  boardId.value = ''
+  emit('navigate', id)
+}
+const handleArrowNavigation = (event: KeyboardEvent, direction: -1 | 1) => {
+  const target = event.target as HTMLElement | null
+  if (editing.value || target?.matches('input, textarea, select, [contenteditable="true"]')) return
+  const id = direction < 0 ? previousAssetId.value : nextAssetId.value
+  if (!id) return
+  event.preventDefault()
+  navigateAsset(id)
+}
+const handleAssetNavigationKey = (event: KeyboardEvent) => {
+  if (event.key === 'ArrowLeft') handleArrowNavigation(event, -1)
+  if (event.key === 'ArrowRight') handleArrowNavigation(event, 1)
+}
 </script>
 
 <template>
   <Teleport to="body">
     <dialog
 ref="dialog" class="asset-dialog" :class="{ 'is-closing': isClosing }"
-      aria-labelledby="asset-overlay-title" @cancel.prevent="close">
+      aria-labelledby="asset-overlay-title" @cancel.prevent="close" @keydown="handleAssetNavigationKey">
       <div class="overlay-toolbar"><span id="asset-overlay-title">Asset details</span><span v-if="asset" class="muted">Version {{ asset.version
           }}</span><button
 class="close-button" type="button" aria-label="Close asset details" autofocus
           @click="close"><svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M5 5l14 14M19 5 5 19" />
           </svg></button></div>
-      <div v-if="status === 'pending'" class="overlay-state" role="status">Loading asset…</div>
+      <main v-if="status === 'pending'" class="overlay-content overlay-loading" role="status" aria-label="Loading asset details">
+        <section class="asset-visual" :class="{ 'skeleton-visual': !resolvedPreviewUrl }" aria-hidden="true"><img v-if="resolvedPreviewUrl" :src="resolvedPreviewUrl" alt=""></section>
+        <aside class="skeleton-panel" aria-hidden="true">
+          <span class="skeleton-line skeleton-status" />
+          <span class="skeleton-line skeleton-title" />
+          <div class="skeleton-actions"><span /><span /></div>
+          <span class="skeleton-line skeleton-field" />
+          <div class="skeleton-rows"><span v-for="index in 6" :key="index" /></div>
+          <span class="skeleton-line skeleton-section" />
+          <span class="skeleton-line skeleton-meta" />
+        </aside>
+      </main>
       <div v-else-if="error" class="overlay-state" role="alert"><strong>Unable to load this asset.</strong><button
           @click="refresh()">Try again</button></div>
       <main v-else-if="asset" class="overlay-content">
-        <section class="asset-visual"><img :src="asset.previewUrl" :alt="`Preview of ${asset.title}`"></section>
+        <section class="asset-visual" :class="{ 'skeleton-visual': !resolvedPreviewUrl }"><img v-if="resolvedPreviewUrl" :src="resolvedPreviewUrl" :alt="`Preview of ${asset.title}`"><button v-if="previousAssetId && !editing" class="asset-navigation previous" type="button" aria-label="Previous asset" @click="navigateAsset(previousAssetId)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7" /></svg></button><button v-if="nextAssetId && !editing" class="asset-navigation next" type="button" aria-label="Next asset" @click="navigateAsset(nextAssetId)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7" /></svg></button></section>
         <aside>
           <span class="asset-status">{{ asset.status }}</span>
           <form v-if="editing" class="edit-form" @submit.prevent="saveDetails">
@@ -293,6 +342,118 @@ v-if="role === 'admin'"
   object-fit: contain
 }
 
+.skeleton-visual,
+.skeleton-line,
+.skeleton-actions span,
+.skeleton-rows span {
+  background: var(--color-surface);
+}
+
+.skeleton-panel {
+  display: grid;
+  align-content: start;
+  gap: var(--space);
+}
+
+.skeleton-line {
+  display: block;
+  min-height: 16px;
+  border-radius: var(--radius);
+}
+
+.skeleton-status {
+  width: 24%;
+}
+
+.skeleton-title {
+  width: 72%;
+  min-height: clamp(48px, 5vw, 72px);
+}
+
+.skeleton-actions {
+  display: flex;
+  gap: calc(var(--space) / 2);
+}
+
+.skeleton-actions span {
+  width: 118px;
+  min-height: 44px;
+  border-radius: 999px;
+}
+
+.skeleton-actions span:last-child {
+  width: 142px;
+}
+
+.skeleton-field {
+  width: 100%;
+  min-height: 42px;
+  margin-top: var(--space);
+}
+
+.skeleton-rows {
+  display: grid;
+  margin-top: var(--space);
+}
+
+.skeleton-rows span {
+  min-height: 44px;
+  border-bottom: 1px solid var(--color-bg);
+}
+
+.skeleton-section {
+  width: 32%;
+  margin-top: var(--space);
+}
+
+.skeleton-meta {
+  width: 48%;
+}
+
+.asset-navigation {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  width: 44px;
+  min-height: 44px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  color: var(--color-fg);
+  background: color-mix(in srgb, var(--color-bg) 86%, transparent);
+  box-shadow: 0 2px 10px rgb(0 0 0 / .14);
+  opacity: .72;
+  translate: 0 -50%;
+  transition-property: opacity, scale;
+  transition-duration: 120ms;
+}
+
+.asset-navigation:hover,
+.asset-navigation:focus-visible {
+  opacity: 1;
+}
+
+.asset-navigation:active {
+  scale: .96;
+}
+
+.asset-navigation.previous {
+  left: calc(var(--space) / 2);
+}
+
+.asset-navigation.next {
+  right: calc(var(--space) / 2);
+}
+
+.asset-navigation svg {
+  width: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 aside {
   min-height: 0;
   padding-right: var(--space);
@@ -477,7 +638,8 @@ li span {
 
 @media(prefers-reduced-motion:reduce) {
   .asset-dialog,
-  .asset-dialog::backdrop {
+  .asset-dialog::backdrop,
+  .asset-navigation {
     transition-duration: .01ms
   }
 }

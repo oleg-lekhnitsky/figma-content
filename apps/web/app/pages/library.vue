@@ -52,31 +52,20 @@ const currentBoardFilters = computed(() => ({
 const hasFilters = computed(() => Boolean(search.value || status.value || projectId.value || dateRange.value !== 'all'))
 const activeFilterCount = computed(() => [status.value, projectId.value, dateRange.value !== 'all'].filter(Boolean).length)
 const assets = ref<AssetCard[]>([])
-const cardsHidden = ref(false)
-let cardSwapTimer: ReturnType<typeof setTimeout> | undefined
 let liveRefreshTimer: ReturnType<typeof setTimeout> | undefined
 let assetPollTimer: ReturnType<typeof setInterval> | undefined
 let assetEvents: EventSource | undefined
 watch(() => data.value?.data.assets, (next) => {
   const incoming = next ?? []
-  if (!assets.value.length) { assets.value = incoming; cardsHidden.value = false; return }
-  if (incoming.map(asset => `${asset.id}:${asset.updated_at}`).join('|') === assets.value.map(asset => `${asset.id}:${asset.updated_at}`).join('|')) {
-    clearTimeout(cardSwapTimer)
-    cardsHidden.value = false
-    return
-  }
-  clearTimeout(cardSwapTimer)
-  cardSwapTimer = setTimeout(async () => {
-    assets.value = incoming
-    await nextTick()
-    requestAnimationFrame(() => { cardsHidden.value = false })
-  }, 180)
+  if (incoming.map(asset => `${asset.id}:${asset.updated_at}`).join('|') === assets.value.map(asset => `${asset.id}:${asset.updated_at}`).join('|')) return
+  assets.value = incoming
 }, { immediate: true })
 const submitters = computed(() => data.value?.data.submitters ?? [])
 const visibleSubmitters = computed(() => submitters.value.slice(0, 5))
 const submitterName = (submitter: Submitter) => submitter.figma_handle || 'Unknown submitter'
 const submitterInitial = (submitter: Submitter) => submitterName(submitter).trim().charAt(0).toUpperCase() || '?'
 const total = computed(() => data.value?.data.total ?? 0)
+const resultKey = computed(() => assets.value.map(asset => `${asset.id}:${asset.updated_at}`).join('|'))
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / 24)))
 const resultMessage = computed(() => loadStatus.value === 'success' ? `${total.value} ${total.value === 1 ? 'asset' : 'assets'}` : '')
 const { data: session } = await useFetch<SessionResponse>('/api/auth/session')
@@ -84,7 +73,9 @@ const isAdmin = computed(() => session.value?.data?.user?.role === 'admin')
 const canManageProjects = computed(() => ['editor', 'admin'].includes(session.value?.data?.user?.role ?? ''))
 const canShare = computed(() => ['contributor', 'editor', 'admin'].includes(session.value?.data?.user?.role ?? ''))
 const selectedAssetId = computed(() => typeof route.query.asset === 'string' ? route.query.asset : '')
+const selectedAssetPreviewUrl = computed(() => assets.value.find(asset => asset.id === selectedAssetId.value)?.previewUrl ?? '')
 const closeAsset = () => router.replace({ path: '/library' })
+const navigateAsset = (id: string) => router.replace({ path: '/library', query: { ...route.query, asset: id } })
 const handleAssetDeleted = (id: string) => {
   assets.value = assets.value.filter(asset => asset.id !== id)
   if (data.value) {
@@ -110,8 +101,7 @@ const updateToolbar = () => {
 const refreshWhenVisible = () => {
   if (document.visibilityState === 'visible') void refresh()
 }
-watch([search, status, projectId, dateRange, customDateFrom, customDateTo, sort], () => { page.value = 1; if (assets.value.length) cardsHidden.value = true })
-watch(page, () => { if (assets.value.length) cardsHidden.value = true })
+watch([search, status, projectId, dateRange, customDateFrom, customDateTo, sort], () => { page.value = 1 })
 onMounted(() => {
   lastScrollY = window.scrollY
   window.addEventListener('scroll', updateToolbar, { passive: true })
@@ -126,7 +116,6 @@ onMounted(() => {
   document.addEventListener('visibilitychange', refreshWhenVisible)
 })
 onBeforeUnmount(() => {
-  clearTimeout(cardSwapTimer)
   clearTimeout(liveRefreshTimer)
   clearInterval(assetPollTimer)
   assetEvents?.close()
@@ -152,10 +141,10 @@ onBeforeUnmount(() => {
       <div v-if="loadStatus === 'pending' && assets.length === 0" class="state" role="status">Loading assets…</div>
       <div v-else-if="error" class="state error" role="alert"><strong>Unable to load assets.</strong><span>Check your connection and try again.</span><button type="button" @click="refresh()">Try again</button></div>
       <div v-else-if="assets.length === 0" class="state"><strong>{{ hasFilters ? 'No matching assets' : 'No assets yet' }}</strong><span>{{ hasFilters ? 'Change your search or clear the filters.' : 'Upload frames from the Figma plugin to build this library.' }}</span><button v-if="hasFilters" type="button" @click="search = ''; status = ''; projectId = ''; dateRange = 'all'; customDateFrom = ''; customDateTo = ''">Clear filters</button></div>
-      <AssetMasonry v-else :assets="assets" :hidden="cardsHidden" interactive row-flow />
+      <Transition v-else name="result-swap" mode="out-in"><AssetMasonry :key="resultKey" :assets="assets" interactive row-flow /></Transition>
       <nav v-if="totalPages > 1" class="pagination" aria-label="Pagination"><button :disabled="page === 1" @click="page--">Previous</button><span>Page {{ page }} of {{ totalPages }}</span><button :disabled="page === totalPages" @click="page++">Next</button></nav>
     </main>
-    <AssetOverlay v-if="selectedAssetId" :asset-id="selectedAssetId" @close="closeAsset" @deleted="handleAssetDeleted" />
+    <AssetOverlay v-if="selectedAssetId" :asset-id="selectedAssetId" :asset-ids="assets.map(asset => asset.id)" :preview-url="selectedAssetPreviewUrl" @close="closeAsset" @deleted="handleAssetDeleted" @navigate="navigateAsset" />
   </div>
 </template>
 
@@ -184,5 +173,6 @@ onBeforeUnmount(() => {
 @media(max-width:520px){.toolbar-search{grid-column:1/-1;grid-row:2}.index-toolbar nav{grid-column:2;grid-row:1}}
 .preview{background:transparent}.preview.is-loading{background:var(--color-surface)}.preview img{opacity:0;transition:opacity .22s ease-out}.preview img.is-loaded{opacity:1}
 .asset-card{opacity:1;transform:translateY(0);transition-property:opacity,transform;transition-duration:.18s,.22s;transition-delay:var(--card-stagger,0ms);transition-timing-function:ease-out,cubic-bezier(.16,1.35,.3,1);animation:card-fade-in .42s cubic-bezier(.16,1.35,.3,1) backwards;animation-delay:var(--card-stagger,0ms)}.masonry.cards-hidden .asset-card{opacity:0;transform:translateY(16px);transition-delay:0ms}@keyframes card-fade-in{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
-@media(prefers-reduced-motion:reduce){.index-toolbar,.filter-controls-enter-active,.filter-controls-leave-active{transition-duration:.01ms}.asset-card{transition:none;animation:none}.masonry.cards-hidden .asset-card{opacity:1;transform:none}.preview img{transition:none}.figma-button{transition-duration:.01ms;transform:translate(-50%,0)}.figma-button:active{scale:1}}
+.result-swap-enter-active,.result-swap-leave-active{transition-property:opacity,transform;transition-duration:180ms;transition-timing-function:cubic-bezier(.2,0,0,1)}.result-swap-enter-from{opacity:0;transform:translateY(8px)}.result-swap-leave-to{opacity:0;transform:translateY(-4px)}
+@media(prefers-reduced-motion:reduce){.index-toolbar,.filter-controls-enter-active,.filter-controls-leave-active,.result-swap-enter-active,.result-swap-leave-active{transition-duration:.01ms}.asset-card{transition:none;animation:none}.masonry.cards-hidden .asset-card{opacity:1;transform:none}.preview img{transition:none}.figma-button{transition-duration:.01ms;transform:translate(-50%,0)}.figma-button:active{scale:1}}
 </style>
