@@ -19,6 +19,8 @@ const props = withDefaults(defineProps<{
   selectedIds?: string[]
   reorderable?: boolean
   rowFlow?: boolean
+  stableColumns?: boolean
+  animateChanges?: boolean
 }>(), {
   interactive: false,
   hidden: false,
@@ -28,7 +30,9 @@ const props = withDefaults(defineProps<{
   selectable: false,
   selectedIds: () => [],
   reorderable: false,
-  rowFlow: false
+  rowFlow: false,
+  stableColumns: false,
+  animateChanges: false
 })
 const emit = defineEmits<{
   toggleSelection: [asset: T]
@@ -127,7 +131,8 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section ref="masonry" class="asset-masonry" :class="{ 'cards-hidden': hidden, 'column-layout': layout === 'column' }" :aria-label="label">
+  <section ref="masonry" class="asset-masonry" :class="{ 'cards-hidden': hidden, 'column-layout': layout === 'column', 'stable-columns': stableColumns }" :aria-label="label">
+    <TransitionGroup name="card-list" :css="animateChanges">
     <article v-for="(asset, index) in assets" :key="asset.id" class="asset-card" :class="{ 'is-selected': isSelected(asset.id), 'is-dragging': draggedIndex === index, 'is-drop-target': dropIndex === index && draggedIndex !== index }" :style="{ '--card-stagger': cardStagger(index) }" :draggable="reorderable" @dragstart="startDrag($event, index)" @dragover="dragOver($event, index)" @drop="dropAsset($event, index)" @dragend="finishDrag">
       <div class="preview" :class="{ 'is-loading': !loadedImages.has(asset.id) }" :style="{ aspectRatio: `${asset.width} / ${asset.height}` }">
         <NuxtLink v-if="interactive" class="preview-link" :to="assetLink(asset.id)" :aria-label="`View ${asset.title}`">
@@ -146,11 +151,13 @@ onBeforeUnmount(() => {
         <slot name="actions" :asset="asset"><span v-if="interactive" class="card-meta card-status">{{ asset.status }}</span></slot>
       </div>
     </article>
+    </TransitionGroup>
   </section>
 </template>
 
 <style scoped>
-.asset-masonry{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));column-gap:var(--space);align-items:start}.asset-masonry.is-masonry{grid-auto-flow:dense;grid-auto-rows:1px;row-gap:0}
+.asset-masonry{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));column-gap:var(--space);align-items:start}.asset-masonry.is-masonry{grid-auto-flow:dense;grid-auto-rows:1px;row-gap:0}
+.asset-masonry.stable-columns .asset-card:nth-child(7n + 1){grid-column:1}.asset-masonry.stable-columns .asset-card:nth-child(7n + 2){grid-column:2}.asset-masonry.stable-columns .asset-card:nth-child(7n + 3){grid-column:3}.asset-masonry.stable-columns .asset-card:nth-child(7n + 4){grid-column:4}.asset-masonry.stable-columns .asset-card:nth-child(7n + 5){grid-column:5}.asset-masonry.stable-columns .asset-card:nth-child(7n + 6){grid-column:6}.asset-masonry.stable-columns .asset-card:nth-child(7n){grid-column:7}
 .asset-masonry.column-layout{--column-viewport-margin:clamp(24px,6vh,64px);width:min(760px,100%);margin-inline:auto;grid-template-columns:minmax(0,1fr);row-gap:0}.asset-masonry.column-layout .asset-card{padding-bottom:var(--section-gap)}.asset-masonry.column-layout .preview{height:auto;aspect-ratio:auto!important;overflow:visible;clip-path:none;background:transparent}.asset-masonry.column-layout .preview img{width:auto;height:auto;max-width:100%;max-height:calc(100vh - var(--column-viewport-margin)*2);max-height:calc(100dvh - var(--column-viewport-margin)*2);margin-inline:auto;border-radius:var(--radius);object-fit:contain}.asset-masonry.column-layout .card-body{flex-direction:column;align-items:center;justify-content:center;text-align:center}
 .asset-card{min-width:0;padding-bottom:calc(var(--space)*2);color:inherit;background:transparent;opacity:1;transform:translateY(0);transition-property:opacity,transform;transition-duration:.18s,.22s;transition-delay:var(--card-stagger,0ms);transition-timing-function:ease-out,cubic-bezier(.16,1.35,.3,1);animation:card-fade-in .42s cubic-bezier(.16,1.35,.3,1) backwards;animation-delay:var(--card-stagger,0ms)}.asset-masonry.is-masonry .asset-card{grid-row-end:span var(--card-rows)}
 .asset-card[draggable=true]{cursor:grab}.asset-card[draggable=true]:active{cursor:grabbing}.asset-card.is-dragging{opacity:.35}.asset-card.is-drop-target .preview{box-shadow:0 0 0 3px var(--color-accent)}
@@ -162,13 +169,14 @@ onBeforeUnmount(() => {
 .preview-actions{position:absolute;z-index:3;right:10px;bottom:10px;left:10px;display:flex;justify-content:center;opacity:0;transform:translateY(8px);pointer-events:none;transition:opacity 150ms,transform 150ms cubic-bezier(.2,0,0,1)}
 .selection-control.selection-control{position:absolute;z-index:3;top:10px;right:10px;width:24px;height:24px;min-height:24px;padding:0;border:1px solid rgb(0 0 0/.35);border-radius:50%;background:rgb(255 255 255/.9);box-shadow:0 1px 4px rgb(0 0 0/.12);opacity:0;transition:opacity 120ms,scale 150ms,background-color 150ms,border-color 150ms}.selection-control.active{border-color:var(--color-fg);background:var(--color-fg);opacity:1}.selection-control:hover{border-color:var(--color-fg)}.selection-control:active{scale:.9}.asset-card:hover .selection-control,.asset-card:focus-within .selection-control{opacity:1}
 .asset-card:hover .figma-button,.asset-card:focus-within .figma-button{opacity:1;transform:translate(-50%,0);pointer-events:auto}.asset-card:hover .preview-actions,.asset-card:focus-within .preview-actions{opacity:1;transform:translateY(0);pointer-events:auto}.figma-button:hover{opacity:.8}.figma-button:active{scale:.96}.figma-button:focus-visible{outline:2px solid var(--color-accent);outline-offset:2px}
-.asset-masonry.cards-hidden .asset-card{opacity:0;transform:translateY(16px);transition-delay:0ms}
+.asset-masonry.cards-hidden .asset-card{opacity:0;transform:translateY(16px);transition-delay:var(--card-stagger,0ms);animation:none}
+.card-list-enter-active,.card-list-leave-active{transition-property:opacity,transform;transition-duration:.18s,.22s;transition-delay:0ms;transition-timing-function:ease-out,cubic-bezier(.2,0,0,1)}.card-list-enter-active{animation:none}.card-list-enter-from{opacity:0;transform:translateY(12px)}.card-list-leave-to{opacity:0;transform:translateY(-4px)}
 @keyframes card-fade-in{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
-@media(max-width:2200px){.asset-masonry{grid-template-columns:repeat(5,minmax(0,1fr))}}
-@media(max-width:1680px){.asset-masonry{grid-template-columns:repeat(4,minmax(0,1fr))}}
-@media(max-width:1280px){.asset-masonry{grid-template-columns:repeat(3,minmax(0,1fr))}}
-@media(max-width:900px){.asset-masonry{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:520px){.asset-masonry{grid-template-columns:minmax(0,1fr)}.card-body{font-size:14px}}
+@media(max-width:2200px){.asset-masonry{grid-template-columns:repeat(6,minmax(0,1fr))}.asset-masonry.stable-columns .asset-card:nth-child(n){grid-column:auto}.asset-masonry.stable-columns .asset-card:nth-child(6n + 1){grid-column:1}.asset-masonry.stable-columns .asset-card:nth-child(6n + 2){grid-column:2}.asset-masonry.stable-columns .asset-card:nth-child(6n + 3){grid-column:3}.asset-masonry.stable-columns .asset-card:nth-child(6n + 4){grid-column:4}.asset-masonry.stable-columns .asset-card:nth-child(6n + 5){grid-column:5}.asset-masonry.stable-columns .asset-card:nth-child(6n){grid-column:6}}
+@media(max-width:1680px){.asset-masonry{grid-template-columns:repeat(5,minmax(0,1fr))}.asset-masonry.stable-columns .asset-card:nth-child(n){grid-column:auto}.asset-masonry.stable-columns .asset-card:nth-child(5n + 1){grid-column:1}.asset-masonry.stable-columns .asset-card:nth-child(5n + 2){grid-column:2}.asset-masonry.stable-columns .asset-card:nth-child(5n + 3){grid-column:3}.asset-masonry.stable-columns .asset-card:nth-child(5n + 4){grid-column:4}.asset-masonry.stable-columns .asset-card:nth-child(5n){grid-column:5}}
+@media(max-width:1280px){.asset-masonry{grid-template-columns:repeat(4,minmax(0,1fr))}.asset-masonry.stable-columns .asset-card:nth-child(n){grid-column:auto}.asset-masonry.stable-columns .asset-card:nth-child(4n + 1){grid-column:1}.asset-masonry.stable-columns .asset-card:nth-child(4n + 2){grid-column:2}.asset-masonry.stable-columns .asset-card:nth-child(4n + 3){grid-column:3}.asset-masonry.stable-columns .asset-card:nth-child(4n){grid-column:4}}
+@media(max-width:900px){.asset-masonry{grid-template-columns:repeat(3,minmax(0,1fr))}.asset-masonry.stable-columns .asset-card:nth-child(n){grid-column:auto}.asset-masonry.stable-columns .asset-card:nth-child(3n + 1){grid-column:1}.asset-masonry.stable-columns .asset-card:nth-child(3n + 2){grid-column:2}.asset-masonry.stable-columns .asset-card:nth-child(3n){grid-column:3}}
+@media(max-width:520px){.asset-masonry{grid-template-columns:repeat(2,minmax(0,1fr))}.asset-masonry.stable-columns .asset-card:nth-child(n){grid-column:auto}.asset-masonry.stable-columns .asset-card:nth-child(odd){grid-column:1}.asset-masonry.stable-columns .asset-card:nth-child(even){grid-column:2}.card-body{font-size:14px}}
 @media(hover:none){.selection-control.selection-control{opacity:1}.preview-actions{opacity:1;transform:none;pointer-events:auto}}
-@media(prefers-reduced-motion:reduce){.asset-card{transition:none;animation:none}.asset-masonry.cards-hidden .asset-card{opacity:1;transform:none}.preview img{transition:none}.figma-button{transition-duration:.01ms;transform:translate(-50%,0)}.preview-actions{transition:none}.figma-button:active{scale:1}}
+@media(prefers-reduced-motion:reduce){.asset-card,.card-list-enter-active,.card-list-leave-active{transition:none;animation:none}.asset-masonry.cards-hidden .asset-card{opacity:1;transform:none}.preview img{transition:none}.figma-button{transition-duration:.01ms;transform:translate(-50%,0)}.preview-actions{transition:none}.figma-button:active{scale:1}}
 </style>

@@ -4,15 +4,25 @@ const route = useRoute()
 const router = useRouter()
 
 interface AssetCard {
-  id: string; title: string; description: string|null; previewUrl: string; width: number; height: number; status: string; figma_url: string
-  created_at: string; updated_at: string; projects: { name: string } | null
-  asset_tags: Array<{ tags: { id: string; name: string; slug: string } | null }>
-  allowed_users: { figma_handle: string | null; avatar_url: string | null } | null
+  id: string; title: string; description?: string|null; previewUrl: string; preview2xUrl?: string|null; width: number; height: number; status?: string; figma_url?: string
+  created_at?: string; updated_at?: string; projects?: { name: string } | null
+  asset_tags?: Array<{ tags: { id?: string; name: string; slug?: string } | null }>
+  allowed_users?: { figma_handle: string | null; avatar_url: string | null } | null
 }
 interface Submitter { id: string; figma_handle: string | null; avatar_url: string | null }
 interface Project { id: string; name: string; slug: string }
 interface AssetList { data: { assets: AssetCard[]; submitters: Submitter[]; total: number; page: number; pageSize: number } }
 interface SessionResponse { data: { authenticated: boolean; user?: { role: string; workspace?: { name: string } | null } } }
+interface BoardSummary {
+  id: string
+  title: string
+  purpose: 'showcase' | 'review' | 'portfolio' | 'case'
+  itemCount: number
+  assetIds: string[]
+  previewAssets: AssetCard[]
+}
+interface BoardList { data: { collections: BoardSummary[] } }
+interface BoardContent { data: { assets: AssetCard[] } }
 
 const search = ref('')
 const status = ref('')
@@ -37,7 +47,58 @@ const dateTo = computed(() => dateRange.value === 'custom' && customDateTo.value
 const query = computed(() => ({ search: search.value, ...(status.value ? { status: status.value } : {}), ...(projectId.value ? { projectId: projectId.value } : {}), ...(dateFrom.value ? { dateFrom: dateFrom.value } : {}), ...(dateTo.value ? { dateTo: dateTo.value } : {}), sort: sort.value, page: page.value }))
 const { data, status: loadStatus, error, refresh } = await useFetch<AssetList>('/api/assets', { query, watch: [query] })
 const { data: projectData } = await useFetch<{data:{projects:Project[]}}>('/api/projects')
+const { data: boardData } = await useFetch<BoardList>('/api/shares')
 const projects = computed(() => projectData.value?.data.projects ?? [])
+const boards = computed(() => boardData.value?.data.collections.filter(board => board.purpose !== 'case') ?? [])
+const selectedBoardId = computed(() => typeof route.query.board === 'string' ? route.query.board : '')
+const selectedBoard = computed(() => boards.value.find(board => board.id === selectedBoardId.value))
+const { data: selectedBoardData, status: selectedBoardStatus, error: selectedBoardError } = await useAsyncData('library-selected-board', async () => {
+  const boardId = selectedBoardId.value
+  if (!boardId) return { boardId: '', assets: [] as AssetCard[] }
+  const board = boardData.value?.data.collections.find(collection => collection.id === boardId)
+  const availableAssets = data.value?.data.assets ?? []
+  const availableById = new Map(availableAssets.map(asset => [asset.id, asset]))
+  const localAssets = (board?.assetIds ?? []).map(id => availableById.get(id)).filter((asset): asset is AssetCard => Boolean(asset))
+  if (board && localAssets.length === board.assetIds.length) return { boardId, assets: localAssets }
+  const response = await $fetch<BoardContent>(`/api/shares/${boardId}/content`)
+  return { boardId, assets: response.data.assets }
+}, { watch: [selectedBoardId] })
+const locallyKnownBoardAssets = computed(() => {
+  const board = selectedBoard.value
+  if (!board) return []
+  const availableById = new Map(assets.value.map(asset => [asset.id, asset]))
+  const previewById = new Map(board.previewAssets.map(asset => [asset.id, asset]))
+  return board.assetIds.map(id => availableById.get(id) ?? previewById.get(id)).filter((asset): asset is AssetCard => Boolean(asset))
+})
+const boardAssets = computed(() => {
+  if (selectedBoardData.value?.boardId !== selectedBoardId.value) return locallyKnownBoardAssets.value
+  const knownById = new Map(locallyKnownBoardAssets.value.map(asset => [asset.id, asset]))
+  return selectedBoardData.value.assets.map(asset => {
+    const known = knownById.get(asset.id)
+    return known ? { ...asset, previewUrl: known.previewUrl, preview2xUrl: known.preview2xUrl ?? asset.preview2xUrl } : asset
+  })
+})
+const displayedAssets = computed(() => {
+  const source = selectedBoardId.value ? boardAssets.value : assets.value
+  const term = search.value.trim().toLocaleLowerCase()
+  return selectedBoardId.value && term
+    ? source.filter(asset => `${asset.title} ${asset.description ?? ''}`.toLocaleLowerCase().includes(term))
+    : source
+})
+const cardsHidden = ref(false)
+let boardTransition = 0
+const selectBoard = async (boardId: string) => {
+  if (boardId === selectedBoardId.value) return
+  const transition = ++boardTransition
+  cardsHidden.value = true
+  await new Promise(resolve => setTimeout(resolve, 300))
+  if (transition !== boardTransition) return
+  await router.replace({ path: '/library', query: boardId ? { board: boardId } : {} })
+  await nextTick()
+  requestAnimationFrame(() => {
+    if (transition === boardTransition) cardsHidden.value = false
+  })
+}
 const selectedProjectName = computed(() => projects.value.find(project => project.id === projectId.value)?.name)
 const dateRangeLabel = computed(() => dateRange.value === 'today' ? 'Today' : dateRange.value === 'week' ? 'This week' : dateRange.value === 'two-weeks' ? 'Last two weeks' : dateRange.value === 'month' ? 'This month' : dateRange.value === 'custom' ? 'Custom dates' : '')
 const currentBoardFilters = computed(() => ({
@@ -65,16 +126,18 @@ const visibleSubmitters = computed(() => submitters.value.slice(0, 5))
 const submitterName = (submitter: Submitter) => submitter.figma_handle || 'Unknown submitter'
 const submitterInitial = (submitter: Submitter) => submitterName(submitter).trim().charAt(0).toUpperCase() || '?'
 const total = computed(() => data.value?.data.total ?? 0)
-const resultKey = computed(() => assets.value.map(asset => `${asset.id}:${asset.updated_at}`).join('|'))
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / 24)))
-const resultMessage = computed(() => loadStatus.value === 'success' ? `${total.value} ${total.value === 1 ? 'asset' : 'assets'}` : '')
+const resultMessage = computed(() => {
+  if (selectedBoardId.value) return selectedBoardStatus.value === 'success' ? `${displayedAssets.value.length} ${displayedAssets.value.length === 1 ? 'asset' : 'assets'} in ${selectedBoard.value?.title ?? 'board'}` : ''
+  return loadStatus.value === 'success' ? `${total.value} ${total.value === 1 ? 'asset' : 'assets'}` : ''
+})
 const { data: session } = await useFetch<SessionResponse>('/api/auth/session')
 const isAdmin = computed(() => session.value?.data?.user?.role === 'admin')
 const canManageProjects = computed(() => ['editor', 'admin'].includes(session.value?.data?.user?.role ?? ''))
 const canShare = computed(() => ['contributor', 'editor', 'admin'].includes(session.value?.data?.user?.role ?? ''))
 const selectedAssetId = computed(() => typeof route.query.asset === 'string' ? route.query.asset : '')
-const selectedAssetPreviewUrl = computed(() => assets.value.find(asset => asset.id === selectedAssetId.value)?.previewUrl ?? '')
-const closeAsset = () => router.replace({ path: '/library' })
+const selectedAssetPreviewUrl = computed(() => displayedAssets.value.find(asset => asset.id === selectedAssetId.value)?.previewUrl ?? '')
+const closeAsset = () => router.replace({ path: '/library', query: selectedBoardId.value ? { board: selectedBoardId.value } : {} })
 const navigateAsset = (id: string) => router.replace({ path: '/library', query: { ...route.query, asset: id } })
 const handleAssetDeleted = (id: string) => {
   assets.value = assets.value.filter(asset => asset.id !== id)
@@ -136,21 +199,30 @@ onBeforeUnmount(() => {
         <nav aria-label="Library controls"><NuxtLink to="/portfolio">Portfolio</NuxtLink><ShareCollection v-if="canShare" :current-filters="currentBoardFilters" /><NuxtLink v-if="isAdmin" to="/admin/users">Admin</NuxtLink><NuxtLink v-else-if="canManageProjects" to="/admin/projects">Projects</NuxtLink><NuxtLink to="/account">Account</NuxtLink></nav>
       </header>
 
-      <SelectionPanel label="Asset filters" :wide="filtersExpanded" :bare="!filtersExpanded"><Transition name="filter-controls"><form v-if="filtersExpanded" class="filters" aria-label="Filter and sort assets" @submit.prevent><label><span class="sr-only">Status</span><select v-model="status" name="status"><option value="">All statuses</option><option value="approved">Approved</option><option value="draft">Draft</option></select></label><label><span class="sr-only">Project</span><select v-model="projectId" name="project"><option value="">All projects</option><option v-for="project in projects" :key="project.id" :value="project.id">{{ project.name }}</option></select></label><label><span class="sr-only">Date</span><select v-model="dateRange" name="date"><option value="all">All dates</option><option value="today">Today</option><option value="week">This week</option><option value="two-weeks">Last two weeks</option><option value="month">This month</option><option value="custom">Custom range</option></select></label><label v-if="dateRange==='custom'" class="date-field"><span>From</span><input v-model="customDateFrom" type="date" name="date-from" :max="customDateTo || undefined"></label><label v-if="dateRange==='custom'" class="date-field"><span>To</span><input v-model="customDateTo" type="date" name="date-to" :min="customDateFrom || undefined"></label><label><span class="sr-only">Sort</span><select v-model="sort" name="sort"><option value="newest">Newest</option><option value="oldest">Oldest</option><option value="updated">Recently updated</option><option value="title">Title</option><option value="dimensions">Dimensions</option><option value="submitter">Submitter</option></select></label><div v-if="submitters.length" class="submitter-stack" role="list" aria-label="People who submitted assets"><span v-for="submitter in visibleSubmitters" :key="submitter.id" class="submitter-avatar" role="listitem" :title="submitterName(submitter)"><img v-if="submitter.avatar_url" :src="submitter.avatar_url" alt=""><span v-else aria-hidden="true">{{ submitterInitial(submitter) }}</span><span class="sr-only">{{ submitterName(submitter) }}</span></span><span v-if="submitters.length > visibleSubmitters.length" class="submitter-more" :title="`${submitters.length-visibleSubmitters.length} more submitters`">+{{ submitters.length-visibleSubmitters.length }}</span></div></form></Transition><button class="filter-panel-toggle" :class="{ 'is-expanded': filtersExpanded }" type="button" :aria-label="filtersExpanded ? 'Hide filters' : 'Show filters'" :aria-expanded="filtersExpanded" @click="filtersExpanded=!filtersExpanded"><svg v-if="filtersExpanded" aria-hidden="true" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></svg><span v-if="!filtersExpanded">Filters</span><span v-if="!filtersExpanded&&activeFilterCount" class="filter-count">{{ activeFilterCount }}</span></button></SelectionPanel>
+      <nav v-if="boards.length" class="board-tabs" aria-label="Browse boards">
+        <button type="button" :aria-pressed="!selectedBoardId" @click="selectBoard('')">All</button>
+        <button v-for="board in boards" :key="board.id" type="button" :title="board.title" :aria-label="`Show ${board.title}`" :aria-pressed="selectedBoardId === board.id" @click="selectBoard(board.id)">{{ board.title }}</button>
+      </nav>
 
-      <div v-if="loadStatus === 'pending' && assets.length === 0" class="state" role="status">Loading assets…</div>
-      <div v-else-if="error" class="state error" role="alert"><strong>Unable to load assets.</strong><span>Check your connection and try again.</span><button type="button" @click="refresh()">Try again</button></div>
-      <div v-else-if="assets.length === 0" class="state"><strong>{{ hasFilters ? 'No matching assets' : 'No assets yet' }}</strong><span>{{ hasFilters ? 'Change your search or clear the filters.' : 'Upload frames from the Figma plugin to build this library.' }}</span><button v-if="hasFilters" type="button" @click="search = ''; status = ''; projectId = ''; dateRange = 'all'; customDateFrom = ''; customDateTo = ''">Clear filters</button></div>
-      <Transition v-else name="result-swap" mode="out-in"><AssetMasonry :key="resultKey" :assets="assets" interactive /></Transition>
-      <nav v-if="totalPages > 1" class="pagination" aria-label="Pagination"><button :disabled="page === 1" @click="page--">Previous</button><span>Page {{ page }} of {{ totalPages }}</span><button :disabled="page === totalPages" @click="page++">Next</button></nav>
+      <SelectionPanel v-if="!selectedBoardId" label="Asset filters" :wide="filtersExpanded" :bare="!filtersExpanded"><Transition name="filter-controls"><form v-if="filtersExpanded" class="filters" aria-label="Filter and sort assets" @submit.prevent><label><span class="sr-only">Status</span><select v-model="status" name="status"><option value="">All statuses</option><option value="approved">Approved</option><option value="draft">Draft</option></select></label><label><span class="sr-only">Project</span><select v-model="projectId" name="project"><option value="">All projects</option><option v-for="project in projects" :key="project.id" :value="project.id">{{ project.name }}</option></select></label><label><span class="sr-only">Date</span><select v-model="dateRange" name="date"><option value="all">All dates</option><option value="today">Today</option><option value="week">This week</option><option value="two-weeks">Last two weeks</option><option value="month">This month</option><option value="custom">Custom range</option></select></label><label v-if="dateRange==='custom'" class="date-field"><span>From</span><input v-model="customDateFrom" type="date" name="date-from" :max="customDateTo || undefined"></label><label v-if="dateRange==='custom'" class="date-field"><span>To</span><input v-model="customDateTo" type="date" name="date-to" :min="customDateFrom || undefined"></label><label><span class="sr-only">Sort</span><select v-model="sort" name="sort"><option value="newest">Newest</option><option value="oldest">Oldest</option><option value="updated">Recently updated</option><option value="title">Title</option><option value="dimensions">Dimensions</option><option value="submitter">Submitter</option></select></label><div v-if="submitters.length" class="submitter-stack" role="list" aria-label="People who submitted assets"><span v-for="submitter in visibleSubmitters" :key="submitter.id" class="submitter-avatar" role="listitem" :title="submitterName(submitter)"><img v-if="submitter.avatar_url" :src="submitter.avatar_url" alt=""><span v-else aria-hidden="true">{{ submitterInitial(submitter) }}</span><span class="sr-only">{{ submitterName(submitter) }}</span></span><span v-if="submitters.length > visibleSubmitters.length" class="submitter-more" :title="`${submitters.length-visibleSubmitters.length} more submitters`">+{{ submitters.length-visibleSubmitters.length }}</span></div></form></Transition><button class="filter-panel-toggle" :class="{ 'is-expanded': filtersExpanded }" type="button" :aria-label="filtersExpanded ? 'Hide filters' : 'Show filters'" :aria-expanded="filtersExpanded" @click="filtersExpanded=!filtersExpanded"><svg v-if="filtersExpanded" aria-hidden="true" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></svg><span v-if="!filtersExpanded">Filters</span><span v-if="!filtersExpanded&&activeFilterCount" class="filter-count">{{ activeFilterCount }}</span></button></SelectionPanel>
+
+      <span v-if="selectedBoardId && selectedBoardStatus === 'pending' && displayedAssets.length" class="sr-only" role="status">Loading the rest of {{ selectedBoard?.title ?? 'this board' }}</span>
+      <AssetMasonrySkeleton v-if="selectedBoardId && selectedBoardStatus === 'pending' && displayedAssets.length === 0" :label="`Loading ${selectedBoard?.title ?? 'board'}`" />
+      <div v-else-if="selectedBoardId && selectedBoardError && displayedAssets.length === 0" class="state error" role="alert"><strong>Unable to load this board.</strong><span>Try another board or return to all assets.</span></div>
+      <AssetMasonrySkeleton v-else-if="!selectedBoardId && loadStatus === 'pending' && assets.length === 0" />
+      <div v-else-if="!selectedBoardId && error" class="state error" role="alert"><strong>Unable to load assets.</strong><span>Check your connection and try again.</span><button type="button" @click="refresh()">Try again</button></div>
+      <div v-else-if="displayedAssets.length === 0" class="state"><strong>{{ selectedBoardId ? 'No matching assets on this board' : hasFilters ? 'No matching assets' : 'No assets yet' }}</strong><span>{{ selectedBoardId ? 'Try another board or change your search.' : hasFilters ? 'Change your search or clear the filters.' : 'Upload frames from the Figma plugin to build this library.' }}</span><button v-if="!selectedBoardId && hasFilters" type="button" @click="search = ''; status = ''; projectId = ''; dateRange = 'all'; customDateFrom = ''; customDateTo = ''">Clear filters</button></div>
+      <AssetMasonry v-else :assets="displayedAssets" :hidden="cardsHidden" :stable-columns="Boolean(selectedBoardId)" :animate-changes="!cardsHidden" interactive />
+      <nav v-if="!selectedBoardId && totalPages > 1" class="pagination" aria-label="Pagination"><button :disabled="page === 1" @click="page--">Previous</button><span>Page {{ page }} of {{ totalPages }}</span><button :disabled="page === totalPages" @click="page++">Next</button></nav>
     </main>
-    <AssetOverlay v-if="selectedAssetId" :asset-id="selectedAssetId" :asset-ids="assets.map(asset => asset.id)" :preview-url="selectedAssetPreviewUrl" @close="closeAsset" @deleted="handleAssetDeleted" @navigate="navigateAsset" />
+    <AssetOverlay v-if="selectedAssetId" :asset-id="selectedAssetId" :asset-ids="displayedAssets.map(asset => asset.id)" :preview-url="selectedAssetPreviewUrl" @close="closeAsset" @deleted="handleAssetDeleted" @navigate="navigateAsset" />
   </div>
 </template>
 
 <style scoped>
 .library-shell{--space:clamp(12px,1vw,24px);--muted:.45;min-height:100vh;color:#000;background:#fff;font-size:16px;font-weight:700;letter-spacing:-.015em;line-height:1.15}main{min-height:100vh;padding:var(--space);padding-bottom:calc(var(--space) + 68px)}.index-toolbar{position:sticky;z-index:4;top:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-items:start;gap:var(--space);min-height:68px;margin-top:calc(var(--space)*-1);padding:var(--space) 0;background:rgb(255 255 255/.95);backdrop-filter:blur(12px)}.brand{text-decoration:none}.filters{width:100%;display:flex;flex-wrap:nowrap;gap:2px var(--space)}.filters label{min-width:7rem;flex:1}.filters input,.filters select{width:100%;min-height:24px;padding:0;border:0;border-bottom:1px solid rgb(0 0 0/.18);border-radius:0;color:inherit;background:transparent;font:inherit}.filters input::placeholder{color:inherit;opacity:var(--muted)}.count{margin:0;opacity:var(--muted);text-align:right;font-variant-numeric:tabular-nums}.index-toolbar nav{grid-column:4;position:absolute;top:calc(var(--space) + 27px);right:0;display:flex;gap:var(--space)}.index-toolbar nav a{text-decoration:none}.masonry{column-count:6;column-gap:var(--space)}.asset-card{display:inline-block;width:100%;break-inside:avoid;margin-bottom:calc(var(--space)*2);color:inherit;background:transparent;text-decoration:none}.preview{overflow:hidden;border-radius:8px;background:transparent;clip-path:inset(0 round 8px)}.preview img{display:block;width:100%;height:100%;object-fit:cover}.asset-card:hover{opacity:1}.card-body{display:flex;justify-content:space-between;align-items:flex-start;gap:var(--space);padding-top:8px}.card-body h2,.card-body p{margin:0;font:inherit}.card-body p,.card-body>span{opacity:.3}.card-body>span{text-transform:capitalize}.state{min-height:45vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center}.state span{opacity:var(--muted)}button{min-height:44px;padding:0 18px;border:0;border-radius:999px;color:white;background:black;font:inherit;cursor:pointer;transition-property:scale,opacity;transition-duration:150ms}.state button:active,.pagination button:active{scale:.96}.pagination{display:flex;align-items:center;justify-content:center;gap:var(--space);padding:calc(var(--space)*2) 0}.pagination span{opacity:var(--muted)}:is(a,button):focus-visible{outline:2px solid #06f90e;outline-offset:2px}.sr-only{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}@media(max-width:2200px){.masonry{column-count:5}}@media(max-width:1680px){.masonry{column-count:4}}@media(max-width:1280px){.masonry{column-count:3}}@media(max-width:900px){.index-toolbar{grid-template-columns:1fr 2fr auto}.count{display:none}.masonry{column-count:2}}@media(max-width:520px){.index-toolbar{grid-template-columns:1fr auto;gap:8px}.brand{grid-column:1}.index-toolbar nav{position:static;grid-column:2;grid-row:1}.card-body{font-size:14px}.masonry{column-count:1}}@media(prefers-reduced-motion:reduce){.preview img,button{transition:none}.state button:active,.pagination button:active{scale:1}}
 .index-toolbar{transition:opacity .18s ease-out,transform .24s cubic-bezier(.2,0,0,1)}
+.board-tabs{display:flex;gap:var(--space);margin-bottom:calc(var(--space)*2);overflow-x:auto;overscroll-behavior-inline:contain;scrollbar-width:none}.board-tabs::-webkit-scrollbar{display:none}.board-tabs button{position:relative;min-height:44px;max-width:18ch;flex:0 0 auto;overflow:hidden;padding:0;color:inherit;background:transparent;border-radius:0;text-overflow:ellipsis;white-space:nowrap}.board-tabs button:first-child{max-width:none}.board-tabs button[aria-pressed=true]::after{content:"";position:absolute;right:0;bottom:4px;left:0;height:2px;background:currentColor}.board-tabs button:hover{opacity:.5}
 .library-shell{--space:inherit}
 .index-toolbar.toolbar-hidden{pointer-events:none;opacity:0;transform:translateY(calc(-100% - var(--space)))}
 .index-toolbar{min-height:0}

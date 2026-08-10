@@ -72,7 +72,7 @@ export const boardPreviewForCollection = async (collection: {
     if (error) throw databaseError('read board preview assets', error)
     ids = data.map((item: { asset_id: string }) => item.asset_id)
   }
-  if (!ids.length) return { itemCount: 0, previewAssets: [] }
+  if (!ids.length) return { itemCount: 0, assetIds: [], previewAssets: [] }
 
   const previewIds = ids.slice(0, 4)
   let query = useSupabaseAdmin().from('assets')
@@ -90,7 +90,7 @@ export const boardPreviewForCollection = async (collection: {
   })))
   const position = new Map(previewIds.map((assetId, index) => [assetId, index]))
   previewAssets.sort((a, b) => (position.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (position.get(b.id) ?? Number.MAX_SAFE_INTEGER))
-  return { itemCount: ids.length || count || 0, previewAssets }
+  return { itemCount: ids.length || count || 0, assetIds: ids, previewAssets }
 }
 
 export const publicAssetsForCollection = async (
