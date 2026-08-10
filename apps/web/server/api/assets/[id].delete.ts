@@ -4,6 +4,7 @@ import { requireAsset } from '../../utils/assets'
 import { writeAuditLog } from '../../utils/audit'
 import { requireRole } from '../../utils/session'
 import { requireTrustedMutation } from '../../utils/request-security'
+import { removeAssetObjects } from '../../utils/storage'
 
 export default defineEventHandler(async (event) => {
   requireTrustedMutation(event)
@@ -15,7 +16,7 @@ export default defineEventHandler(async (event) => {
   const paths = [...new Set([asset.image_path, asset.thumbnail_path, asset.thumbnail_2x_path, ...(versions ?? []).flatMap((row: { image_path: string, thumbnail_path: string | null, thumbnail_2x_path: string | null }) => [row.image_path, row.thumbnail_path, row.thumbnail_2x_path])].filter(Boolean))] as string[]
   const { error } = await useSupabaseAdmin().from('assets').delete().eq('id', id).eq('organization_id', session.user.organization_id)
   if (error) throw databaseError('delete asset', error)
-  if (paths.length) await useSupabaseAdmin().storage.from('assets').remove(paths)
+  if (paths.length) await removeAssetObjects(paths)
   await writeAuditLog(session.user.organization_id, session.user.id, 'delete', 'asset', id, { title: asset.title })
   return { data: { deleted: true } }
 })

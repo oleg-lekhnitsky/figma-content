@@ -11,9 +11,11 @@
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1106.0",
+    "@aws-sdk/s3-request-presigner": "^3.1106.0",
     "@content-library/shared": "*",
-    "@supabase/supabase-js": "^2.57.4",
     "@nuxt/image": "^2.1.0",
+    "@supabase/supabase-js": "^2.57.4",
     "nuxt": "^4.5.2",
     "sharp": "^0.35.3",
     "vue": "^3.5.40",

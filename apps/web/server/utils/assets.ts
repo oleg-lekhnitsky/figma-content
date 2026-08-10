@@ -1,10 +1,7 @@
 import { appError, databaseError } from './app-error'
+import { signedAssetObjectUrl } from './storage'
 
-export const signedAssetUrl = async (path: string, expiresIn = 900) => {
-  const { data, error } = await useSupabaseAdmin().storage.from('assets').createSignedUrl(path, expiresIn)
-  if (error) throw databaseError('sign asset URL', error)
-  return data.signedUrl
-}
+export const signedAssetUrl = signedAssetObjectUrl
 
 export const requireAsset = async (id: string, organizationId: string) => {
   const { data, error } = await useSupabaseAdmin().from('assets')

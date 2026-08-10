@@ -8,6 +8,7 @@ import { requireRole } from '../../../utils/session'
 import { expectedSharpFormat, isAllowedUploadMime } from '../../../utils/upload-validation'
 import { rateLimit, requireTrustedMutation } from '../../../utils/request-security'
 import { canManageAsset } from '../../../utils/authorization'
+import { r2AssetPath, removeAssetObjects, uploadAssetObject } from '../../../utils/storage'
 
 export default defineEventHandler(async (event) => {
   rateLimit(event, 'asset-version-upload', 30, 60_000)
@@ -31,25 +32,27 @@ export default defineEventHandler(async (event) => {
   const version = current.version + 1
   const extension = file.type === 'image/png' ? 'png' : 'jpg'
   const basePath = `${session.user.organization_id}/${id}/versions/${version}`
-  const imagePath = `${basePath}/original.${extension}`; const thumbnailPath = `${basePath}/thumbnail.webp`; const thumbnail2xPath = `${basePath}/thumbnail@2x.webp`
+  const imagePath = r2AssetPath(`${basePath}/original.${extension}`); const thumbnailPath = r2AssetPath(`${basePath}/thumbnail.webp`); const thumbnail2xPath = r2AssetPath(`${basePath}/thumbnail@2x.webp`)
   const [thumbnail, thumbnail2x] = await Promise.all([
     image.clone().resize({ width: 640, withoutEnlargement: true }).webp({ quality: 100 }).toBuffer(),
     image.clone().resize({ width: 1280, withoutEnlargement: true }).webp({ quality: 100 }).toBuffer()
   ])
-  const bucket = useSupabaseAdmin().storage.from('assets')
-  const originalUpload = await bucket.upload(imagePath, file.data, { contentType: file.type, upsert: false })
-  if (originalUpload.error) throw databaseError('upload replacement', originalUpload.error)
-  const thumbnailUpload = await bucket.upload(thumbnailPath, thumbnail, { contentType: 'image/webp', upsert: false })
-  if (thumbnailUpload.error) { await bucket.remove([imagePath]); throw databaseError('upload replacement thumbnail', thumbnailUpload.error) }
-  const thumbnail2xUpload = await bucket.upload(thumbnail2xPath, thumbnail2x, { contentType: 'image/webp', upsert: false })
-  if (thumbnail2xUpload.error) { await bucket.remove([imagePath, thumbnailPath]); throw databaseError('upload retina replacement thumbnail', thumbnail2xUpload.error) }
+  const uploadedPaths: string[] = []
+  try {
+    await uploadAssetObject(imagePath, file.data, file.type); uploadedPaths.push(imagePath)
+    await uploadAssetObject(thumbnailPath, thumbnail, 'image/webp'); uploadedPaths.push(thumbnailPath)
+    await uploadAssetObject(thumbnail2xPath, thumbnail2x, 'image/webp'); uploadedPaths.push(thumbnail2xPath)
+  } catch (error) {
+    if (uploadedPaths.length) await removeAssetObjects(uploadedPaths)
+    throw error
+  }
   const metadata = parsed.data
   const update = { image_path: imagePath, thumbnail_path: thumbnailPath, thumbnail_2x_path: thumbnail2xPath, mime_type: file.type, file_size: file.data.byteLength, width: info.width, height: info.height, image_format: extension, figma_file_key: metadata.figmaFileKey, figma_node_id: metadata.figmaNodeId, figma_node_name: metadata.figmaNodeName, figma_url: metadata.figmaUrl, version, status: 'draft' }
   const db = useSupabaseAdmin()
   const { error: versionError } = await db.from('asset_versions').insert({ organization_id: session.user.organization_id, asset_id: id, version, image_path: imagePath, thumbnail_path: thumbnailPath, thumbnail_2x_path: thumbnail2xPath, mime_type: file.type, file_size: file.data.byteLength, width: info.width, height: info.height, metadata, created_by: session.user.id })
-  if (versionError) { await bucket.remove([imagePath, thumbnailPath, thumbnail2xPath]); throw databaseError('create asset version', versionError) }
+  if (versionError) { await removeAssetObjects([imagePath, thumbnailPath, thumbnail2xPath]); throw databaseError('create asset version', versionError) }
   const { data: asset, error } = await db.from('assets').update(update).eq('id', id).eq('organization_id', session.user.organization_id).eq('version', current.version).select('*').single()
-  if (error) { await db.from('asset_versions').delete().eq('asset_id', id).eq('version', version); await bucket.remove([imagePath, thumbnailPath, thumbnail2xPath]); throw databaseError('activate asset version', error) }
+  if (error) { await db.from('asset_versions').delete().eq('asset_id', id).eq('version', version); await removeAssetObjects([imagePath, thumbnailPath, thumbnail2xPath]); throw databaseError('activate asset version', error) }
   await writeAuditLog(session.user.organization_id, session.user.id, 'upload', 'asset', id, { version, replacement: true })
   return { data: { asset } }
 })

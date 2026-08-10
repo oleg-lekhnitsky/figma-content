@@ -23,6 +23,11 @@ export default defineNuxtConfig({
     pluginCallbackUrl: process.env.PLUGIN_CALLBACK_URL ?? '',
     sessionTtlSeconds: Number(process.env.SESSION_TTL_SECONDS ?? 28_800),
     maxUploadBytes: Number(process.env.MAX_UPLOAD_BYTES ?? 10_485_760),
+    r2AccountId: process.env.R2_ACCOUNT_ID ?? '',
+    r2AccessKeyId: process.env.R2_ACCESS_KEY_ID ?? '',
+    r2SecretAccessKey: process.env.R2_SECRET_ACCESS_KEY ?? '',
+    r2Bucket: process.env.R2_BUCKET ?? '',
+    r2Endpoint: process.env.R2_ENDPOINT ?? '',
     public: { appUrl: process.env.NUXT_PUBLIC_APP_URL ?? 'http://localhost:3000' }
   },
   typescript: { strict: true }
