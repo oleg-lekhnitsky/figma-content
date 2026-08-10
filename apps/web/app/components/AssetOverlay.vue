@@ -729,8 +729,9 @@ li span {
     padding: 0;
     overflow-x: hidden;
     overflow-y: auto;
-    overscroll-behavior: contain;
-    scroll-snap-type: y proximity
+    overscroll-behavior-x: none;
+    overscroll-behavior-y: none;
+    touch-action: pan-y
   }
 
   .asset-visual {
@@ -740,8 +741,7 @@ li span {
     background: var(--color-bg);
     clip-path: none;
     touch-action: none;
-    user-select: none;
-    scroll-snap-align: start
+    user-select: none
   }
 
   .asset-visual img {
@@ -842,8 +842,7 @@ li span {
     padding: calc(var(--space)*2) var(--space) max(calc(var(--space)*3), env(safe-area-inset-bottom));
     color: var(--color-fg);
     background: var(--color-bg);
-    overflow: visible;
-    scroll-snap-align: start
+    overflow: visible
   }
 
   .skeleton-panel { display: grid }
