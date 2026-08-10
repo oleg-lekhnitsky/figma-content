@@ -39,6 +39,8 @@ const emit = defineEmits<{
   reorder: [fromIndex: number, toIndex: number]
 }>()
 
+const route = useRoute()
+const router = useRouter()
 const loadedImages = reactive(new Set<string>())
 const selectedIdSet = computed(() => new Set(props.selectedIds))
 const isSelected = (id: string) => selectedIdSet.value.has(id)
@@ -47,7 +49,22 @@ const draggedIndex = ref<number | null>(null)
 const dropIndex = ref<number | null>(null)
 let resizeObserver: ResizeObserver | undefined
 let measureFrame = 0
-const assetLink = (id: string): RouteLocationRaw => ({ path: '/library', query: { asset: id } })
+const assetLink = (id: string): RouteLocationRaw => ({ path: '/library', query: { ...route.query, asset: id } })
+const openAsset = (event: MouseEvent, id: string) => {
+  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+  const transitionDocument = document as Document & { startViewTransition?: (update: () => Promise<void>) => { finished: Promise<void> } }
+  if (!transitionDocument.startViewTransition || !window.matchMedia('(max-width: 760px)').matches || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  event.preventDefault()
+  const image = (event.currentTarget as HTMLElement).querySelector<HTMLImageElement>('img')
+  if (!image) return void router.push(assetLink(id))
+  image.style.viewTransitionName = 'asset-preview'
+  const transition = transitionDocument.startViewTransition(async () => {
+    await router.push(assetLink(id))
+    image.style.viewTransitionName = ''
+    await nextTick()
+  })
+  transition.finished.finally(() => { image.style.viewTransitionName = '' })
+}
 const cardStagger = (index: number) => `${Math.min(index * 18, 144)}ms`
 const startDrag = (event: DragEvent, index: number) => {
   if (!props.reorderable || !event.dataTransfer) return
@@ -135,7 +152,7 @@ onBeforeUnmount(() => {
     <TransitionGroup name="card-list" :css="animateChanges">
     <article v-for="(asset, index) in assets" :key="asset.id" class="asset-card" :class="{ 'is-selected': isSelected(asset.id), 'is-dragging': draggedIndex === index, 'is-drop-target': dropIndex === index && draggedIndex !== index }" :style="{ '--card-stagger': cardStagger(index) }" :draggable="reorderable" @dragstart="startDrag($event, index)" @dragover="dragOver($event, index)" @drop="dropAsset($event, index)" @dragend="finishDrag">
       <div class="preview" :class="{ 'is-loading': !loadedImages.has(asset.id) }" :style="{ aspectRatio: `${asset.width} / ${asset.height}` }">
-        <NuxtLink v-if="interactive" class="preview-link" :to="assetLink(asset.id)" :aria-label="`View ${asset.title}`">
+        <NuxtLink v-if="interactive" class="preview-link" :to="assetLink(asset.id)" :aria-label="`View ${asset.title}`" @click="openAsset($event, asset.id)">
           <img :class="{ 'is-loaded': loadedImages.has(asset.id) }" :data-asset-id="asset.id" :src="asset.previewUrl" :srcset="asset.preview2xUrl ? `${asset.previewUrl} 1x, ${asset.preview2xUrl} 2x` : undefined" :width="asset.width" :height="asset.height" :alt="`Preview of ${asset.title}`" :loading="index < 6 ? 'eager' : 'lazy'" :fetchpriority="index < 2 ? 'high' : 'auto'" decoding="async" @load="markImageLoaded(asset.id)">
         </NuxtLink>
         <img v-else :class="{ 'is-loaded': loadedImages.has(asset.id) }" :data-asset-id="asset.id" :src="asset.previewUrl" :srcset="asset.preview2xUrl ? `${asset.previewUrl} 1x, ${asset.preview2xUrl} 2x` : undefined" :width="asset.width" :height="asset.height" :alt="asset.title" :loading="index < 6 ? 'eager' : 'lazy'" :fetchpriority="index < 2 ? 'high' : 'auto'" decoding="async" @load="markImageLoaded(asset.id)">

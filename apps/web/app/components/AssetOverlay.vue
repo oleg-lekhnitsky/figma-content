@@ -6,13 +6,17 @@ interface SessionResponse { data: { authenticated: boolean; user?: { id: string;
 interface Board { id:string; title:string; mode:'dynamic'|'static'; role:'owner'|'editor'|'contributor'|'viewer' }
 interface Option { id:string; name:string }
 const dialog = ref<HTMLDialogElement>()
-const { data, status, error, refresh } = await useFetch<{ data: { asset: AssetDetail } }>(() => `/api/assets/${props.assetId}`)
-const { data: previewData } = await useFetch<{ data: { id: string; url: string } }>(() => `/api/assets/${props.assetId}/preview`)
-const { data: session } = await useFetch<SessionResponse>('/api/auth/session')
-const { data: boardData } = await useFetch<{data:{collections:Board[]}}>('/api/shares')
-const { data: projectData } = await useFetch<{data:{projects:Option[]}}>('/api/projects')
-const { data: campaignData } = await useFetch<{data:{campaigns:Option[]}}>('/api/campaigns')
-const asset = computed(() => data.value?.data.asset)
+const overlayContent = ref<HTMLElement>()
+const { data, status, error, refresh } = await useLazyFetch<{ data: { asset: AssetDetail } }>(() => `/api/assets/${props.assetId}`)
+const { data: previewData, execute: loadFullPreview } = await useLazyFetch<{ data: { id: string; url: string } }>(() => `/api/assets/${props.assetId}/preview`, { immediate: false })
+const { data: session } = await useLazyFetch<SessionResponse>('/api/auth/session')
+const { data: boardData } = await useLazyFetch<{data:{collections:Board[]}}>('/api/shares')
+const { data: projectData } = await useLazyFetch<{data:{projects:Option[]}}>('/api/projects')
+const { data: campaignData } = await useLazyFetch<{data:{campaigns:Option[]}}>('/api/campaigns')
+const fetchedAsset = computed(() => data.value?.data.asset)
+const retainedAsset = shallowRef<AssetDetail>()
+watch(fetchedAsset, next => { if (next) retainedAsset.value = next }, { immediate: true })
+const asset = computed(() => fetchedAsset.value ?? retainedAsset.value)
 const displayedPreviewUrl = ref(props.previewUrl)
 watch(() => [props.assetId, props.previewUrl], () => { displayedPreviewUrl.value = props.previewUrl }, { immediate: true })
 watch(() => previewData.value?.data, async (preview) => {
@@ -38,6 +42,13 @@ const nextAssetId = computed(() => assetIndex.value >= 0 && assetIndex.value < p
 const boardId = ref('')
 const editing = ref(false); const title = ref(''); const description = ref(''); const projectId = ref(''); const campaignId = ref(''); const tagsText = ref(''); const language = ref(''); const contentType = ref(''); const actionError = ref(''); const actionMessage = ref(''); const downloading = ref(false); const saving = ref(false)
 const isClosing = ref(false)
+const gestureX = ref(0)
+const gestureY = ref(0)
+const gestureActive = ref(false)
+const gestureAxis = ref<'x' | 'y' | ''>('')
+let gesturePointerId: number | undefined
+let gestureStartX = 0
+let gestureStartY = 0
 let previousBodyOverflow = ''
 let previousRootOverflow = ''
 let scrollLocked = false
@@ -67,7 +78,11 @@ const unlockPageScroll = () => {
   document.documentElement.style.overflow = previousRootOverflow
   scrollLocked = false
 }
-onMounted(() => { lockPageScroll(); dialog.value?.showModal() })
+onMounted(() => {
+  lockPageScroll()
+  dialog.value?.showModal()
+  if (!props.previewUrl || !window.matchMedia('(max-width: 760px)').matches) void loadFullPreview()
+})
 onBeforeUnmount(() => { clearTimeout(closeTimer); unlockPageScroll() })
 const finishClose = () => {
   unlockPageScroll()
@@ -122,6 +137,50 @@ const handleAssetNavigationKey = (event: KeyboardEvent) => {
   if (event.key === 'ArrowLeft') handleArrowNavigation(event, -1)
   if (event.key === 'ArrowRight') handleArrowNavigation(event, 1)
 }
+const gestureStyle = computed(() => ({
+  transform: `translate3d(${gestureX.value}px, ${Math.max(0, gestureY.value)}px, 0)`,
+  opacity: String(Math.max(.42, 1 - Math.max(0, gestureY.value) / 320))
+}))
+const startGesture = (event: PointerEvent) => {
+  if (event.pointerType !== 'touch' || editing.value) return
+  gesturePointerId = event.pointerId
+  gestureStartX = event.clientX
+  gestureStartY = event.clientY
+  gestureAxis.value = ''
+  gestureActive.value = true
+  ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
+}
+const moveGesture = (event: PointerEvent) => {
+  if (!gestureActive.value || event.pointerId !== gesturePointerId) return
+  const x = event.clientX - gestureStartX
+  const y = event.clientY - gestureStartY
+  if (!gestureAxis.value && Math.hypot(x, y) > 8) gestureAxis.value = Math.abs(x) > Math.abs(y) ? 'x' : 'y'
+  if (gestureAxis.value === 'x') {
+    gestureX.value = x
+    gestureY.value = 0
+  } else if (gestureAxis.value === 'y') {
+    gestureX.value = 0
+    gestureY.value = y
+  }
+}
+const resetGesture = () => {
+  gestureActive.value = false
+  gestureAxis.value = ''
+  gesturePointerId = undefined
+  gestureX.value = 0
+  gestureY.value = 0
+}
+const revealDetails = () => overlayContent.value?.scrollTo({ top: window.innerHeight, behavior: 'smooth' })
+const finishGesture = (event: PointerEvent) => {
+  if (!gestureActive.value || event.pointerId !== gesturePointerId) return
+  const axis = gestureAxis.value
+  const x = gestureX.value
+  const y = gestureY.value
+  resetGesture()
+  if (axis === 'y' && y > 90) return close()
+  if (axis === 'y' && y < -56) return revealDetails()
+  if (axis === 'x' && Math.abs(x) > 56) navigateAsset(x < 0 ? nextAssetId.value : previousAssetId.value)
+}
 </script>
 
 <template>
@@ -135,7 +194,7 @@ class="close-button" type="button" aria-label="Close asset details" autofocus
           @click="close"><svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M5 5l14 14M19 5 5 19" />
           </svg></button></div>
-      <main v-if="status === 'pending'" class="overlay-content overlay-loading" role="status" aria-label="Loading asset details">
+      <main v-if="status === 'pending' && !asset" class="overlay-content overlay-loading" role="status" aria-label="Loading asset details">
         <section class="asset-visual" :class="{ 'skeleton-visual': !resolvedPreviewUrl }" aria-hidden="true"><img v-if="resolvedPreviewUrl" :src="resolvedPreviewUrl" alt=""></section>
         <aside class="skeleton-panel" aria-hidden="true">
           <span class="skeleton-line skeleton-status" />
@@ -149,8 +208,8 @@ class="close-button" type="button" aria-label="Close asset details" autofocus
       </main>
       <div v-else-if="error" class="overlay-state" role="alert"><strong>Unable to load this asset.</strong><button
           @click="refresh()">Try again</button></div>
-      <main v-else-if="asset" class="overlay-content">
-        <section class="asset-visual" :class="{ 'skeleton-visual': !resolvedPreviewUrl }"><img v-if="resolvedPreviewUrl" :src="resolvedPreviewUrl" :alt="`Preview of ${asset.title}`"><button v-if="previousAssetId && !editing" class="asset-navigation previous" type="button" aria-label="Previous asset" @click="navigateAsset(previousAssetId)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7" /></svg></button><button v-if="nextAssetId && !editing" class="asset-navigation next" type="button" aria-label="Next asset" @click="navigateAsset(nextAssetId)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7" /></svg></button></section>
+      <main v-else-if="asset" ref="overlayContent" class="overlay-content">
+        <section class="asset-visual" :class="{ 'skeleton-visual': !resolvedPreviewUrl, 'is-dragging': gestureActive }" :style="gestureStyle" aria-describedby="mobile-gesture-hint" @pointerdown="startGesture" @pointermove="moveGesture" @pointerup="finishGesture" @pointercancel="resetGesture"><span id="mobile-gesture-hint" class="sr-only">Swipe left or right to browse assets. Pull down to close.</span><button class="pull-handle" type="button" aria-label="Close asset details" @pointerdown.stop @click="close" /><img v-if="resolvedPreviewUrl" :src="resolvedPreviewUrl" :alt="`Preview of ${asset.title}`" draggable="false"><button class="details-hint" type="button" aria-label="Show asset details" @pointerdown.stop @click="revealDetails"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg><span>Details</span></button><button v-if="previousAssetId && !editing" class="asset-navigation previous" type="button" aria-label="Previous asset" @click="navigateAsset(previousAssetId)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7" /></svg></button><button v-if="nextAssetId && !editing" class="asset-navigation next" type="button" aria-label="Next asset" @click="navigateAsset(nextAssetId)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7" /></svg></button></section>
         <aside>
           <span class="asset-status">{{ asset.status }}</span>
           <form v-if="editing" class="edit-form" @submit.prevent="saveDetails">
@@ -330,8 +389,16 @@ v-if="role === 'admin'"
   min-height: 0;
   background: var(--bg);
   border-radius: var(--radius);
-  overflow: hidden
+  overflow: hidden;
+  transition-property: transform, opacity;
+  transition-duration: .24s;
+  transition-timing-function: cubic-bezier(.2, 0, 0, 1)
 }
+
+.asset-visual.is-dragging { transition-duration: 0s }
+.pull-handle { display: none }
+.details-hint { display: none }
+.sr-only{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
 
 .asset-visual img {
   position: absolute;
@@ -608,32 +675,151 @@ li span {
 }
 
 @media(max-width:760px) {
+  .asset-dialog {
+    color: var(--color-fg);
+    background: var(--color-bg);
+    grid-template-rows: minmax(0, 1fr)
+  }
+
   .overlay-content {
+    height: 100dvh;
     display: block;
-    padding-bottom: calc(var(--space)*2);
-    overflow-y: auto
+    padding: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scroll-snap-type: y proximity
   }
 
   .asset-visual {
-    height: min(58dvh, 36rem)
+    width: 100%;
+    height: 100dvh;
+    border-radius: 0;
+    background: var(--color-bg);
+    clip-path: none;
+    touch-action: none;
+    user-select: none;
+    scroll-snap-align: start
+  }
+
+  .asset-visual img {
+    padding: max(calc(var(--space)*3), env(safe-area-inset-top)) var(--space) max(calc(var(--space)*3), env(safe-area-inset-bottom));
+    object-fit: contain;
+    pointer-events: none;
+    view-transition-name: asset-preview
   }
 
   .overlay-toolbar {
-    grid-template-columns: 1fr auto
+    position: absolute;
+    z-index: 5;
+    inset: 0 0 auto;
+    min-height: calc(44px + var(--space)*2);
+    display: flex;
+    justify-content: flex-end;
+    padding-top: max(var(--space), env(safe-area-inset-top));
+    color: var(--color-fg);
+    background: transparent;
+    backdrop-filter: none;
+    pointer-events: none
   }
 
-  .overlay-toolbar>span:nth-child(2) {
+  .overlay-toolbar>span {
     display: none
   }
 
-  aside {
-    padding: var(--space) 0 0;
-    overflow: visible
+  .close-button {
+    display: none
   }
 
-  h1 {
-    font-size: var(--font-size-h1-mobile)
+  .pull-handle {
+    position: absolute;
+    z-index: 4;
+    top: max(calc(var(--space) / 2), env(safe-area-inset-top));
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
+    display: block;
+    padding: 0;
+    background: transparent;
+    translate: -50% 0
   }
+
+  .pull-handle::before {
+    content: "";
+    position: absolute;
+    top: 8px;
+    left: 0;
+    width: 44px;
+    height: 5px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-fg) 34%, transparent)
+  }
+
+  .details-hint {
+    position: absolute;
+    z-index: 4;
+    bottom: max(var(--space), env(safe-area-inset-bottom));
+    left: 50%;
+    min-height: 44px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 4px 16px;
+    color: var(--color-muted);
+    background: transparent;
+    translate: -50% 0
+  }
+
+  .details-hint svg {
+    width: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round
+  }
+
+  .details-hint span { font-size: 12px }
+
+  .asset-navigation { display: none }
+
+  .overlay-content > aside,
+  .skeleton-panel {
+    min-height: 100dvh;
+    display: block;
+    box-sizing: border-box;
+    padding: calc(var(--space)*2) var(--space) max(calc(var(--space)*3), env(safe-area-inset-bottom));
+    color: var(--color-fg);
+    background: var(--color-bg);
+    overflow: visible;
+    scroll-snap-align: start
+  }
+
+  .skeleton-panel { display: grid }
+
+  h1 { font-size: var(--font-size-h1-mobile) }
+}
+
+:global(::view-transition-group(asset-preview)) {
+  z-index: 10000;
+  animation-duration: .32s;
+  animation-timing-function: cubic-bezier(.2, 0, 0, 1)
+}
+
+:global(::view-transition-old(root)),
+:global(::view-transition-new(root)) {
+  animation: none;
+  mix-blend-mode: normal
+}
+
+:global(::view-transition-old(asset-preview)),
+:global(::view-transition-new(asset-preview)) {
+  animation-duration: .32s;
+  animation-timing-function: cubic-bezier(.2, 0, 0, 1);
+  mix-blend-mode: normal
 }
 
 @media(prefers-reduced-motion:reduce) {
@@ -642,5 +828,7 @@ li span {
   .asset-navigation {
     transition-duration: .01ms
   }
+
+  .asset-visual { transition-duration: .01ms }
 }
 </style>

@@ -136,7 +136,10 @@ const isAdmin = computed(() => session.value?.data?.user?.role === 'admin')
 const canManageProjects = computed(() => ['editor', 'admin'].includes(session.value?.data?.user?.role ?? ''))
 const canShare = computed(() => ['contributor', 'editor', 'admin'].includes(session.value?.data?.user?.role ?? ''))
 const selectedAssetId = computed(() => typeof route.query.asset === 'string' ? route.query.asset : '')
-const selectedAssetPreviewUrl = computed(() => displayedAssets.value.find(asset => asset.id === selectedAssetId.value)?.previewUrl ?? '')
+const selectedAssetPreviewUrl = computed(() => {
+  const selected = displayedAssets.value.find(asset => asset.id === selectedAssetId.value)
+  return selected?.preview2xUrl ?? selected?.previewUrl ?? ''
+})
 const closeAsset = () => router.replace({ path: '/library', query: selectedBoardId.value ? { board: selectedBoardId.value } : {} })
 const navigateAsset = (id: string) => router.replace({ path: '/library', query: { ...route.query, asset: id } })
 const handleAssetDeleted = (id: string) => {
