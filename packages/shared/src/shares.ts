@@ -2,8 +2,14 @@ import { z } from 'zod'
 
 export const boardRoleSchema = z.enum(['owner', 'editor', 'contributor', 'viewer'])
 export const boardMemberRoleSchema = boardRoleSchema.exclude(['owner'])
-export const boardPurposeSchema = z.enum(['showcase', 'review'])
+export const boardPurposeSchema = z.enum(['showcase', 'review', 'portfolio', 'case'])
 export const boardLayoutSchema = z.enum(['masonry', 'column', 'presentation', 'grid'])
+export const portfolioContactLinkSchema = z.object({
+  label: z.string().trim().min(1).max(80),
+  url: z.string().trim().max(500).refine(value => {
+    try { return ['http:', 'https:', 'mailto:', 'tel:'].includes(new URL(value).protocol) } catch { return false }
+  }, 'Enter a valid web, email, or phone link.')
+})
 
 export const publicCollectionFiltersSchema = z.object({
   search: z.string().trim().max(200).default(''),
@@ -25,18 +31,43 @@ export const createPublicCollectionSchema = z.object({
   filters: publicCollectionFiltersSchema,
   expiresAt: z.iso.datetime({ offset: true }).nullable().default(null),
   reviewMonth: z.iso.date().nullable().default(null),
-  submissionDeadline: z.iso.datetime({ offset: true }).nullable().default(null)
+  submissionDeadline: z.iso.datetime({ offset: true }).nullable().default(null),
+  portfolioKind: z.enum(['main', 'client']).nullable().default(null),
+  portfolioClient: z.string().trim().max(120).nullable().default(null),
+  introduction: z.string().trim().max(2000).nullable().default(null),
+  contactHeading: z.string().trim().max(160).nullable().default(null),
+  contactLinks: z.array(portfolioContactLinkSchema).default([])
 }).refine(value => !value.expiresAt || value.expiresAt > new Date().toISOString(), {
   message: 'Choose an expiry date in the future.',
   path: ['expiresAt']
 }).refine(value => value.purpose !== 'review' || (value.mode === 'static' && value.reviewMonth), {
   message: 'Monthly review boards require a review month and manual collection.',
   path: ['reviewMonth']
+}).refine(value => value.purpose !== 'portfolio' || value.mode === 'static', {
+  message: 'Portfolio projects use manual ordering.',
+  path: ['mode']
+}).refine(value => value.purpose !== 'portfolio' || value.portfolioKind, {
+  message: 'Choose a portfolio edition type.', path: ['portfolioKind']
+}).refine(value => value.portfolioKind !== 'client' || value.portfolioClient, {
+  message: 'Enter the client or recipient name.', path: ['portfolioClient']
+}).refine(value => value.purpose !== 'case' || value.mode === 'static', {
+  message: 'Portfolio cases use manual ordering.', path: ['mode']
 })
 
 export const updatePublicCollectionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('rename'), title: z.string().trim().min(1).max(120) }),
   z.object({ action: z.literal('settings'), filters: publicCollectionFiltersSchema }),
+  z.object({
+    action: z.literal('portfolio-settings'),
+    portfolioKind: z.enum(['main', 'client']),
+    portfolioClient: z.string().trim().max(120).nullable(),
+    introduction: z.string().trim().max(2000).nullable(),
+    contactHeading: z.string().trim().max(160).nullable(),
+    contactLinks: z.array(portfolioContactLinkSchema)
+  }).refine(value => value.portfolioKind !== 'client' || value.portfolioClient, {
+    message: 'Enter the client or recipient name.',
+    path: ['portfolioClient']
+  }),
   z.object({ action: z.literal('layout'), layout: boardLayoutSchema }),
   z.object({ action: z.literal('refresh') }),
   z.object({ action: z.literal('publish') }),

@@ -29,6 +29,19 @@ export default defineEventHandler(async (event) => {
     if (settingsError) throw databaseError('update board settings', settingsError)
     return { data: { collection: data } }
   }
+  if (parsed.data.action === 'portfolio-settings') {
+    if (collection.purpose !== 'portfolio') throw appError(409, 'NOT_PORTFOLIO', 'This board is not a portfolio edition.')
+    const { data, error: settingsError } = await db.from('public_collections').update({
+      portfolio_kind: parsed.data.portfolioKind,
+      portfolio_client: parsed.data.portfolioKind === 'client' ? parsed.data.portfolioClient : null,
+      introduction: parsed.data.introduction,
+      contact_heading: parsed.data.contactHeading,
+      contact_links: parsed.data.contactLinks
+    }).eq('id', id).eq('organization_id', session.user.organization_id)
+      .select('id,portfolio_kind,portfolio_client,introduction,contact_heading,contact_links,updated_at').single()
+    if (settingsError) throw databaseError('update portfolio settings', settingsError)
+    return { data: { collection: data } }
+  }
   if (parsed.data.action === 'layout') {
     const { data, error: layoutError } = await db.from('public_collections').update({ layout: parsed.data.layout })
       .eq('id', id).eq('organization_id', session.user.organization_id).select('id,layout,updated_at').single()

@@ -59,7 +59,7 @@ export const replaceCollectionSnapshot = async (collectionId: string, organizati
 export const boardPreviewForCollection = async (collection: {
   id: string
   organization_id: string
-  purpose: 'showcase' | 'review'
+  purpose: 'showcase' | 'review' | 'portfolio' | 'case'
   mode: 'dynamic' | 'static'
   filters: PublicCollectionFilters
 }) => {

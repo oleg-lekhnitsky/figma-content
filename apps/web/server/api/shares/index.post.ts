@@ -18,13 +18,18 @@ export default defineEventHandler(async (event) => {
     purpose: input.purpose,
     review_month: input.reviewMonth,
     submission_deadline: input.submissionDeadline,
+    portfolio_kind: input.purpose === 'portfolio' ? input.portfolioKind : null,
+    portfolio_client: input.purpose === 'portfolio' ? input.portfolioClient : null,
+    introduction: input.purpose === 'portfolio' ? input.introduction : null,
+    contact_heading: input.purpose === 'portfolio' ? input.contactHeading : null,
+    contact_links: input.purpose === 'portfolio' ? input.contactLinks : [],
     mode: input.mode,
     layout: input.layout,
-    content_strategy: input.purpose === 'review' ? 'manual' : input.mode === 'dynamic' ? 'dynamic' : 'snapshot',
-    publication_enabled: input.purpose !== 'review',
+    content_strategy: ['review', 'portfolio', 'case'].includes(input.purpose) ? 'manual' : input.mode === 'dynamic' ? 'dynamic' : 'snapshot',
+    publication_enabled: input.purpose === 'showcase',
     filters,
     expires_at: input.expiresAt
-  }).select('id,slug,title,purpose,review_month,submission_deadline,mode,filters,expires_at,publication_enabled,content_strategy,layout,created_at,updated_at').single()
+  }).select('id,slug,title,purpose,portfolio_kind,portfolio_client,introduction,contact_heading,contact_links,review_month,submission_deadline,mode,filters,expires_at,publication_enabled,content_strategy,layout,created_at,updated_at').single()
   if (error) throw databaseError('create public collection', error)
   const { error: ownerError } = await db.from('public_collection_members').insert({
     collection_id: data.id, organization_id: session.user.organization_id,
@@ -35,6 +40,6 @@ export default defineEventHandler(async (event) => {
     throw databaseError('create board owner', ownerError)
   }
   let itemCount: number | null = null
-  if (input.mode === 'static' && input.purpose !== 'review') itemCount = await replaceCollectionSnapshot(data.id, session.user.organization_id, filters, session.user.id)
+  if (input.mode === 'static' && !['review', 'portfolio', 'case'].includes(input.purpose)) itemCount = await replaceCollectionSnapshot(data.id, session.user.organization_id, filters, session.user.id)
   return { data: { collection: { ...data, role: 'owner', itemCount } } }
 })

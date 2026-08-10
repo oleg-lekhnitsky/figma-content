@@ -75,6 +75,16 @@ describe('shared authorization contracts', () => {
     expect(createPublicCollectionSchema.safeParse({ ...base, mode: 'dynamic' }).success).toBe(false)
   })
 
+  it('requires portfolio projects to use a static collection', () => {
+    const base = {
+      title: 'Selected work', purpose: 'portfolio', portfolioKind: 'main', mode: 'static', expiresAt: null,
+      reviewMonth: null, submissionDeadline: null,
+      filters: { search: '', projectId: null, tagId: null, uploadedBy: null, dateFrom: null, dateTo: null }
+    }
+    expect(createPublicCollectionSchema.safeParse(base).success).toBe(true)
+    expect(createPublicCollectionSchema.safeParse({ ...base, mode: 'dynamic' }).success).toBe(false)
+  })
+
   it('rejects public collection date ranges in reverse order', () => {
     const result = createPublicCollectionSchema.safeParse({
       title: 'Invalid range', mode: 'dynamic', expiresAt: null,

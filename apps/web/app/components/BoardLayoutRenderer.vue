@@ -18,11 +18,13 @@ withDefaults(defineProps<{
   headingTag?: 'h2' | 'h3' | 'h4'
   selectable?: boolean
   selectedIds?: string[]
+  rowFlow?: boolean
 }>(), {
   label: 'Board assets',
   headingTag: 'h3',
   selectable: false,
-  selectedIds: () => []
+  selectedIds: () => [],
+  rowFlow: false
 })
 
 defineEmits<{ toggleSelection: [asset: T] }>()
@@ -44,7 +46,7 @@ defineEmits<{ toggleSelection: [asset: T] }>()
   </AssetGrid>
   <AssetMasonry
     v-else :assets="assets" :layout="layout" :label="label" :heading-tag="headingTag" :selectable="selectable"
-    :selected-ids="selectedIds" @toggle-selection="$emit('toggleSelection', $event)">
+    :selected-ids="selectedIds" :row-flow="rowFlow" @toggle-selection="$emit('toggleSelection', $event)">
     <template #details="{ asset }"><slot name="details" :asset="asset" /></template>
     <template #previewActions="{ asset }"><slot name="previewActions" :asset="asset" /></template>
     <template #actions="{ asset }"><slot name="actions" :asset="asset" /></template>

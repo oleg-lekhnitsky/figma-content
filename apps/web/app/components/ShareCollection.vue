@@ -2,11 +2,11 @@
 import type { BoardLayout } from '@content-library/shared'
 
 interface CurrentFilters { search?: string; projectId?: string; projectName?: string; dateFrom?: string; dateTo?: string; dateLabel?: string; status?: string }
-const props = defineProps<{ currentFilters?: CurrentFilters }>()
+const props = withDefaults(defineProps<{ currentFilters?: CurrentFilters; portfolioOnly?: boolean }>(), { portfolioOnly: false })
 
 interface Option { id: string; name: string }
 type BoardRole = 'owner' | 'editor' | 'contributor' | 'viewer' | 'admin'
-interface Collection { id: string; slug: string; title: string; purpose: 'showcase' | 'review'; review_month: string | null; submission_deadline: string | null; mode: 'dynamic' | 'static'; layout: BoardLayout; role: BoardRole; expires_at: string | null; publication_enabled: boolean; content_strategy: 'dynamic' | 'snapshot' | 'manual'; created_at: string; updated_at: string; itemCount: number; previewAssets: Array<{ id: string; title: string; previewUrl: string; width: number; height: number }> }
+interface Collection { id: string; slug: string; title: string; purpose: 'showcase' | 'review' | 'portfolio' | 'case'; portfolio_kind?:'main'|'client'|null; portfolio_client?:string|null; introduction?:string|null; review_month: string | null; submission_deadline: string | null; mode: 'dynamic' | 'static'; layout: BoardLayout; role: BoardRole; expires_at: string | null; publication_enabled: boolean; content_strategy: 'dynamic' | 'snapshot' | 'manual'; created_at: string; updated_at: string; itemCount: number; previewAssets: Array<{ id: string; title: string; previewUrl: string; width: number; height: number }> }
 interface ListResponse { data: { collections: Collection[] } }
 interface OptionsResponse<T extends string> { data: Record<T, Option[]> }
 interface CreateResponse { data: { collection: Omit<Collection, 'previewAssets'> & { itemCount: number | null } } }
@@ -16,7 +16,10 @@ const titleInput = ref<HTMLInputElement | null>(null)
 const createButton = ref<HTMLButtonElement | null>(null)
 const view = ref<'list' | 'create'>('list')
 const title = ref('')
-const purpose = ref<'showcase' | 'review'>('showcase')
+const purpose = ref<'showcase' | 'review' | 'portfolio'>('showcase')
+const portfolioKind = ref<'main'|'client'>('client')
+const portfolioClient = ref('')
+const introduction = ref('')
 const mode = ref<'dynamic' | 'static'>('dynamic')
 const range = ref<'all' | 'day' | 'month' | 'custom'>('month')
 const dateFrom = ref('')
@@ -98,7 +101,7 @@ const loadCollections = async () => {
     $fetch<OptionsResponse<'projects'>>('/api/projects'),
     $fetch<OptionsResponse<'tags'>>('/api/tags')
   ])
-  collections.value = shareResponse.data.collections
+  collections.value = shareResponse.data.collections.filter(collection => collection.purpose !== 'case')
   projects.value = projectResponse.data.projects
   tags.value = tagResponse.data.tags
 }
@@ -107,12 +110,13 @@ const open = async () => {
   opening.value = true
   message.value = ''
   errorMessage.value = ''
-  view.value = 'list'
+  view.value = props.portfolioOnly ? 'create' : 'list'
   try { await loadCollections() } catch { errorMessage.value = 'Unable to load sharing settings. Check your connection and try again.' }
   lockPageScroll()
   dialog.value?.showModal()
   await nextTick()
-  createButton.value?.focus()
+  if (props.portfolioOnly) await showCreate(false)
+  else createButton.value?.focus()
   opening.value = false
 }
 const close = () => { dialog.value?.close(); unlockPageScroll() }
@@ -120,7 +124,10 @@ const showCreate = async (fromCurrentView = false) => {
   message.value = ''
   errorMessage.value = ''
   usingCurrentFilters.value = fromCurrentView
-  purpose.value = 'showcase'
+  purpose.value = props.portfolioOnly ? 'portfolio' : 'showcase'
+  portfolioKind.value = 'client'
+  portfolioClient.value = ''
+  introduction.value = ''
   mode.value = 'dynamic'
   searchFilter.value = fromCurrentView ? props.currentFilters?.search ?? '' : ''
   projectId.value = fromCurrentView ? props.currentFilters?.projectId ?? '' : ''
@@ -155,26 +162,32 @@ const createCollection = async () => {
   errorMessage.value = ''
   try {
     const review = purpose.value === 'review'
+    const portfolio = purpose.value === 'portfolio'
     const reviewStart = review ? new Date(`${reviewMonth.value}-01T00:00:00.000`) : null
     const reviewEnd = reviewStart ? new Date(reviewStart.getFullYear(), reviewStart.getMonth() + 1, 0, 23, 59, 59, 999) : null
     const response = await $fetch<CreateResponse>('/api/shares', {
       method: 'POST', body: {
-        title: title.value || (review ? reviewTitle() : defaultTitle()),
+        title: title.value || (review ? reviewTitle() : portfolio ? 'Portfolio project' : defaultTitle()),
         purpose: purpose.value,
-        mode: review ? 'static' : mode.value,
+        mode: review || portfolio ? 'static' : mode.value,
         filters: review
           ? { search: '', projectId: null, tagId: null, uploadedBy: null, dateFrom: reviewStart?.toISOString(), dateTo: reviewEnd?.toISOString() }
           : { search: searchFilter.value, projectId: projectId.value || null, tagId: tagId.value || null, ...datesForRange() },
-        expiresAt: review ? null : isoAt(expiry.value, true),
+        expiresAt: review || portfolio ? null : isoAt(expiry.value, true),
         reviewMonth: review ? `${reviewMonth.value}-01` : null,
-        submissionDeadline: review ? isoAt(submissionDeadline.value, true) : null
+        submissionDeadline: review ? isoAt(submissionDeadline.value, true) : null,
+        portfolioKind: portfolio ? portfolioKind.value : null,
+        portfolioClient: portfolio && portfolioKind.value === 'client' ? portfolioClient.value : null,
+        introduction: portfolio ? introduction.value || null : null
       }
     })
     const createdCollection: Collection = { ...response.data.collection, itemCount: response.data.collection.itemCount ?? 0, previewAssets: [] }
     collections.value.unshift(createdCollection)
-    if (createdCollection.purpose !== 'review') await copyLink(createdCollection)
+    if (createdCollection.purpose === 'showcase') await copyLink(createdCollection)
     message.value = response.data.collection.purpose === 'review'
       ? 'Monthly review created. Add contributors so they can submit their work.'
+      : response.data.collection.purpose === 'portfolio'
+      ? 'Portfolio project created. Arrange the work, choose a layout, then publish it.'
       : response.data.collection.mode === 'static'
       ? `Link copied. The snapshot contains ${response.data.collection.itemCount ?? 0} approved items.`
       : 'Link copied. New approved items matching these filters will appear automatically.'
@@ -223,14 +236,14 @@ const closeActionMenu = (event: Event) => {
 </script>
 
 <template>
-  <button type="button" class="button-plain share-trigger" :disabled="opening" @click="open">Boards</button>
+  <button type="button" :class="[props.portfolioOnly ? 'button' : 'button-plain', 'share-trigger']" :disabled="opening" @click="open">{{ props.portfolioOnly ? 'Create edition' : 'Boards' }}</button>
   <dialog
 ref="dialog" class="share-dialog" aria-labelledby="share-title" @click.self="close" @cancel.prevent="close"
     @close="unlockPageScroll">
     <div class="share-panel">
       <header>
         <div class="dialog-heading"><button
-v-if="view === 'create'" type="button" class="button-plain back-button" @click="showList">Back to boards</button><h2 id="share-title" class="display-title">{{ view === 'list' ? 'My boards and shared with me' : 'Create board' }}</h2></div><button
+v-if="view === 'create' && !props.portfolioOnly" type="button" class="button-plain back-button" @click="showList">Back to boards</button><h2 id="share-title" class="display-title">{{ props.portfolioOnly ? 'Create portfolio edition' : view === 'list' ? 'My boards and shared with me' : 'Create board' }}</h2></div><button
 type="button"
           class="button-secondary button-icon close-button" aria-label="Close board settings" @click="close"><svg
             aria-hidden="true" viewBox="0 0 24 24">
@@ -239,7 +252,7 @@ type="button"
       </header>
       <Transition name="panel-view" mode="out-in" @after-enter="focusCurrentView">
         <section v-if="view === 'list'" key="list" class="boards-view">
-          <div class="boards-intro"><p>Manage public showcases and private review boards.</p><div class="boards-intro-actions"><button v-if="hasCurrentFilters" ref="createButton" type="button" @click="showCreate(true)">Create from this view</button><button v-else ref="createButton" type="button" @click="showCreate(false)">Create board</button><button v-if="hasCurrentFilters" type="button" class="button-secondary" @click="showCreate(false)">Create board</button></div></div>
+          <div class="boards-intro"><p>Manage showcases, portfolio projects, and private review boards.</p><div class="boards-intro-actions"><button v-if="hasCurrentFilters" ref="createButton" type="button" @click="showCreate(true)">Create from this view</button><button v-else ref="createButton" type="button" @click="showCreate(false)">Create board</button><button v-if="hasCurrentFilters" type="button" class="button-secondary" @click="showCreate(false)">Create board</button></div></div>
           <p class="feedback" role="status" aria-live="polite">{{ message }}</p>
           <p v-if="errorMessage" class="feedback error" role="alert">{{ errorMessage }}</p>
           <ul v-if="collections.length" class="board-grid">
@@ -248,23 +261,25 @@ type="button"
               <div class="board-info"><div><label v-if="['owner', 'editor', 'admin'].includes(collection.role)" class="board-title"><span class="sr-only">Board name</span><textarea
 :value="collection.title" rows="1" maxlength="120" :aria-describedby="`board-feedback-${collection.id}`"
                     :aria-invalid="boardFeedback[collection.id]?.error || undefined" @change="renameBoard(collection, $event)" /><span
-:id="`board-feedback-${collection.id}`" class="field-message" :class="{ error: boardFeedback[collection.id]?.error }" role="status" aria-live="polite">{{ boardFeedback[collection.id]?.text }}</span></label><template v-else><strong>{{ collection.title }}</strong></template><span class="board-meta">{{ collection.role }} · {{ collection.purpose === 'review' ? 'monthly review' : collection.mode }} · {{ collection.publication_enabled ? 'public' : 'private' }}<template v-if="collection.expires_at"> · expires {{ new Date(collection.expires_at).toLocaleDateString() }}</template></span></div>
+:id="`board-feedback-${collection.id}`" class="field-message" :class="{ error: boardFeedback[collection.id]?.error }" role="status" aria-live="polite">{{ boardFeedback[collection.id]?.text }}</span></label><template v-else><strong>{{ collection.title }}</strong></template><span class="board-meta">{{ collection.role }} · {{ collection.purpose === 'review' ? 'monthly review' : collection.purpose === 'portfolio' ? 'portfolio' : collection.mode }} · {{ collection.publication_enabled ? 'public' : 'private' }}<template v-if="collection.expires_at"> · expires {{ new Date(collection.expires_at).toLocaleDateString() }}</template></span></div>
                 <details class="action-menu board-menu" @keydown.esc.prevent="closeActionMenu"><summary aria-label="More board actions">•••</summary><div><a v-if="collection.publication_enabled" :href="collectionUrl(collection.slug)" target="_blank" rel="noopener noreferrer">View public page</a><button v-if="collection.publication_enabled" type="button" @click="copyLink(collection); closeActionMenu($event)">Copy public link</button><button v-if="['owner', 'editor', 'admin'].includes(collection.role)" type="button" :disabled="busy" @click="collection.publication_enabled ? revoke(collection) : publish(collection); closeActionMenu($event)">{{ collection.publication_enabled ? 'Disable public link' :'Enable public link' }}</button></div></details></div>
             </li>
           </ul>
-          <div v-else-if="!errorMessage" class="empty-boards"><strong>No boards yet</strong><span>Create a showcase for sharing or a monthly review for collecting work.</span></div>
+          <div v-else-if="!errorMessage" class="empty-boards"><strong>No boards yet</strong><span>Create a showcase, portfolio project, or monthly review.</span></div>
         </section>
         <form v-else key="create" @submit.prevent="createCollection">
-          <fieldset><legend>Board type</legend><label class="choice"><input v-model="purpose" type="radio" value="showcase" name="purpose"><span><strong>Showcase</strong><small>Curate work for a public link or portfolio.</small></span></label><label class="choice"><input v-model="purpose" type="radio" value="review" name="purpose"><span><strong>Monthly review</strong><small>Collect work privately from invited contributors.</small></span></label></fieldset>
+          <fieldset v-if="!props.portfolioOnly"><legend>Board type</legend><label class="choice"><input v-model="purpose" type="radio" value="showcase" name="purpose"><span><strong>Showcase</strong><small>Share an automatically updating or fixed collection.</small></span></label><label class="choice"><input v-model="purpose" type="radio" value="portfolio" name="purpose"><span><strong>Portfolio project</strong><small>Arrange selected work, choose a layout, then publish.</small></span></label><label class="choice"><input v-model="purpose" type="radio" value="review" name="purpose"><span><strong>Monthly review</strong><small>Collect work privately from invited contributors.</small></span></label></fieldset>
           <label>Board name<input ref="titleInput" v-model="title" name="title" required maxlength="120"></label>
+          <fieldset v-if="purpose === 'portfolio'"><legend>Edition</legend><label class="choice"><input v-model="portfolioKind" type="radio" value="main" name="portfolio-kind"><span><strong>Main portfolio</strong><small>Your canonical selection of work.</small></span></label><label class="choice"><input v-model="portfolioKind" type="radio" value="client" name="portfolio-kind"><span><strong>Client edition</strong><small>A tailored selection for one recipient.</small></span></label></fieldset>
+          <div v-if="purpose === 'portfolio'" class="form-grid"><label v-if="portfolioKind === 'client'">Client or recipient<input v-model="portfolioClient" name="portfolio-client" required maxlength="120" placeholder="Acme Studio"></label><label>Introduction<textarea v-model="introduction" name="introduction" rows="3" maxlength="2000" placeholder="A short note about this selection" /></label></div>
           <div v-if="usingCurrentFilters" class="filter-context"><strong>Starting with current filters</strong><span>{{ currentFilterLabels.join(' · ') || 'All dates' }}</span><small v-if="props.currentFilters?.status==='draft'">Draft status is not included because showcase boards contain approved assets only.</small><small v-else>Showcase boards contain approved assets only.</small></div>
           <fieldset v-if="purpose === 'showcase'"><legend>Updates</legend><label class="choice"><input v-model="mode" type="radio" value="dynamic" name="mode"><span><strong>Dynamic</strong><small>New approved items matching the filters appear automatically.</small></span></label><label class="choice"><input v-model="mode" type="radio" value="static" name="mode"><span><strong>Static</strong><small>Freeze the current results and update the snapshot manually.</small></span></label></fieldset>
-          <div v-if="purpose === 'showcase'" class="form-grid"><label>Search<input v-model="searchFilter" type="search" name="search" maxlength="200"></label><label>Date range<select v-model="range" name="range"><option value="month">This month</option><option value="day">Today</option><option value="all">Any date</option><option value="custom">Custom dates</option></select></label><label>Project<select v-model="projectId" name="project"><option value="">Any project</option><option v-for="project in projects" :key="project.id" :value="project.id">{{ project.name }}</option></select></label><label>Tag<select v-model="tagId" name="tag"><option value="">Any tag</option><option v-for="tag in tags" :key="tag.id" :value="tag.id">{{ tag.name }}</option></select></label><label>Link expiry <span>(optional)</span><input v-model="expiry" type="date" name="expiry"></label></div>
+          <div v-if="purpose !== 'review'" class="form-grid"><label>Search<input v-model="searchFilter" type="search" name="search" maxlength="200"></label><label>Date range<select v-model="range" name="range"><option value="month">This month</option><option value="day">Today</option><option value="all">Any date</option><option value="custom">Custom dates</option></select></label><label>Project<select v-model="projectId" name="project"><option value="">Any project</option><option v-for="project in projects" :key="project.id" :value="project.id">{{ project.name }}</option></select></label><label>Tag<select v-model="tagId" name="tag"><option value="">Any tag</option><option v-for="tag in tags" :key="tag.id" :value="tag.id">{{ tag.name }}</option></select></label><label v-if="purpose === 'showcase'">Link expiry <span>(optional)</span><input v-model="expiry" type="date" name="expiry"></label></div>
           <div v-else class="form-grid"><label>Review month<input v-model="reviewMonth" type="month" required name="review-month"></label><label>Submission deadline <span>(optional)</span><input v-model="submissionDeadline" type="date" name="submission-deadline"></label></div>
-          <div v-if="purpose === 'showcase' && range === 'custom'" class="form-grid custom-dates"><label>Start date<input v-model="dateFrom" type="date" name="dateFrom" required></label><label>End date<input v-model="dateTo" type="date" name="dateTo" required></label></div>
-          <p class="approval-note">{{ purpose === 'review' ? 'Review boards start private. Contributors can add their own work.' : 'Only approved items can appear on a public link.' }}</p>
+          <div v-if="purpose !== 'review' && range === 'custom'" class="form-grid custom-dates"><label>Start date<input v-model="dateFrom" type="date" name="dateFrom" required></label><label>End date<input v-model="dateTo" type="date" name="dateTo" required></label></div>
+          <p class="approval-note">{{ purpose === 'review' ? 'Review boards start private. Contributors can add their own work.' : purpose === 'portfolio' ? 'Portfolio projects start private. Publish when the order and layout are ready.' : 'Only approved items can appear on a public link.' }}</p>
           <p v-if="errorMessage" class="feedback error" role="alert">{{ errorMessage }}</p>
-          <div class="form-actions"><button type="submit" :disabled="busy">{{ busy ? 'Creating board…' : purpose === 'review' ? 'Create monthly review' : 'Create board' }}</button><button type="button" class="button-secondary" @click="showList">Cancel</button></div>
+          <div class="form-actions"><button type="submit" :disabled="busy">{{ busy ? 'Creating board…' : purpose === 'review' ? 'Create monthly review' : purpose === 'portfolio' ? 'Create portfolio project' : 'Create board' }}</button><button type="button" class="button-secondary" @click="showList">Cancel</button></div>
         </form>
       </Transition>
     </div>
@@ -347,10 +362,18 @@ legend {
 }
 
 input,
-select {
+select,
+textarea {
   width: 100%;
   min-height: var(--control-height);
   padding: 0 8px;
+  color: var(--color-fg);
+}
+
+textarea { padding-block: calc(var(--space) / 3); resize: vertical; }
+
+input::placeholder {
+  color: var(--color-muted);
 }
 
 fieldset {
