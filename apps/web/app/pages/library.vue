@@ -5,7 +5,7 @@ const router = useRouter()
 
 interface AssetCard {
   id: string; title: string; description: string|null; previewUrl: string; width: number; height: number; status: string; figma_url: string
-  created_at: string; projects: { name: string } | null
+  created_at: string; updated_at: string; projects: { name: string } | null
   asset_tags: Array<{ tags: { id: string; name: string; slug: string } | null }>
   allowed_users: { figma_handle: string | null; avatar_url: string | null } | null
 }
@@ -23,7 +23,6 @@ const customDateTo = ref('')
 const sort = ref('newest')
 const filtersExpanded = ref(false)
 const page = ref(1)
-const viewMode = ref<'edit'|'preview'>('edit')
 const dateFrom = computed(() => {
   if (dateRange.value === 'custom') return customDateFrom.value ? new Date(`${customDateFrom.value}T00:00:00`).toISOString() : ''
   const date = new Date()
@@ -39,16 +38,33 @@ const query = computed(() => ({ search: search.value, ...(status.value ? { statu
 const { data, status: loadStatus, error, refresh } = await useFetch<AssetList>('/api/assets', { query, watch: [query] })
 const { data: projectData } = await useFetch<{data:{projects:Project[]}}>('/api/projects')
 const projects = computed(() => projectData.value?.data.projects ?? [])
+const selectedProjectName = computed(() => projects.value.find(project => project.id === projectId.value)?.name)
+const dateRangeLabel = computed(() => dateRange.value === 'today' ? 'Today' : dateRange.value === 'week' ? 'This week' : dateRange.value === 'two-weeks' ? 'Last two weeks' : dateRange.value === 'month' ? 'This month' : dateRange.value === 'custom' ? 'Custom dates' : '')
+const currentBoardFilters = computed(() => ({
+  search: search.value.trim(),
+  projectId: projectId.value,
+  projectName: selectedProjectName.value,
+  dateFrom: dateFrom.value,
+  dateTo: dateTo.value || (dateRange.value !== 'all' ? new Date().toISOString() : ''),
+  dateLabel: dateRangeLabel.value,
+  status: status.value
+}))
 const hasFilters = computed(() => Boolean(search.value || status.value || projectId.value || dateRange.value !== 'all'))
 const activeFilterCount = computed(() => [status.value, projectId.value, dateRange.value !== 'all'].filter(Boolean).length)
 const assets = ref<AssetCard[]>([])
 const cardsHidden = ref(false)
 let cardSwapTimer: ReturnType<typeof setTimeout> | undefined
 let liveRefreshTimer: ReturnType<typeof setTimeout> | undefined
+let assetPollTimer: ReturnType<typeof setInterval> | undefined
 let assetEvents: EventSource | undefined
 watch(() => data.value?.data.assets, (next) => {
   const incoming = next ?? []
-  if (!assets.value.length) { assets.value = incoming; return }
+  if (!assets.value.length) { assets.value = incoming; cardsHidden.value = false; return }
+  if (incoming.map(asset => `${asset.id}:${asset.updated_at}`).join('|') === assets.value.map(asset => `${asset.id}:${asset.updated_at}`).join('|')) {
+    clearTimeout(cardSwapTimer)
+    cardsHidden.value = false
+    return
+  }
   clearTimeout(cardSwapTimer)
   cardSwapTimer = setTimeout(async () => {
     assets.value = incoming
@@ -69,6 +85,15 @@ const canManageProjects = computed(() => ['editor', 'admin'].includes(session.va
 const canShare = computed(() => ['contributor', 'editor', 'admin'].includes(session.value?.data?.user?.role ?? ''))
 const selectedAssetId = computed(() => typeof route.query.asset === 'string' ? route.query.asset : '')
 const closeAsset = () => router.replace({ path: '/library' })
+const handleAssetDeleted = (id: string) => {
+  assets.value = assets.value.filter(asset => asset.id !== id)
+  if (data.value) {
+    data.value.data.assets = data.value.data.assets.filter(asset => asset.id !== id)
+    data.value.data.total = Math.max(0, data.value.data.total - 1)
+  }
+  if (page.value > 1 && assets.value.length === 0) page.value--
+  void refresh()
+}
 const toolbarVisible = ref(true)
 let lastScrollY = 0
 let scrollFrame = 0
@@ -82,6 +107,9 @@ const updateToolbar = () => {
     lastScrollY = current
   })
 }
+const refreshWhenVisible = () => {
+  if (document.visibilityState === 'visible') void refresh()
+}
 watch([search, status, projectId, dateRange, customDateFrom, customDateTo, sort], () => { page.value = 1; if (assets.value.length) cardsHidden.value = true })
 watch(page, () => { if (assets.value.length) cardsHidden.value = true })
 onMounted(() => {
@@ -92,13 +120,20 @@ onMounted(() => {
     clearTimeout(liveRefreshTimer)
     liveRefreshTimer = setTimeout(() => { void refresh() }, 400)
   })
+  assetEvents.addEventListener('ready', () => { void refresh() })
+  assetPollTimer = setInterval(refreshWhenVisible, 15_000)
+  window.addEventListener('focus', refreshWhenVisible)
+  document.addEventListener('visibilitychange', refreshWhenVisible)
 })
 onBeforeUnmount(() => {
   clearTimeout(cardSwapTimer)
   clearTimeout(liveRefreshTimer)
+  clearInterval(assetPollTimer)
   assetEvents?.close()
   cancelAnimationFrame(scrollFrame)
   window.removeEventListener('scroll', updateToolbar)
+  window.removeEventListener('focus', refreshWhenVisible)
+  document.removeEventListener('visibilitychange', refreshWhenVisible)
 })
 </script>
 
@@ -109,7 +144,7 @@ onBeforeUnmount(() => {
         <NuxtLink class="brand" to="/library">Content Library</NuxtLink>
         <form class="toolbar-search" role="search" @submit.prevent><label><span class="sr-only">Search assets</span><input v-model="search" type="search" name="search" placeholder="Search"></label></form>
         <p class="count sr-only" role="status" aria-live="polite">{{ resultMessage }}</p>
-        <nav aria-label="Library controls"><div class="view-switcher" role="group" aria-label="Library view mode"><button type="button" :aria-pressed="viewMode==='edit'" @click="viewMode='edit'">Edit</button><button type="button" :aria-pressed="viewMode==='preview'" @click="viewMode='preview'">Preview</button></div><ShareCollection v-if="viewMode==='edit' && canShare" :current-search="search" /><NuxtLink v-if="viewMode==='edit' && isAdmin" to="/admin/users">Admin</NuxtLink><NuxtLink v-else-if="viewMode==='edit' && canManageProjects" to="/admin/projects">Projects</NuxtLink><NuxtLink to="/account">Account</NuxtLink></nav>
+        <nav aria-label="Library controls"><ShareCollection v-if="canShare" :current-filters="currentBoardFilters" /><NuxtLink v-if="isAdmin" to="/admin/users">Admin</NuxtLink><NuxtLink v-else-if="canManageProjects" to="/admin/projects">Projects</NuxtLink><NuxtLink to="/account">Account</NuxtLink></nav>
       </header>
 
       <SelectionPanel label="Asset filters" :wide="filtersExpanded" :bare="!filtersExpanded"><Transition name="filter-controls"><form v-if="filtersExpanded" class="filters" aria-label="Filter and sort assets" @submit.prevent><label><span class="sr-only">Status</span><select v-model="status" name="status"><option value="">All statuses</option><option value="approved">Approved</option><option value="draft">Draft</option></select></label><label><span class="sr-only">Project</span><select v-model="projectId" name="project"><option value="">All projects</option><option v-for="project in projects" :key="project.id" :value="project.id">{{ project.name }}</option></select></label><label><span class="sr-only">Date</span><select v-model="dateRange" name="date"><option value="all">All dates</option><option value="today">Today</option><option value="week">This week</option><option value="two-weeks">Last two weeks</option><option value="month">This month</option><option value="custom">Custom range</option></select></label><label v-if="dateRange==='custom'" class="date-field"><span>From</span><input v-model="customDateFrom" type="date" name="date-from" :max="customDateTo || undefined"></label><label v-if="dateRange==='custom'" class="date-field"><span>To</span><input v-model="customDateTo" type="date" name="date-to" :min="customDateFrom || undefined"></label><label><span class="sr-only">Sort</span><select v-model="sort" name="sort"><option value="newest">Newest</option><option value="oldest">Oldest</option><option value="updated">Recently updated</option><option value="title">Title</option><option value="dimensions">Dimensions</option><option value="submitter">Submitter</option></select></label><div v-if="submitters.length" class="submitter-stack" role="list" aria-label="People who submitted assets"><span v-for="submitter in visibleSubmitters" :key="submitter.id" class="submitter-avatar" role="listitem" :title="submitterName(submitter)"><img v-if="submitter.avatar_url" :src="submitter.avatar_url" alt=""><span v-else aria-hidden="true">{{ submitterInitial(submitter) }}</span><span class="sr-only">{{ submitterName(submitter) }}</span></span><span v-if="submitters.length > visibleSubmitters.length" class="submitter-more" :title="`${submitters.length-visibleSubmitters.length} more submitters`">+{{ submitters.length-visibleSubmitters.length }}</span></div></form></Transition><button class="filter-panel-toggle" :class="{ 'is-expanded': filtersExpanded }" type="button" :aria-label="filtersExpanded ? 'Hide filters' : 'Show filters'" :aria-expanded="filtersExpanded" @click="filtersExpanded=!filtersExpanded"><svg v-if="filtersExpanded" aria-hidden="true" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></svg><span v-if="!filtersExpanded">Filters</span><span v-if="!filtersExpanded&&activeFilterCount" class="filter-count">{{ activeFilterCount }}</span></button></SelectionPanel>
@@ -117,10 +152,10 @@ onBeforeUnmount(() => {
       <div v-if="loadStatus === 'pending' && assets.length === 0" class="state" role="status">Loading assets…</div>
       <div v-else-if="error" class="state error" role="alert"><strong>Unable to load assets.</strong><span>Check your connection and try again.</span><button type="button" @click="refresh()">Try again</button></div>
       <div v-else-if="assets.length === 0" class="state"><strong>{{ hasFilters ? 'No matching assets' : 'No assets yet' }}</strong><span>{{ hasFilters ? 'Change your search or clear the filters.' : 'Upload frames from the Figma plugin to build this library.' }}</span><button v-if="hasFilters" type="button" @click="search = ''; status = ''; projectId = ''; dateRange = 'all'; customDateFrom = ''; customDateTo = ''">Clear filters</button></div>
-      <AssetMasonry v-else :assets="assets" :hidden="cardsHidden" :interactive="viewMode==='edit'" />
+      <AssetMasonry v-else :assets="assets" :hidden="cardsHidden" interactive row-flow />
       <nav v-if="totalPages > 1" class="pagination" aria-label="Pagination"><button :disabled="page === 1" @click="page--">Previous</button><span>Page {{ page }} of {{ totalPages }}</span><button :disabled="page === totalPages" @click="page++">Next</button></nav>
     </main>
-    <AssetOverlay v-if="selectedAssetId" :asset-id="selectedAssetId" @close="closeAsset" />
+    <AssetOverlay v-if="selectedAssetId" :asset-id="selectedAssetId" @close="closeAsset" @deleted="handleAssetDeleted" />
   </div>
 </template>
 
@@ -133,7 +168,6 @@ onBeforeUnmount(() => {
 .brand,.index-toolbar nav,.toolbar-search,.filters{min-height:44px;align-items:center}.brand{display:flex}
 .index-toolbar nav{position:static;display:flex;justify-content:flex-end;gap:var(--space)}
 .toolbar-search{grid-column:2/4;display:flex}.toolbar-search label{width:100%}.toolbar-search input{width:100%;height:44px;padding:0 8px}.toolbar-search input::-webkit-search-cancel-button{appearance:none}
-.view-switcher{display:inline-flex;align-items:center;padding:3px;border-radius:999px;background:var(--color-surface)}.view-switcher button{min-height:30px;padding:0 10px;border-radius:999px;color:var(--color-muted);background:transparent;font-size:13px;transition-property:color,background-color,scale;transition-duration:150ms}.view-switcher button[aria-pressed=true]{color:var(--color-bg);background:var(--color-fg)}.view-switcher button:active{scale:.96}
 .count{position:absolute}
 .filters label{position:relative;box-sizing:border-box;height:44px;border-bottom:1px solid rgb(0 0 0/.18)}
 .filters input,.filters select{box-sizing:border-box;height:43px;min-height:43px;padding:0 28px 0 8px;border:0;appearance:none;line-height:1.15}

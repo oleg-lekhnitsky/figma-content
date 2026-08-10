@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import type { BoardLayout } from '@content-library/shared'
+
 const route = useRoute()
 interface PublicAsset { id: string; title: string; description: string|null; previewUrl: string; preview2xUrl?: string|null; width: number; height: number; projects: { name: string } | null; asset_tags: Array<{ tags: { name: string } | null }> }
-interface PublicResponse { data: { collection: { title: string; mode: 'dynamic' | 'static'; layout: 'masonry' | 'column' | 'presentation'; expiresAt: string | null; updatedAt: string; organization: { name: string } | null }; assets: PublicAsset[] } }
+interface PublicResponse { data: { collection: { title: string; mode: 'dynamic' | 'static'; layout: BoardLayout; expiresAt: string | null; updatedAt: string; organization: { name: string } | null }; assets: PublicAsset[] } }
 const { data, status, error } = await useFetch<PublicResponse>(() => `/api/public/collections/${String(route.params.slug)}`)
 const collection = computed(() => data.value?.data.collection)
 const assets = computed(() => data.value?.data.assets ?? [])
@@ -20,11 +22,10 @@ useHead(() => ({ title: collection.value?.title ?? 'Shared collection' }))
     <div v-if="status === 'pending'" class="state" role="status">Loading collection…</div>
     <div v-else-if="error" class="state" role="alert"><strong>Collection unavailable</strong><span>The link may have expired or been disabled.</span></div>
     <div v-else-if="assets.length === 0" class="state"><strong>No approved items yet</strong><span>This collection will show items when they are available.</span></div>
-    <AssetPresentation v-else-if="collection?.layout === 'presentation'" :assets="assets" label="Shared assets presentation"><template #details="{asset}"><p v-if="asset.description">{{ asset.description }}</p><p class="asset-context">{{ asset.projects?.name ?? 'No project' }}<template v-if="asset.asset_tags.length"> · {{ asset.asset_tags.map(link => link.tags?.name).filter(Boolean).join(', ') }}</template></p></template></AssetPresentation>
-    <AssetMasonry v-else :assets="assets" :layout="collection?.layout === 'column' ? 'column' : 'masonry'" label="Shared assets" />
+    <BoardLayoutRenderer v-else-if="collection" :assets="assets" :layout="collection.layout" label="Shared assets"><template #details="{asset}"><p v-if="asset.description">{{ asset.description }}</p></template></BoardLayoutRenderer>
   </main>
 </template>
 
 <style scoped>
-.public-library{min-height:100vh;padding:var(--page-padding);color:var(--color-fg);background:var(--color-bg);font-weight:700}header{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-items:start;gap:var(--space);padding:0 0 clamp(2.5rem,5vw,5rem)}h1{grid-column:1 / 3}.meta{grid-column:3 / 5;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space);padding-top:4px;color:var(--color-muted)}.asset-context{margin-top:8px!important}.state{min-height:50vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center}.state span{color:var(--color-muted)}@media(max-width:900px){header{grid-template-columns:repeat(2,minmax(0,1fr))}h1{grid-column:1 / 3}.meta{grid-column:1 / 3}}@media(max-width:560px){header{grid-template-columns:1fr}h1,.meta{grid-column:1}.meta{grid-template-columns:1fr;padding-top:0}}
+.public-library{min-height:100vh;padding:var(--page-padding);color:var(--color-fg);background:var(--color-bg);font-weight:700}header{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-items:start;gap:var(--space);padding:0 0 clamp(2.5rem,5vw,5rem)}h1{grid-column:1 / 3}.meta{grid-column:3 / 5;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space);padding-top:4px;color:var(--color-muted)}.state{min-height:50vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center}.state span{color:var(--color-muted)}@media(max-width:900px){header{grid-template-columns:repeat(2,minmax(0,1fr))}h1{grid-column:1 / 3}.meta{grid-column:1 / 3}}@media(max-width:560px){header{grid-template-columns:1fr}h1,.meta{grid-column:1}.meta{grid-template-columns:1fr;padding-top:0}}
 </style>

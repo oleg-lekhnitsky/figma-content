@@ -3,7 +3,7 @@ import { z } from 'zod'
 export const boardRoleSchema = z.enum(['owner', 'editor', 'contributor', 'viewer'])
 export const boardMemberRoleSchema = boardRoleSchema.exclude(['owner'])
 export const boardPurposeSchema = z.enum(['showcase', 'review'])
-export const boardLayoutSchema = z.enum(['masonry', 'column', 'presentation'])
+export const boardLayoutSchema = z.enum(['masonry', 'column', 'presentation', 'grid'])
 
 export const publicCollectionFiltersSchema = z.object({
   search: z.string().trim().max(200).default(''),
@@ -49,6 +49,9 @@ export const boardMemberSchema = z.object({
 }).strict()
 
 export const boardAssetSchema = z.object({ assetId: z.uuid() }).strict()
+export const boardOrderSchema = z.object({
+  assetIds: z.array(z.uuid()).min(1).max(500).refine(ids => new Set(ids).size === ids.length)
+}).strict()
 export const reviewSubmissionSchema = z.object({ status: z.enum(['ready', 'reviewed']) }).strict()
 export const reviewDecisionSchema = z.object({
   assetIds: z.array(z.uuid()).min(1).max(100).transform(ids => [...new Set(ids)]),
@@ -57,3 +60,4 @@ export const reviewDecisionSchema = z.object({
 
 export type PublicCollectionFilters = z.infer<typeof publicCollectionFiltersSchema>
 export type BoardRole = z.infer<typeof boardRoleSchema>
+export type BoardLayout = z.infer<typeof boardLayoutSchema>

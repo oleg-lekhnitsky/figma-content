@@ -1,4 +1,6 @@
+import { publicCollectionFiltersSchema } from '@content-library/shared'
 import { databaseError } from '../../utils/app-error'
+import { boardPreviewForCollection } from '../../utils/public-collections'
 import { requireAuth } from '../../utils/session'
 
 export default defineEventHandler(async (event) => {
@@ -14,5 +16,16 @@ export default defineEventHandler(async (event) => {
   if (session.user.role !== 'admin') query = query.in('id', [...roles.keys()])
   const { data, error } = await query.order('created_at', { ascending: false }).limit(50)
   if (error) throw databaseError('list public collections', error)
-  return { data: { collections: data.map((collection: { id: string; [key: string]: unknown }) => ({ ...collection, role: roles.get(collection.id) ?? 'admin' })) } }
+  const collections = await Promise.all(data.map(async (collection: { id: string; organization_id?: string; purpose: 'showcase' | 'review'; mode: 'dynamic' | 'static'; filters: unknown; [key: string]: unknown }) => ({
+    ...collection,
+    role: roles.get(collection.id) ?? 'admin',
+    ...await boardPreviewForCollection({
+      id: collection.id,
+      organization_id: session.user.organization_id,
+      purpose: collection.purpose,
+      mode: collection.mode,
+      filters: publicCollectionFiltersSchema.parse(collection.filters)
+    })
+  })))
+  return { data: { collections } }
 })

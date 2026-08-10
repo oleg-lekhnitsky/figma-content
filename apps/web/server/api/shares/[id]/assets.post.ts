@@ -21,8 +21,10 @@ export default defineEventHandler(async (event) => {
   const { data: asset, error: assetError } = await query.maybeSingle()
   if (assetError) throw databaseError('read board asset', assetError)
   if (!asset) throw appError(403, 'BOARD_ASSET_FORBIDDEN', 'Contributors can add only their own approved assets.')
+  const { data: lastItem } = await db.from('public_collection_assets').select('position').eq('collection_id', id)
+    .order('position', { ascending: false, nullsFirst: false }).limit(1).maybeSingle()
   const { error } = await db.from('public_collection_assets').upsert({
-    collection_id: id, asset_id: asset.id, added_by: session.user.id, source: 'manual',
+    collection_id: id, asset_id: asset.id, added_by: session.user.id, source: 'manual', position: (lastItem?.position ?? -1) + 1,
     ...(collection.purpose === 'review' ? { review_status: 'ready', reviewed_at: null, reviewed_by: null } : {})
   }, { onConflict: 'collection_id,asset_id' })
   if (error) throw databaseError('add board asset', error)

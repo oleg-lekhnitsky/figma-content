@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assetListQuerySchema, assetMetadataSchema, boardMemberSchema, createPublicCollectionSchema, hasPermission, passwordChangeSchema, passwordLoginSchema, reviewDecisionSchema, reviewSubmissionSchema, roleSchema, updatePublicCollectionSchema, userInviteSchema, userUpdateSchema } from './index'
+import { assetListQuerySchema, assetMetadataSchema, boardMemberSchema, boardOrderSchema, createPublicCollectionSchema, hasPermission, passwordChangeSchema, passwordLoginSchema, reviewDecisionSchema, reviewSubmissionSchema, roleSchema, updatePublicCollectionSchema, userInviteSchema, userUpdateSchema } from './index'
 
 describe('shared authorization contracts', () => {
   it('keeps role permissions least-privileged', () => {
@@ -52,7 +52,16 @@ describe('shared authorization contracts', () => {
   it('accepts only supported board layouts', () => {
     expect(updatePublicCollectionSchema.safeParse({ action: 'layout', layout: 'presentation' }).success).toBe(true)
     expect(updatePublicCollectionSchema.safeParse({ action: 'layout', layout: 'column' }).success).toBe(true)
-    expect(updatePublicCollectionSchema.safeParse({ action: 'layout', layout: 'grid' }).success).toBe(false)
+    expect(updatePublicCollectionSchema.safeParse({ action: 'layout', layout: 'grid' }).success).toBe(true)
+    expect(updatePublicCollectionSchema.safeParse({ action: 'layout', layout: 'carousel' }).success).toBe(false)
+  })
+
+  it('requires a complete board order without duplicate assets', () => {
+    const first = '8bce9101-13ba-448a-acfa-54e91af1daca'
+    const second = '72d34fc8-dfc2-4a16-b342-3d063d1c61b1'
+    expect(boardOrderSchema.safeParse({ assetIds: [first, second] }).success).toBe(true)
+    expect(boardOrderSchema.safeParse({ assetIds: [first, first] }).success).toBe(false)
+    expect(boardOrderSchema.safeParse({ assetIds: [] }).success).toBe(false)
   })
 
   it('requires monthly reviews to use a review month and manual collection', () => {

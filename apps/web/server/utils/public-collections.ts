@@ -31,18 +31,66 @@ export const matchingApprovedAssetIds = async (organizationId: string, filters: 
   return data.map((item: { id: string }) => item.id)
 }
 
+const applyDynamicBoardOrder = async (collectionId: string, newestIds: string[]) => {
+  if (!newestIds.length) return newestIds
+  const { data, error } = await useSupabaseAdmin().from('public_collection_assets')
+    .select('asset_id,position').eq('collection_id', collectionId).in('asset_id', newestIds)
+    .not('position', 'is', null).order('position', { ascending: true })
+  if (error) throw databaseError('read dynamic board order', error)
+  const positionedIds = data.map((item: { asset_id: string }) => item.asset_id)
+  const positioned = new Set(positionedIds)
+  return [...newestIds.filter(assetId => !positioned.has(assetId)), ...positionedIds]
+}
+
 export const replaceCollectionSnapshot = async (collectionId: string, organizationId: string, filters: PublicCollectionFilters, addedBy?: string) => {
   const ids: string[] = await matchingApprovedAssetIds(organizationId, filters)
   const db = useSupabaseAdmin()
   const { error: deleteError } = await db.from('public_collection_assets').delete().eq('collection_id', collectionId)
   if (deleteError) throw databaseError('clear collection snapshot', deleteError)
   if (ids.length) {
-    const { error } = await db.from('public_collection_assets').upsert(ids.map(assetId => ({ collection_id: collectionId, asset_id: assetId, added_by: addedBy ?? null, source: 'snapshot' })), { onConflict: 'collection_id,asset_id', ignoreDuplicates: true })
+    const { error } = await db.from('public_collection_assets').upsert(ids.map((assetId, position) => ({ collection_id: collectionId, asset_id: assetId, added_by: addedBy ?? null, source: 'snapshot', position })), { onConflict: 'collection_id,asset_id', ignoreDuplicates: true })
     if (error) throw databaseError('save collection snapshot', error)
   }
   const { error: strategyError } = await db.from('public_collections').update({ content_strategy: 'snapshot' }).eq('id', collectionId).eq('organization_id', organizationId)
   if (strategyError) throw databaseError('save collection content strategy', strategyError)
   return ids.length
+}
+
+export const boardPreviewForCollection = async (collection: {
+  id: string
+  organization_id: string
+  purpose: 'showcase' | 'review'
+  mode: 'dynamic' | 'static'
+  filters: PublicCollectionFilters
+}) => {
+  let ids: string[]
+  if (collection.mode === 'dynamic') {
+    ids = await applyDynamicBoardOrder(collection.id, await matchingApprovedAssetIds(collection.organization_id, collection.filters))
+  } else {
+    const { data, error } = await useSupabaseAdmin().from('public_collection_assets')
+      .select('asset_id').eq('collection_id', collection.id).order('position', { ascending: true, nullsFirst: false }).limit(500)
+    if (error) throw databaseError('read board preview assets', error)
+    ids = data.map((item: { asset_id: string }) => item.asset_id)
+  }
+  if (!ids.length) return { itemCount: 0, previewAssets: [] }
+
+  const previewIds = ids.slice(0, 4)
+  let query = useSupabaseAdmin().from('assets')
+    .select('id,title,thumbnail_path,image_path,width,height', { count: 'exact' })
+    .eq('organization_id', collection.organization_id).in('id', previewIds)
+  query = collection.purpose === 'review' ? query.neq('status', 'archived') : query.eq('status', 'approved')
+  const { data, count, error } = await query.order('created_at', { ascending: false }).limit(4)
+  if (error) throw databaseError('load board preview assets', error)
+  const previewAssets = await Promise.all(data.map(async (asset: { id: string; title: string; thumbnail_path: string | null; image_path: string; width: number; height: number }) => ({
+    id: asset.id,
+    title: asset.title,
+    width: asset.width,
+    height: asset.height,
+    previewUrl: await signedAssetUrl(asset.thumbnail_path ?? asset.image_path, 3600)
+  })))
+  const position = new Map(previewIds.map((assetId, index) => [assetId, index]))
+  previewAssets.sort((a, b) => (position.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (position.get(b.id) ?? Number.MAX_SAFE_INTEGER))
+  return { itemCount: ids.length || count || 0, previewAssets }
 }
 
 export const publicAssetsForCollection = async (
@@ -51,10 +99,10 @@ export const publicAssetsForCollection = async (
 ) => {
   let ids: string[]
   if (collection.mode === 'dynamic') {
-    ids = await matchingApprovedAssetIds(collection.organization_id, collection.filters)
+    ids = await applyDynamicBoardOrder(collection.id, await matchingApprovedAssetIds(collection.organization_id, collection.filters))
   } else {
     const { data, error } = await useSupabaseAdmin().from('public_collection_assets')
-      .select('asset_id').eq('collection_id', collection.id).limit(500)
+      .select('asset_id').eq('collection_id', collection.id).order('position', { ascending: true, nullsFirst: false }).limit(500)
     if (error) throw databaseError('read collection snapshot', error)
     ids = data.map((item: { asset_id: string }) => item.asset_id)
   }
@@ -68,9 +116,12 @@ export const publicAssetsForCollection = async (
   query = options.includeUnapproved ? query.neq('status', 'archived') : query.eq('status', 'approved')
   const { data, error } = await query.order('created_at', { ascending: false })
   if (error) throw databaseError('load public collection assets', error)
-  return await Promise.all(data.map(async (asset: { thumbnail_path: string | null; thumbnail_2x_path: string | null; image_path: string; [key: string]: unknown }) => ({
+  const signedAssets = await Promise.all(data.map(async (asset: { thumbnail_path: string | null; thumbnail_2x_path: string | null; image_path: string; [key: string]: unknown }) => ({
     ...asset,
     previewUrl: await signedAssetUrl(asset.thumbnail_path ?? asset.image_path, 3600),
     preview2xUrl: asset.thumbnail_2x_path ? await signedAssetUrl(asset.thumbnail_2x_path, 3600) : null
   })))
+  const position = new Map(ids.map((id, index) => [id, index]))
+  signedAssets.sort((a, b) => (position.get(String(a.id)) ?? Number.MAX_SAFE_INTEGER) - (position.get(String(b.id)) ?? Number.MAX_SAFE_INTEGER))
+  return signedAssets
 }

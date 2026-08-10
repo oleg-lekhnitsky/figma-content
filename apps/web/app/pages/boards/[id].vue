@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import type { BoardLayout } from '@content-library/shared'
+
 definePageMeta({ middleware: 'auth' })
 
 type BoardRole = 'owner' | 'editor' | 'contributor' | 'viewer'
 type WorkspaceRole = 'viewer' | 'contributor' | 'editor' | 'admin'
-interface Collection { id:string; slug:string; title:string; purpose:'showcase'|'review'; review_month:string|null; submission_deadline:string|null; mode:'dynamic'|'static'; layout:'masonry'|'column'|'presentation'; expires_at:string|null; publication_enabled:boolean; content_strategy:'dynamic'|'snapshot'|'manual'; updated_at:string }
+interface Collection { id:string; slug:string; title:string; purpose:'showcase'|'review'; review_month:string|null; submission_deadline:string|null; mode:'dynamic'|'static'; layout:BoardLayout; expires_at:string|null; publication_enabled:boolean; content_strategy:'dynamic'|'snapshot'|'manual'; updated_at:string }
 interface Member { user_id:string; role:BoardRole; allowed_users:{email:string|null;figma_handle:string|null;avatar_url:string|null}|null }
 interface Filters { search:string; projectId:string|null; tagId:string|null; uploadedBy:string|null; dateFrom:string|null; dateTo:string|null }
 interface Asset { id:string; title:string; description:string|null; previewUrl:string; preview2xUrl?:string|null; width:number; height:number; status:'draft'|'approved'; uploaded_by:string; projects?:{name:string}|null; allowed_users?:{email:string|null;figma_handle:string|null;avatar_url:string|null}|null; submission?:{review_status:'ready'|'reviewed';created_at:string;reviewed_at:string|null}|null }
@@ -38,6 +40,10 @@ const memberEmail = ref('')
 const memberRole = ref<'editor'|'contributor'|'viewer'>('contributor')
 const busy = ref(false)
 const contentBusy = ref(false)
+const deleteDialog = ref<HTMLDialogElement | null>(null)
+const deleteTrigger = ref<HTMLButtonElement | null>(null)
+const deleteError = ref('')
+const filtersExpanded = ref(false)
 const boardAssets = ref<Asset[]>([])
 const availableAssets = ref<Asset[]>([])
 const projects = ref<Option[]>([])
@@ -49,6 +55,8 @@ const filters = reactive({
   dateFrom: collection.filters.dateFrom?.slice(0,10) ?? '',
   dateTo: collection.filters.dateTo?.slice(0,10) ?? ''
 })
+const activeFilterCount = computed(() => [filters.search,filters.projectId,filters.tagId,filters.dateFrom,filters.dateTo].filter(Boolean).length)
+let filterSaveTimer: ReturnType<typeof setTimeout> | undefined
 
 const publicUrl = computed(() => `/s/${collection.slug}`)
 const loadMembers = async () => {
@@ -113,10 +121,15 @@ const saveFilters = async () => {
       uploadedBy:collection.filters.uploadedBy,dateFrom:isoDate(filters.dateFrom),dateTo:isoDate(filters.dateTo,true)
     }}})
     await loadContent()
-    feedback.text=collection.mode==='dynamic'?'Filters saved. The public board is updated.':'Filters saved. Update the snapshot when you want to replace its content.'
+    feedback.text=collection.mode==='dynamic'?'Board updated.':'Filters updated. Replace the snapshot when you are ready.'
   } catch { feedback.text='Unable to save board filters.'; feedback.error=true }
   finally { contentBusy.value=false }
 }
+watch(() => [filters.search,filters.projectId,filters.tagId,filters.dateFrom,filters.dateTo], () => {
+  clearTimeout(filterSaveTimer)
+  filterSaveTimer=setTimeout(() => { void saveFilters() },450)
+})
+onBeforeUnmount(() => clearTimeout(filterSaveTimer))
 const hasAsset = (assetId:string) => boardAssets.value.some(asset=>asset.id===assetId)
 const submitterName = (asset:Asset) => asset.allowed_users?.figma_handle || asset.allowed_users?.email || 'Workspace member'
 const canRemoveAsset = (asset:Asset) => canEdit.value || asset.uploaded_by === currentUserId
@@ -150,7 +163,7 @@ const toggleVisibleSelection = () => {
   if (allVisibleSelected.value) visibleReviewAssets.value.forEach(asset => selectedAssetIds.delete(asset.id))
   else visibleReviewAssets.value.forEach(asset => selectedAssetIds.add(asset.id))
 }
-const setLayout = async (layout:'masonry'|'column'|'presentation') => {
+const setLayout = async (layout:BoardLayout) => {
   if (layout===collection.layout || !canEdit.value) return
   const previous=collection.layout
   collection.layout=layout
@@ -192,6 +205,29 @@ const removeAsset = async (asset:Asset) => {
   catch { feedback.text='Unable to remove this item.'; feedback.error=true }
   finally { contentBusy.value=false }
 }
+const boardAssetIndex = (assetId:string) => boardAssets.value.findIndex(asset => asset.id===assetId)
+const reorderBoardAssets = async (fromIndex:number,toIndex:number) => {
+  if (!canEdit.value||contentBusy.value||fromIndex===toIndex) return
+  const previous=[...boardAssets.value]
+  const next=[...previous]
+  const [moved]=next.splice(fromIndex,1)
+  if (!moved||toIndex<0||toIndex>=next.length+1) return
+  next.splice(toIndex,0,moved)
+  boardAssets.value=next
+  contentBusy.value=true; feedback.text=''; feedback.error=false
+  try {
+    await apiFetch(`/api/shares/${id}/order`,{method:'PATCH',body:{assetIds:next.map(asset=>asset.id)}})
+    feedback.text='Board order updated.'
+  } catch {
+    boardAssets.value=previous
+    feedback.text='Unable to save the board order.'; feedback.error=true
+  } finally { contentBusy.value=false }
+}
+const moveBoardAsset = (assetId:string,direction:-1|1) => {
+  const fromIndex=boardAssetIndex(assetId)
+  const toIndex=fromIndex+direction
+  if (fromIndex>=0&&toIndex>=0&&toIndex<boardAssets.value.length) void reorderBoardAssets(fromIndex,toIndex)
+}
 const saveMember = async () => {
   busy.value=true; feedback.text=''; feedback.error=false
   try { await apiFetch(`/api/shares/${id}/members`,{method:'POST',body:{email:memberEmail.value,role:memberRole.value}}); memberEmail.value=''; await loadMembers(); feedback.text='Board access saved.' }
@@ -202,6 +238,19 @@ const removeMember = async (member:Member) => {
   busy.value=true; feedback.text=''; feedback.error=false
   try { await apiFetch(`/api/shares/${id}/members/${member.user_id}`,{method:'DELETE'}); await loadMembers(); feedback.text='Board access removed.' }
   catch { feedback.text='Unable to remove this board member.'; feedback.error=true }
+  finally { busy.value=false }
+}
+const openDeleteDialog = () => {
+  deleteError.value=''
+  deleteDialog.value?.showModal()
+}
+const deleteBoard = async () => {
+  busy.value=true; deleteError.value=''
+  try {
+    await apiFetch(`/api/shares/${id}`,{method:'DELETE'})
+    deleteDialog.value?.close()
+    await navigateTo('/library')
+  } catch { deleteError.value='Unable to delete this board. Check your connection and try again.' }
   finally { busy.value=false }
 }
 </script>
@@ -219,10 +268,10 @@ const removeMember = async (member:Member) => {
       <nav v-if="collection.purpose === 'review'" class="review-tabs" aria-label="Board views"><NuxtLink :class="{active:activeView==='review'}" :to="{query:{view:'review'}}">Review</NuxtLink><NuxtLink :class="{active:activeView==='members'}" :to="{query:{view:'members'}}">Members</NuxtLink><NuxtLink :class="{active:activeView==='settings'}" :to="{query:{view:'settings'}}">Settings</NuxtLink></nav>
       <section v-if="collection.purpose === 'review' && activeView === 'review'" class="review-workspace" aria-labelledby="review-title">
         <header class="review-heading"><div><p class="section-label">Review queue</p><h2 id="review-title">Submitted work</h2></div><p class="muted">New work is submitted from the Figma plugin.</p></header>
-        <div class="review-toolbar"><div class="review-controls" role="group" aria-label="Filter submissions"><button type="button" class="button-secondary" :class="{active:reviewFilter==='all'}" @click="reviewFilter='all'">All <span>{{ boardAssets.length }}</span></button><button type="button" class="button-secondary" :class="{active:reviewFilter==='ready'}" @click="reviewFilter='ready'">Ready <span>{{ reviewCount('ready') }}</span></button><button type="button" class="button-secondary" :class="{active:reviewFilter==='reviewed'}" @click="reviewFilter='reviewed'">Reviewed <span>{{ reviewCount('reviewed') }}</span></button></div><div class="review-toolbar-actions"><div v-if="canEdit" class="layout-control" role="group" aria-label="Board layout"><button type="button" :aria-pressed="collection.layout==='masonry'" @click="setLayout('masonry')">Masonry</button><button type="button" :aria-pressed="collection.layout==='column'" @click="setLayout('column')">Column</button><button type="button" :aria-pressed="collection.layout==='presentation'" @click="setLayout('presentation')">Presentation</button></div><button v-if="canEdit" class="button-secondary select-visible" type="button" :disabled="contentBusy||!visibleReviewAssets.length" @click="toggleVisibleSelection">{{ allVisibleSelected?'Deselect visible':'Select visible' }}</button><label v-if="collection.layout!=='presentation'" class="group-control">Group by<select v-model="groupBy"><option value="contributor">Contributor</option><option value="project">Project</option></select></label></div></div>
+        <div class="review-toolbar"><div class="review-controls" role="group" aria-label="Filter submissions"><button type="button" class="button-secondary" :class="{active:reviewFilter==='all'}" @click="reviewFilter='all'">All <span>{{ boardAssets.length }}</span></button><button type="button" class="button-secondary" :class="{active:reviewFilter==='ready'}" @click="reviewFilter='ready'">Ready <span>{{ reviewCount('ready') }}</span></button><button type="button" class="button-secondary" :class="{active:reviewFilter==='reviewed'}" @click="reviewFilter='reviewed'">Reviewed <span>{{ reviewCount('reviewed') }}</span></button></div><div class="review-toolbar-actions"><LayoutControl v-if="canEdit" :model-value="collection.layout" @update:model-value="setLayout" /><button v-if="canEdit" class="button-secondary select-visible" type="button" :disabled="contentBusy||!visibleReviewAssets.length" @click="toggleVisibleSelection">{{ allVisibleSelected?'Deselect visible':'Select visible' }}</button><label v-if="collection.layout!=='presentation'" class="group-control">Group by<select v-model="groupBy"><option value="contributor">Contributor</option><option value="project">Project</option></select></label></div></div>
         <p class="review-feedback" :class="{error:feedback.error}" role="status" aria-live="polite">{{ feedback.text }}</p>
         <div v-if="reviewGroups.length&&collection.layout!=='presentation'" class="review-groups">
-          <section v-for="(group,groupIndex) in reviewGroups" :key="group.id" class="review-group" :aria-labelledby="`group-${groupIndex}`"><header><div class="submitter"><span v-if="groupBy==='contributor'" class="submitter-avatar"><img v-if="group.avatarUrl" :src="group.avatarUrl" alt=""><span v-else aria-hidden="true">{{ group.name.charAt(0).toUpperCase() }}</span></span><h3 :id="`group-${groupIndex}`">{{ group.name }}</h3></div><span class="muted">{{ group.assets.length }} {{ group.assets.length===1?'submission':'submissions' }}</span></header><AssetMasonry :assets="group.assets" :layout="collection.layout==='column'?'column':'masonry'" :label="`${group.name} submissions`" heading-tag="h4" selectable :selected-ids="[...selectedAssetIds]" @toggle-selection="toggleSelection"><template #details="{asset}"><div v-if="groupBy==='project'" class="card-submitter"><span class="card-submitter-avatar"><img v-if="asset.allowed_users?.avatar_url" :src="asset.allowed_users.avatar_url" alt=""><span v-else aria-hidden="true">{{ submitterName(asset).charAt(0).toUpperCase() }}</span></span><span>{{ submitterName(asset) }}</span></div><p>{{ groupBy === 'contributor' && asset.projects?.name ? `${asset.projects.name} · ` : '' }}{{ asset.status }} · {{ asset.submission?.review_status ?? 'ready' }}</p></template><template #previewActions="{asset}"><div class="card-actions"><button v-if="canApprove&&asset.status==='draft'" class="button-secondary approve-button" type="button" :disabled="contentBusy" @click="applyDecision([asset],'approve')">Approve</button><button v-if="canEdit&&(asset.submission?.review_status??'ready')==='ready'&&asset.status==='draft'" class="button-secondary" type="button" :disabled="contentBusy" @click="applyDecision([asset],'pass')">Pass</button><button v-if="canEdit&&(asset.submission?.review_status??'ready')==='ready'&&asset.status==='approved'" class="button-secondary" type="button" :disabled="contentBusy" @click="applyDecision([asset],'pass')">Complete</button><button v-if="canEdit&&(asset.submission?.review_status??'ready')==='reviewed'" class="button-secondary" type="button" :disabled="contentBusy" @click="applyDecision([asset],'reopen')">Reopen</button><button v-if="canRemoveAsset(asset)" class="button-secondary remove-icon" type="button" :disabled="contentBusy" :aria-label="`Remove ${asset.title}`" title="Remove" @click="removeAsset(asset)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v5m4-5v5" /></svg></button></div></template></AssetMasonry></section>
+          <section v-for="(group,groupIndex) in reviewGroups" :key="group.id" class="review-group" :aria-labelledby="`group-${groupIndex}`"><header><div class="submitter"><span v-if="groupBy==='contributor'" class="submitter-avatar"><img v-if="group.avatarUrl" :src="group.avatarUrl" alt=""><span v-else aria-hidden="true">{{ group.name.charAt(0).toUpperCase() }}</span></span><h3 :id="`group-${groupIndex}`">{{ group.name }}</h3></div><span class="muted">{{ group.assets.length }} {{ group.assets.length===1?'submission':'submissions' }}</span></header><BoardLayoutRenderer :assets="group.assets" :layout="collection.layout" :label="`${group.name} submissions`" heading-tag="h4" selectable :selected-ids="[...selectedAssetIds]" @toggle-selection="toggleSelection"><template #details="{asset}"><div v-if="groupBy==='project'" class="card-submitter"><span class="card-submitter-avatar"><img v-if="asset.allowed_users?.avatar_url" :src="asset.allowed_users.avatar_url" alt=""><span v-else aria-hidden="true">{{ submitterName(asset).charAt(0).toUpperCase() }}</span></span><span>{{ submitterName(asset) }}</span></div><p>{{ groupBy === 'contributor' && asset.projects?.name ? `${asset.projects.name} · ` : '' }}{{ asset.status }} · {{ asset.submission?.review_status ?? 'ready' }}</p></template><template #previewActions="{asset}"><div class="card-actions"><button v-if="canApprove&&asset.status==='draft'" class="button-secondary approve-button" type="button" :disabled="contentBusy" @click="applyDecision([asset],'approve')">Approve</button><button v-if="canEdit&&(asset.submission?.review_status??'ready')==='ready'&&asset.status==='draft'" class="button-secondary" type="button" :disabled="contentBusy" @click="applyDecision([asset],'pass')">Pass</button><button v-if="canEdit&&(asset.submission?.review_status??'ready')==='ready'&&asset.status==='approved'" class="button-secondary" type="button" :disabled="contentBusy" @click="applyDecision([asset],'pass')">Complete</button><button v-if="canEdit&&(asset.submission?.review_status??'ready')==='reviewed'" class="button-secondary" type="button" :disabled="contentBusy" @click="applyDecision([asset],'reopen')">Reopen</button><button v-if="canRemoveAsset(asset)" class="button-secondary remove-icon" type="button" :disabled="contentBusy" :aria-label="`Remove ${asset.title}`" title="Remove" @click="removeAsset(asset)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v5m4-5v5" /></svg></button></div></template></BoardLayoutRenderer></section>
         </div>
         <AssetPresentation v-else-if="visibleReviewAssets.length" :assets="visibleReviewAssets" label="Submitted work presentation" selectable :selected-ids="[...selectedAssetIds]" @toggle-selection="toggleSelection"><template #details="{asset}"><div class="card-submitter"><span class="card-submitter-avatar"><img v-if="asset.allowed_users?.avatar_url" :src="asset.allowed_users.avatar_url" alt=""><span v-else aria-hidden="true">{{ submitterName(asset).charAt(0).toUpperCase() }}</span></span><span>{{ submitterName(asset) }}</span></div><p>{{ asset.projects?.name ? `${asset.projects.name} · ` : '' }}{{ asset.status }} · {{ asset.submission?.review_status ?? 'ready' }}</p></template><template #previewActions="{asset}"><div class="card-actions"><button v-if="canApprove&&asset.status==='draft'" class="button-secondary approve-button" type="button" :disabled="contentBusy" @click="applyDecision([asset],'approve')">Approve</button><button v-if="canEdit&&(asset.submission?.review_status??'ready')==='ready'&&asset.status==='draft'" class="button-secondary" type="button" :disabled="contentBusy" @click="applyDecision([asset],'pass')">Pass</button><button v-if="canEdit&&(asset.submission?.review_status??'ready')==='ready'&&asset.status==='approved'" class="button-secondary" type="button" :disabled="contentBusy" @click="applyDecision([asset],'pass')">Complete</button><button v-if="canEdit&&(asset.submission?.review_status??'ready')==='reviewed'" class="button-secondary" type="button" :disabled="contentBusy" @click="applyDecision([asset],'reopen')">Reopen</button><button v-if="canRemoveAsset(asset)" class="button-secondary remove-icon" type="button" :disabled="contentBusy" :aria-label="`Remove ${asset.title}`" title="Remove" @click="removeAsset(asset)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v5m4-5v5" /></svg></button></div></template></AssetPresentation>
         <div v-else class="review-empty"><strong>{{ boardAssets.length ? `No ${reviewFilter} submissions` : 'No submissions yet' }}</strong><span class="muted">{{ boardAssets.length ? 'Choose another filter to see submitted work.' : 'Designers can select this board as a destination in the Figma plugin.' }}</span></div>
@@ -233,30 +282,21 @@ const removeMember = async (member:Member) => {
         <div class="settings-content">
           <label class="title-field"><span>Board name</span><input :value="collection.title" :readonly="!canEdit" maxlength="120" :aria-describedby="'board-title-feedback'" @change="rename"><small id="board-title-feedback" :class="{error:feedback.error}" role="status" aria-live="polite">{{ feedback.text }}</small></label>
           <dl><div><dt>{{ collection.purpose === 'review' ? 'Review month' : 'Updates' }}</dt><dd>{{ collection.purpose === 'review' && collection.review_month ? new Date(`${collection.review_month}T12:00:00`).toLocaleDateString(undefined,{month:'long',year:'numeric'}) : collection.mode === 'dynamic' ? 'Dynamic' : collection.content_strategy==='manual'?'Manual selection':'Filter snapshot' }}</dd></div><div v-if="collection.purpose === 'review'"><dt>Deadline</dt><dd>{{ collection.submission_deadline ? new Date(collection.submission_deadline).toLocaleDateString() : 'No deadline' }}</dd></div><div><dt>Public access</dt><dd>{{ collection.publication_enabled?'Anyone with the link can view':'Disabled' }}</dd></div></dl>
-          <div class="layout-setting"><span>Public layout</span><div class="layout-control" role="group" aria-label="Public board layout"><button type="button" :disabled="!canEdit" :aria-pressed="collection.layout==='masonry'" @click="setLayout('masonry')">Masonry</button><button type="button" :disabled="!canEdit" :aria-pressed="collection.layout==='column'" @click="setLayout('column')">Column</button><button type="button" :disabled="!canEdit" :aria-pressed="collection.layout==='presentation'" @click="setLayout('presentation')">Presentation</button></div></div>
+          <div class="layout-setting"><span>Public layout</span><LayoutControl :model-value="collection.layout" :disabled="!canEdit" label="Public board layout" @update:model-value="setLayout" /></div>
           <div class="actions"><NuxtLink v-if="collection.publication_enabled" class="button-secondary" :to="publicUrl" target="_blank">View public page</NuxtLink><button v-if="collection.publication_enabled" class="button-secondary" type="button" @click="copyLink">Copy public link</button><button v-if="canEdit" class="button-secondary" type="button" :disabled="busy" @click="setPublication(!collection.publication_enabled)">{{ collection.publication_enabled?'Disable public link':'Enable public link' }}</button></div>
         </div>
       </section>
       <section v-if="collection.purpose !== 'review'" class="content" aria-labelledby="content-title">
         <div><p class="section-label">Content</p><h2 id="content-title">{{ collection.mode==='dynamic' ? 'Choose what appears' : 'Manage snapshot' }}</h2></div>
         <div class="content-settings">
-          <p class="muted content-explanation">{{ collection.mode==='dynamic' ? 'Approved items matching these filters appear on the public board automatically.' : collection.content_strategy==='manual' ? 'This board uses a manual selection. Rebuilding from filters will replace it.' : 'This frozen snapshot was generated from the saved filters. Adding or removing one item switches it to manual selection.' }}</p>
-          <form v-if="canEdit" class="filter-form" @submit.prevent="saveFilters">
-            <label>Search<input v-model="filters.search" type="search" placeholder="Any title or description"></label>
-            <label>Project<select v-model="filters.projectId"><option value="">Any project</option><option v-for="project in projects" :key="project.id" :value="project.id">{{ project.name }}</option></select></label>
-            <label>Tag<select v-model="filters.tagId"><option value="">Any tag</option><option v-for="tag in tags" :key="tag.id" :value="tag.id">{{ tag.name }}</option></select></label>
-            <label>From<input v-model="filters.dateFrom" type="date" :max="filters.dateTo||undefined"></label>
-            <label>To<input v-model="filters.dateTo" type="date" :min="filters.dateFrom||undefined"></label>
-            <button class="button-secondary" type="submit" :disabled="contentBusy">Save filters</button>
-          </form>
+          <p class="muted content-explanation">{{ collection.mode==='dynamic' ? 'Approved items matching these filters appear automatically. Drag to arrange them; newly matching items appear first.' : collection.content_strategy==='manual' ? 'This board uses a manual selection. Rebuilding from filters will replace it.' : 'This frozen snapshot was generated from the saved filters. Adding or removing one item switches it to manual selection.' }}</p>
+          <SelectionPanel v-if="canEdit" label="Board asset filters" :wide="filtersExpanded" :bare="!filtersExpanded"><Transition name="filter-controls"><form v-if="filtersExpanded" class="board-filters" aria-label="Filter board assets" @submit.prevent><input v-model="filters.search" type="search" aria-label="Search assets" placeholder="Search"><select v-model="filters.projectId" aria-label="Filter by project"><option value="">Any project</option><option v-for="project in projects" :key="project.id" :value="project.id">{{ project.name }}</option></select><select v-model="filters.tagId" aria-label="Filter by tag"><option value="">Any tag</option><option v-for="tag in tags" :key="tag.id" :value="tag.id">{{ tag.name }}</option></select><label class="date-field"><span>From</span><input v-model="filters.dateFrom" type="date" :max="filters.dateTo||undefined"></label><label class="date-field"><span>To</span><input v-model="filters.dateTo" type="date" :min="filters.dateFrom||undefined"></label></form></Transition><button class="filter-panel-toggle" :class="{ 'is-expanded': filtersExpanded }" type="button" :aria-label="filtersExpanded ? 'Hide filters' : 'Show filters'" :aria-expanded="filtersExpanded" @click="filtersExpanded=!filtersExpanded"><svg v-if="filtersExpanded" aria-hidden="true" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></svg><span v-if="!filtersExpanded">Filters</span><span v-if="!filtersExpanded&&activeFilterCount" class="filter-count">{{ activeFilterCount }}</span></button></SelectionPanel>
           <div class="content-heading"><strong>{{ boardAssets.length }} {{ boardAssets.length===1 ? 'item' : 'items' }} on this board</strong><button v-if="collection.mode==='static'&&canEdit" class="button-secondary" type="button" :disabled="busy" @click="refreshSnapshot">Replace with filter snapshot</button></div>
-          <div v-if="boardAssets.length" class="asset-grid">
-            <article v-for="asset in boardAssets" :key="asset.id" class="content-card"><div class="image-wrap" :style="{aspectRatio:`${asset.width}/${asset.height}`}"><img :src="asset.previewUrl" :srcset="asset.preview2xUrl?`${asset.previewUrl} 1x, ${asset.preview2xUrl} 2x`:undefined" :alt="asset.title"></div><div><span><strong>{{ asset.title }}</strong></span><button v-if="collection.mode==='static'&&canRemoveAsset(asset)" class="button-secondary" type="button" :disabled="contentBusy" @click="removeAsset(asset)">Remove</button></div></article>
-          </div>
+          <AssetMasonry v-if="boardAssets.length" :assets="boardAssets" label="Board content" heading-tag="h3" :reorderable="canEdit&&!contentBusy" @reorder="reorderBoardAssets"><template #details="{asset}"><p>{{ asset.projects?.name ?? 'No project' }}</p></template><template #previewActions="{asset}"><div v-if="canEdit" class="asset-order-actions" role="group" :aria-label="`Reorder ${asset.title}`"><button class="button-secondary order-button" type="button" :disabled="contentBusy||boardAssetIndex(asset.id)===0" :aria-label="`Move ${asset.title} up`" title="Move up" @click="moveBoardAsset(asset.id,-1)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 14 6-6 6 6" /></svg></button><button class="button-secondary order-button" type="button" :disabled="contentBusy||boardAssetIndex(asset.id)===boardAssets.length-1" :aria-label="`Move ${asset.title} down`" title="Move down" @click="moveBoardAsset(asset.id,1)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 10 6 6 6-6" /></svg></button></div></template><template #actions="{asset}"><button v-if="collection.mode==='static'&&canRemoveAsset(asset)" class="button-secondary" type="button" :disabled="contentBusy" @click="removeAsset(asset)">Remove</button></template></AssetMasonry>
           <p v-else class="muted">No content matches this board yet.</p>
           <template v-if="collection.mode==='static'&&canContribute">
             <h3>Add approved content</h3>
-            <div class="asset-grid available-grid"><article v-for="asset in availableAssets" :key="asset.id" class="content-card" :class="{selected:hasAsset(asset.id)}"><div class="image-wrap" :style="{aspectRatio:`${asset.width}/${asset.height}`}"><img :src="asset.previewUrl" :srcset="asset.preview2xUrl?`${asset.previewUrl} 1x, ${asset.preview2xUrl} 2x`:undefined" :alt="asset.title"></div><div><span><strong>{{ asset.title }}</strong></span><button class="button-secondary" type="button" :disabled="contentBusy||hasAsset(asset.id)" @click="addAsset(asset)">{{ hasAsset(asset.id)?'Added':'Add' }}</button></div></article></div>
+            <AssetMasonry :assets="availableAssets" label="Approved content available to add" heading-tag="h4"><template #details="{asset}"><p>{{ asset.projects?.name ?? 'No project' }}</p></template><template #actions="{asset}"><button class="button-secondary" type="button" :disabled="contentBusy||hasAsset(asset.id)" @click="addAsset(asset)">{{ hasAsset(asset.id)?'Added':'Add' }}</button></template></AssetMasonry>
           </template>
         </div>
       </section>
@@ -268,7 +308,19 @@ const removeMember = async (member:Member) => {
           <ul><li v-for="member in members" :key="member.user_id"><div><strong>{{ member.allowed_users?.email ?? member.allowed_users?.figma_handle ?? 'Workspace member' }}</strong><span class="muted">{{ member.role }}</span></div><button v-if="canManageMembers && member.role!=='owner'" class="button-secondary" type="button" :disabled="busy" @click="removeMember(member)">Remove</button></li></ul>
         </div>
       </section>
+      <section v-if="canManageMembers && (collection.purpose !== 'review' || activeView === 'settings')" class="danger" aria-labelledby="danger-title">
+        <div><p class="section-label">Danger zone</p><h2 id="danger-title">Delete board</h2></div>
+        <div class="danger-content"><p>Delete this board, its member access, and its public link.</p><button ref="deleteTrigger" class="button-secondary destructive-button" type="button" :disabled="busy" @click="openDeleteDialog">Delete board</button></div>
+      </section>
     </main>
+    <dialog ref="deleteDialog" class="delete-dialog" aria-labelledby="delete-board-title" aria-describedby="delete-board-description" @close="deleteTrigger?.focus()">
+      <form method="dialog" @submit.prevent>
+        <h2 id="delete-board-title">Delete “{{ collection.title }}”?</h2>
+        <p id="delete-board-description">This permanently deletes the board, removes member access, and disables its public link. This action cannot be undone.</p>
+        <p class="delete-error" role="alert">{{ deleteError }}</p>
+        <div class="dialog-actions"><button class="button-secondary" type="submit" value="cancel" :disabled="busy" autofocus @click="deleteDialog?.close()">Cancel</button><button class="button-secondary destructive-button" type="button" :disabled="busy" @click="deleteBoard">{{ busy?'Deleting board…':'Delete board' }}</button></div>
+      </form>
+    </dialog>
   </div>
 </template>
 
@@ -391,6 +443,29 @@ const removeMember = async (member:Member) => {
   gap: calc(var(--space) / 2);
 }
 
+.asset-order-actions {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--space) / 2);
+}
+
+.order-button.order-button {
+  width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: color-mix(in srgb, var(--color-bg) 88%, transparent);
+  box-shadow: 0 1px 4px rgb(0 0 0 / .12);
+}
+
+.order-button svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+
 .review-toolbar {
   display: flex;
   align-items: end;
@@ -464,28 +539,6 @@ const removeMember = async (member:Member) => {
   display: flex;
   align-items: end;
   gap: var(--space);
-}
-
-.layout-control {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px;
-  border-radius: 999px;
-  background: var(--color-surface);
-}
-
-.layout-control button {
-  min-height: 30px;
-  padding: 0 10px;
-  border-radius: 999px;
-  color: var(--color-muted);
-  background: transparent;
-  font-size: 13px;
-}
-
-.layout-control button[aria-pressed=true] {
-  color: var(--color-bg);
-  background: var(--color-fg);
 }
 
 .layout-setting {
@@ -581,7 +634,214 @@ const removeMember = async (member:Member) => {
   text-align: center;
 }
 
+.danger {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space);
+  padding: var(--section-gap) 0;
+  border-top: 1px solid var(--color-line);
+}
+
+.danger > div:last-child {
+  grid-column: 2 / 5;
+}
+
+.danger h2 {
+  margin-top: 6px;
+}
+
+.danger-content {
+  display: grid;
+  justify-items: start;
+  gap: var(--space);
+}
+
+.danger-content p {
+  margin: 0;
+  color: var(--color-muted);
+}
+
+.button-secondary.button-secondary.destructive-button {
+  color: var(--color-danger);
+}
+
+.delete-dialog {
+  width: min(32rem, calc(100% - 2 * var(--space)));
+  padding: 0;
+  border: 0;
+  border-radius: calc(var(--radius) * 3);
+  color: var(--color-fg);
+  background: var(--color-bg);
+  box-shadow: 0 24px 80px rgb(0 0 0 / .25);
+  overscroll-behavior: contain;
+}
+
+.delete-dialog::backdrop {
+  background: rgb(0 0 0 / .45);
+  backdrop-filter: blur(8px);
+}
+
+.delete-dialog form {
+  display: grid;
+  gap: var(--space);
+  padding: calc(var(--space)*1.5);
+}
+
+.delete-dialog h2,
+.delete-dialog p {
+  margin: 0;
+}
+
+.delete-dialog p {
+  color: var(--color-muted);
+}
+
+.delete-error {
+  min-height: 1.25em;
+  color: var(--color-danger) !important;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: calc(var(--space) / 2);
+}
+
+.board-filters {
+  width: max-content;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.board-filters label {
+  position: relative;
+  width: max-content;
+  height: 36px;
+}
+
+.board-filters :is(input, select) {
+  box-sizing: border-box;
+  width: auto;
+  min-width: 0;
+  max-width: 11rem;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 var(--space);
+  border: 0;
+  border-radius: 999px;
+  appearance: none;
+  color: var(--color-fg);
+  background: var(--color-surface);
+  font-size: 13px;
+}
+
+.board-filters > input[type='search'] {
+  padding-inline: var(--space);
+}
+
+.board-filters > input[type='search']::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.board-filters > select {
+  padding-right: calc(var(--space) * 2);
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - var(--space) + 1px) 50%, calc(100% - var(--space) + 6px) 50%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+}
+
+.board-filters :is(input, select):focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.board-filters .date-field span {
+  position: absolute;
+  z-index: 1;
+  top: 3px;
+  left: var(--space);
+  color: var(--color-muted);
+  font-size: 10px;
+  pointer-events: none;
+}
+
+.board-filters .date-field input {
+  padding: calc(var(--space) / 2) var(--space) 0;
+  appearance: auto;
+}
+
+.filter-panel-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.filter-panel-toggle:not(.is-expanded) {
+  min-height: 44px;
+  padding: 0 20px;
+  box-shadow: 0 12px 36px rgb(0 0 0 / .2);
+}
+
+.filter-panel-toggle.filter-panel-toggle.is-expanded {
+  width: 36px;
+  padding: 0;
+  justify-content: center;
+  box-shadow: none;
+}
+
+.filter-panel-toggle svg {
+  width: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+
+.filter-count {
+  min-width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  padding: 0 5px;
+  border-radius: 999px;
+  color: var(--color-fg);
+  background: var(--color-bg);
+  font-size: 11px;
+}
+
+.filter-controls-enter-active,
+.filter-controls-leave-active {
+  transition: opacity 140ms ease, transform 180ms cubic-bezier(.2, 0, 0, 1);
+}
+
+.filter-controls-enter-from,
+.filter-controls-leave-to {
+  opacity: 0;
+  transform: translateX(8px);
+}
+
 @media (max-width: 720px) {
+  .danger {
+    grid-template-columns: 1fr;
+  }
+
+  .danger > div:last-child {
+    grid-column: 1;
+  }
+
+  .dialog-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .dialog-actions button {
+    width: 100%;
+  }
+
   .member-form {
     grid-template-columns: 1fr;
   }
@@ -627,6 +887,13 @@ const removeMember = async (member:Member) => {
 
   .group-control select {
     width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .filter-controls-enter-active,
+  .filter-controls-leave-active {
+    transition-duration: .01ms;
   }
 }
 </style>

@@ -17,6 +17,8 @@ const props = withDefaults(defineProps<{
   layout?: 'masonry' | 'column'
   selectable?: boolean
   selectedIds?: string[]
+  reorderable?: boolean
+  rowFlow?: boolean
 }>(), {
   interactive: false,
   hidden: false,
@@ -24,23 +26,58 @@ const props = withDefaults(defineProps<{
   headingTag: 'h2',
   layout: 'masonry',
   selectable: false,
-  selectedIds: () => []
+  selectedIds: () => [],
+  reorderable: false,
+  rowFlow: false
 })
-const emit = defineEmits<{ toggleSelection: [asset: T] }>()
+const emit = defineEmits<{
+  toggleSelection: [asset: T]
+  reorder: [fromIndex: number, toIndex: number]
+}>()
 
 const loadedImages = reactive(new Set<string>())
 const selectedIdSet = computed(() => new Set(props.selectedIds))
 const isSelected = (id: string) => selectedIdSet.value.has(id)
 const masonry = ref<HTMLElement | null>(null)
+const draggedIndex = ref<number | null>(null)
+const dropIndex = ref<number | null>(null)
 let resizeObserver: ResizeObserver | undefined
 let measureFrame = 0
 const assetLink = (id: string): RouteLocationRaw => ({ path: '/library', query: { asset: id } })
 const cardStagger = (index: number) => `${Math.min(index * 18, 144)}ms`
+const startDrag = (event: DragEvent, index: number) => {
+  if (!props.reorderable || !event.dataTransfer) return
+  draggedIndex.value = index
+  dropIndex.value = index
+  event.dataTransfer.effectAllowed = 'move'
+  event.dataTransfer.setData('text/plain', props.assets[index]?.id ?? '')
+}
+const dragOver = (event: DragEvent, index: number) => {
+  if (draggedIndex.value === null) return
+  event.preventDefault()
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
+  dropIndex.value = index
+}
+const finishDrag = () => {
+  draggedIndex.value = null
+  dropIndex.value = null
+}
+const dropAsset = (event: DragEvent, index: number) => {
+  if (draggedIndex.value === null) return
+  event.preventDefault()
+  const fromIndex = draggedIndex.value
+  finishDrag()
+  if (fromIndex !== index) emit('reorder', fromIndex, index)
+}
 const measureCards = () => {
   cancelAnimationFrame(measureFrame)
   measureFrame = requestAnimationFrame(() => {
     const root = masonry.value
     if (!root) return
+    if (props.rowFlow) {
+      root.classList.remove('is-masonry')
+      return
+    }
     for (const card of root.querySelectorAll<HTMLElement>('.asset-card')) {
       const rows = String(Math.ceil(card.getBoundingClientRect().height))
       if (card.style.getPropertyValue('--card-rows') !== rows) card.style.setProperty('--card-rows', rows)
@@ -78,7 +115,7 @@ const projectAndTags = (asset: AssetMasonryItem) => {
   const tags = (asset.asset_tags ?? []).slice(0, 2).map(link => link.tags?.name).filter(Boolean)
   return `${asset.projects?.name ?? 'No project'}${tags.length ? ` · ${tags.join(', ')}` : ''}`
 }
-watch(() => props.assets.map(asset => asset.id).join(','), async () => {
+watch(() => [props.assets.map(asset => asset.id).join(','), props.rowFlow], async () => {
   await nextTick()
   observeCards()
 })
@@ -91,7 +128,7 @@ onBeforeUnmount(() => {
 
 <template>
   <section ref="masonry" class="asset-masonry" :class="{ 'cards-hidden': hidden, 'column-layout': layout === 'column' }" :aria-label="label">
-    <article v-for="(asset, index) in assets" :key="asset.id" class="asset-card" :class="{ 'is-selected': isSelected(asset.id) }" :style="{ '--card-stagger': cardStagger(index) }">
+    <article v-for="(asset, index) in assets" :key="asset.id" class="asset-card" :class="{ 'is-selected': isSelected(asset.id), 'is-dragging': draggedIndex === index, 'is-drop-target': dropIndex === index && draggedIndex !== index }" :style="{ '--card-stagger': cardStagger(index) }" :draggable="reorderable" @dragstart="startDrag($event, index)" @dragover="dragOver($event, index)" @drop="dropAsset($event, index)" @dragend="finishDrag">
       <div class="preview" :class="{ 'is-loading': !loadedImages.has(asset.id) }" :style="{ aspectRatio: `${asset.width} / ${asset.height}` }">
         <NuxtLink v-if="interactive" class="preview-link" :to="assetLink(asset.id)" :aria-label="`View ${asset.title}`">
           <img :class="{ 'is-loaded': loadedImages.has(asset.id) }" :data-asset-id="asset.id" :src="asset.previewUrl" :srcset="asset.preview2xUrl ? `${asset.previewUrl} 1x, ${asset.preview2xUrl} 2x` : undefined" :width="asset.width" :height="asset.height" :alt="`Preview of ${asset.title}`" :loading="index < 6 ? 'eager' : 'lazy'" :fetchpriority="index < 2 ? 'high' : 'auto'" decoding="async" @load="markImageLoaded(asset.id)">
@@ -116,10 +153,11 @@ onBeforeUnmount(() => {
 .asset-masonry{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));column-gap:var(--space);align-items:start}.asset-masonry.is-masonry{grid-auto-rows:1px;row-gap:0}
 .asset-masonry.column-layout{--column-viewport-margin:clamp(24px,6vh,64px);width:min(760px,100%);margin-inline:auto;grid-template-columns:minmax(0,1fr);row-gap:0}.asset-masonry.column-layout .asset-card{padding-bottom:var(--section-gap)}.asset-masonry.column-layout .preview{height:auto;aspect-ratio:auto!important;overflow:visible;clip-path:none;background:transparent}.asset-masonry.column-layout .preview img{width:auto;height:auto;max-width:100%;max-height:calc(100vh - var(--column-viewport-margin)*2);max-height:calc(100dvh - var(--column-viewport-margin)*2);margin-inline:auto;border-radius:var(--radius);object-fit:contain}.asset-masonry.column-layout .card-body{flex-direction:column;align-items:center;justify-content:center;text-align:center}
 .asset-card{min-width:0;padding-bottom:calc(var(--space)*2);color:inherit;background:transparent;opacity:1;transform:translateY(0);transition-property:opacity,transform;transition-duration:.18s,.22s;transition-delay:var(--card-stagger,0ms);transition-timing-function:ease-out,cubic-bezier(.16,1.35,.3,1);animation:card-fade-in .42s cubic-bezier(.16,1.35,.3,1) backwards;animation-delay:var(--card-stagger,0ms)}.asset-masonry.is-masonry .asset-card{grid-row-end:span var(--card-rows)}
+.asset-card[draggable=true]{cursor:grab}.asset-card[draggable=true]:active{cursor:grabbing}.asset-card.is-dragging{opacity:.35}.asset-card.is-drop-target .preview{box-shadow:0 0 0 3px var(--color-accent)}
 .preview{position:relative;overflow:hidden;border-radius:var(--radius);background:transparent;clip-path:inset(0 round var(--radius))}.preview.is-loading{background:var(--color-surface)}
 .preview-link{display:block;width:100%;height:100%}.preview-link:hover,.card-body a:hover{opacity:1}
 .preview img{display:block;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .12s ease-out}.preview img.is-loaded{opacity:1}
-.card-body{display:flex;justify-content:space-between;align-items:flex-start;gap:var(--space);padding-top:8px}.card-body .card-title,.card-body p{margin:0;font:inherit;letter-spacing:inherit}.card-body a{text-decoration:none}.card-body p,.card-meta{opacity:.3}.card-meta{white-space:nowrap}.card-status{text-transform:capitalize}
+.card-body{display:flex;justify-content:space-between;align-items:flex-start;gap:var(--space);padding-top:8px}.card-body .card-title,.card-body :deep(p){margin:0;font:inherit;letter-spacing:inherit}.card-body a{text-decoration:none}.card-body :deep(p),.card-meta{opacity:.3}.card-meta{white-space:nowrap}.card-status{text-transform:capitalize}
 .figma-button{position:absolute;z-index:2;left:50%;bottom:10px;min-height:32px;display:inline-flex;align-items:center;justify-content:center;padding:0 13px;border-radius:999px;color:#000;background:#fff;font-size:12px;text-decoration:none;white-space:nowrap;box-shadow:0 1px 3px rgb(0 0 0/.12);opacity:0;transform:translate(-50%,8px);pointer-events:none;transition-property:opacity,transform,scale;transition-duration:150ms;transition-timing-function:cubic-bezier(.2,0,0,1)}
 .preview-actions{position:absolute;z-index:3;right:10px;bottom:10px;left:10px;display:flex;justify-content:center;opacity:0;transform:translateY(8px);pointer-events:none;transition:opacity 150ms,transform 150ms cubic-bezier(.2,0,0,1)}
 .selection-control.selection-control{position:absolute;z-index:3;top:10px;right:10px;width:24px;height:24px;min-height:24px;padding:0;border:1px solid rgb(0 0 0/.35);border-radius:50%;background:rgb(255 255 255/.9);box-shadow:0 1px 4px rgb(0 0 0/.12);opacity:0;transition:opacity 120ms,scale 150ms,background-color 150ms,border-color 150ms}.selection-control.active{border-color:var(--color-fg);background:var(--color-fg);opacity:1}.selection-control:hover{border-color:var(--color-fg)}.selection-control:active{scale:.9}.asset-card:hover .selection-control,.asset-card:focus-within .selection-control{opacity:1}
