@@ -3,6 +3,19 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   modules: ['@nuxt/image', '@nuxt/eslint'],
   css: ['~/assets/css/global.css'],
+  app: {
+    head: {
+      meta: [
+        { name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' },
+        { name: 'theme-color', content: '#ffffff' },
+        { name: 'mobile-web-app-capable', content: 'yes' },
+        { name: 'apple-mobile-web-app-capable', content: 'yes' },
+        { name: 'apple-mobile-web-app-status-bar-style', content: 'default' },
+        { name: 'apple-mobile-web-app-title', content: 'Content Library' }
+      ],
+      link: [{ rel: 'manifest', href: '/manifest.webmanifest' }]
+    }
+  },
   routeRules: {
     '/**': { headers: {
       'X-Content-Type-Options': 'nosniff',
