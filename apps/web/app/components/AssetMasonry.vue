@@ -45,10 +45,12 @@ const loadedImages = reactive(new Set<string>())
 const selectedIdSet = computed(() => new Set(props.selectedIds))
 const isSelected = (id: string) => selectedIdSet.value.has(id)
 const masonry = ref<HTMLElement | null>(null)
+const layoutReady = ref(false)
 const draggedIndex = ref<number | null>(null)
 const dropIndex = ref<number | null>(null)
 let resizeObserver: ResizeObserver | undefined
 let measureFrame = 0
+let revealFrame = 0
 const assetLink = (id: string): RouteLocationRaw => ({ path: '/library', query: { ...route.query, asset: id } })
 const openAsset = (event: MouseEvent, id: string) => {
   if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
@@ -92,18 +94,24 @@ const dropAsset = (event: DragEvent, index: number) => {
 }
 const measureCards = () => {
   cancelAnimationFrame(measureFrame)
+  cancelAnimationFrame(revealFrame)
   measureFrame = requestAnimationFrame(() => {
     const root = masonry.value
     if (!root) return
     if (props.rowFlow) {
       root.classList.remove('is-masonry')
+      revealFrame = requestAnimationFrame(() => { layoutReady.value = true })
       return
     }
+    const styles = getComputedStyle(root)
+    const rowHeight = Number.parseFloat(styles.gridAutoRows) || 1
+    const rowGap = Number.parseFloat(styles.rowGap) || 0
     for (const card of root.querySelectorAll<HTMLElement>('.asset-card')) {
-      const rows = String(Math.ceil(card.getBoundingClientRect().height))
+      const rows = String(Math.ceil((card.getBoundingClientRect().height + rowGap) / (rowHeight + rowGap)))
       if (card.style.getPropertyValue('--card-rows') !== rows) card.style.setProperty('--card-rows', rows)
     }
     root.classList.add('is-masonry')
+    revealFrame = requestAnimationFrame(() => { layoutReady.value = true })
   })
 }
 const syncLoadedImages = () => {
@@ -137,18 +145,20 @@ const projectAndTags = (asset: AssetMasonryItem) => {
   return `${asset.projects?.name ?? 'No project'}${tags.length ? ` · ${tags.join(', ')}` : ''}`
 }
 watch(() => [props.assets.map(asset => asset.id).join(','), props.rowFlow], async () => {
+  layoutReady.value = false
   await nextTick()
   observeCards()
 })
 onMounted(observeCards)
 onBeforeUnmount(() => {
   cancelAnimationFrame(measureFrame)
+  cancelAnimationFrame(revealFrame)
   resizeObserver?.disconnect()
 })
 </script>
 
 <template>
-  <section ref="masonry" class="asset-masonry" :class="{ 'cards-hidden': hidden, 'column-layout': layout === 'column', 'stable-columns': stableColumns }" :aria-label="label">
+  <section ref="masonry" class="asset-masonry" :class="{ 'cards-hidden': hidden || !layoutReady, 'column-layout': layout === 'column', 'stable-columns': stableColumns }" :aria-label="label">
     <TransitionGroup name="card-list" :css="animateChanges">
     <article v-for="(asset, index) in assets" :key="asset.id" class="asset-card" :class="{ 'is-selected': isSelected(asset.id), 'is-dragging': draggedIndex === index, 'is-drop-target': dropIndex === index && draggedIndex !== index }" :style="{ '--card-stagger': cardStagger(index) }" :draggable="reorderable" @dragstart="startDrag($event, index)" @dragover="dragOver($event, index)" @drop="dropAsset($event, index)" @dragend="finishDrag">
       <div class="preview" :class="{ 'is-loading': !loadedImages.has(asset.id) }" :style="{ aspectRatio: `${asset.width} / ${asset.height}` }">
@@ -194,7 +204,7 @@ onBeforeUnmount(() => {
 @media(max-width:1680px){.asset-masonry{grid-template-columns:repeat(5,minmax(0,1fr))}.asset-masonry.stable-columns .asset-card:nth-child(n){grid-column:auto}.asset-masonry.stable-columns .asset-card:nth-child(5n + 1){grid-column:1}.asset-masonry.stable-columns .asset-card:nth-child(5n + 2){grid-column:2}.asset-masonry.stable-columns .asset-card:nth-child(5n + 3){grid-column:3}.asset-masonry.stable-columns .asset-card:nth-child(5n + 4){grid-column:4}.asset-masonry.stable-columns .asset-card:nth-child(5n){grid-column:5}}
 @media(max-width:1280px){.asset-masonry{grid-template-columns:repeat(4,minmax(0,1fr))}.asset-masonry.stable-columns .asset-card:nth-child(n){grid-column:auto}.asset-masonry.stable-columns .asset-card:nth-child(4n + 1){grid-column:1}.asset-masonry.stable-columns .asset-card:nth-child(4n + 2){grid-column:2}.asset-masonry.stable-columns .asset-card:nth-child(4n + 3){grid-column:3}.asset-masonry.stable-columns .asset-card:nth-child(4n){grid-column:4}}
 @media(max-width:900px){.asset-masonry{grid-template-columns:repeat(3,minmax(0,1fr))}.asset-masonry.stable-columns .asset-card:nth-child(n){grid-column:auto}.asset-masonry.stable-columns .asset-card:nth-child(3n + 1){grid-column:1}.asset-masonry.stable-columns .asset-card:nth-child(3n + 2){grid-column:2}.asset-masonry.stable-columns .asset-card:nth-child(3n){grid-column:3}}
-@media(max-width:520px){.asset-masonry{width:calc(100% + var(--space));margin-inline:calc(var(--space)/-2);grid-template-columns:repeat(2,minmax(0,1fr));column-gap:calc(var(--space)/2)}.asset-card{padding-bottom:calc(var(--space)/2)}.preview{border-radius:var(--radius-mobile);clip-path:inset(0 round var(--radius-mobile))}.asset-masonry.stable-columns .asset-card:nth-child(n){grid-column:auto}.asset-masonry.stable-columns .asset-card:nth-child(odd){grid-column:1}.asset-masonry.stable-columns .asset-card:nth-child(even){grid-column:2}.card-body{padding-top:calc(var(--space)/3);font-size:14px}}
+@media(max-width:520px){.asset-masonry{width:calc(100% + var(--space));margin-inline:calc(var(--space)/-2);grid-template-columns:repeat(2,minmax(0,1fr));column-gap:calc(var(--space)/2)}.asset-masonry,.asset-masonry.is-masonry{row-gap:calc(var(--space)/3)}.asset-card{padding-bottom:0}.preview{border-radius:var(--radius-mobile);clip-path:inset(0 round var(--radius-mobile))}.asset-masonry.stable-columns .asset-card:nth-child(n){grid-column:auto}.asset-masonry.stable-columns .asset-card:nth-child(odd){grid-column:1}.asset-masonry.stable-columns .asset-card:nth-child(even){grid-column:2}.card-body{padding-top:calc(var(--space)/3);padding-left:calc(var(--space)/4);font-size:14px}}
 @media(hover:none),(pointer:coarse){.selection-control.selection-control{opacity:1}.figma-button{display:none}.preview-actions{opacity:1;transform:none;pointer-events:auto}.preview-link,.preview-link:hover,.preview-link:active,.preview-link:focus{opacity:1}.preview img{filter:none}}
 @media(prefers-reduced-motion:reduce){.asset-card,.card-list-enter-active,.card-list-leave-active{transition:none;animation:none}.asset-masonry.cards-hidden .asset-card{opacity:1;transform:none}.preview img{transition:none}.figma-button{transition-duration:.01ms;transform:translate(-50%,0)}.preview-actions{transition:none}.figma-button:active{scale:1}}
 </style>
