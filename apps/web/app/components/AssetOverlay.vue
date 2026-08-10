@@ -1,5 +1,5 @@
 <script setup lang="ts">
-const props = withDefaults(defineProps<{ assetId: string; assetIds?: string[]; previewUrl?: string }>(), { assetIds: () => [], previewUrl: '' })
+const props = withDefaults(defineProps<{ assetId: string; assetIds?: string[]; previewUrl?: string; previewUrls?: Record<string, string> }>(), { assetIds: () => [], previewUrl: '', previewUrls: () => ({}) })
 const emit = defineEmits<{ close: []; deleted: [id: string]; navigate: [id: string] }>()
 interface AssetDetail { id: string; uploaded_by: string; title: string; description: string | null; width: number; height: number; file_size: number; mime_type: string; status: string; version: number; created_at: string; updated_at: string; figma_url: string; language: string | null; content_type: string | null; project_id: string | null; campaign_id: string | null; projects: { name: string } | null; campaigns: { name: string } | null; asset_tags: Array<{ tags: { id: string; name: string } | null }>; allowed_users: { figma_handle: string | null } | null; versions: Array<{ id: string; version: number; width: number; height: number; file_size: number; created_at: string }> }
 interface SessionResponse { data: { authenticated: boolean; user?: { id: string; role: string } } }
@@ -39,6 +39,8 @@ const eligibleBoards = computed(() => (boardData.value?.data.collections ?? []).
 const assetIndex = computed(() => props.assetIds.indexOf(props.assetId))
 const previousAssetId = computed(() => assetIndex.value > 0 ? props.assetIds[assetIndex.value - 1] : undefined)
 const nextAssetId = computed(() => assetIndex.value >= 0 && assetIndex.value < props.assetIds.length - 1 ? props.assetIds[assetIndex.value + 1] : undefined)
+const previousPreviewUrl = computed(() => previousAssetId.value ? props.previewUrls[previousAssetId.value] : undefined)
+const nextPreviewUrl = computed(() => nextAssetId.value ? props.previewUrls[nextAssetId.value] : undefined)
 const boardId = ref('')
 const editing = ref(false); const title = ref(''); const description = ref(''); const projectId = ref(''); const campaignId = ref(''); const tagsText = ref(''); const language = ref(''); const contentType = ref(''); const actionError = ref(''); const actionMessage = ref(''); const downloading = ref(false); const saving = ref(false)
 const isClosing = ref(false)
@@ -49,6 +51,8 @@ const gestureAxis = ref<'x' | 'y' | ''>('')
 let gesturePointerId: number | undefined
 let gestureStartX = 0
 let gestureStartY = 0
+let swipeNavigationTarget = ''
+let swipeTimer: ReturnType<typeof setTimeout> | undefined
 let previousBodyOverflow = ''
 let previousRootOverflow = ''
 let scrollLocked = false
@@ -83,7 +87,7 @@ onMounted(() => {
   dialog.value?.showModal()
   if (!props.previewUrl || !window.matchMedia('(max-width: 760px)').matches) void loadFullPreview()
 })
-onBeforeUnmount(() => { clearTimeout(closeTimer); unlockPageScroll() })
+onBeforeUnmount(() => { clearTimeout(closeTimer); clearTimeout(swipeTimer); unlockPageScroll() })
 const finishClose = () => {
   unlockPageScroll()
   dialog.value?.close()
@@ -138,8 +142,9 @@ const handleAssetNavigationKey = (event: KeyboardEvent) => {
   if (event.key === 'ArrowRight') handleArrowNavigation(event, 1)
 }
 const gestureStyle = computed(() => ({
-  transform: `translate3d(${gestureX.value}px, ${Math.max(0, gestureY.value)}px, 0)`,
-  opacity: String(Math.max(.42, 1 - Math.max(0, gestureY.value) / 320))
+  transform: `translate3d(0, ${Math.max(0, gestureY.value)}px, 0)`,
+  opacity: String(Math.max(.42, 1 - Math.max(0, gestureY.value) / 320)),
+  '--swipe-x': `${gestureX.value}px`
 }))
 const startGesture = (event: PointerEvent) => {
   if (event.pointerType !== 'touch' || editing.value) return
@@ -156,7 +161,8 @@ const moveGesture = (event: PointerEvent) => {
   const y = event.clientY - gestureStartY
   if (!gestureAxis.value && Math.hypot(x, y) > 8) gestureAxis.value = Math.abs(x) > Math.abs(y) ? 'x' : 'y'
   if (gestureAxis.value === 'x') {
-    gestureX.value = x
+    const hasDestination = x < 0 ? nextAssetId.value : previousAssetId.value
+    gestureX.value = hasDestination ? x : x * .18
     gestureY.value = 0
   } else if (gestureAxis.value === 'y') {
     gestureX.value = 0
@@ -176,11 +182,28 @@ const finishGesture = (event: PointerEvent) => {
   const axis = gestureAxis.value
   const x = gestureX.value
   const y = gestureY.value
-  resetGesture()
+  gesturePointerId = undefined
   if (axis === 'y' && y > 90) return close()
-  if (axis === 'y' && y < -56) return revealDetails()
-  if (axis === 'x' && Math.abs(x) > 56) navigateAsset(x < 0 ? nextAssetId.value : previousAssetId.value)
+  if (axis === 'y' && y < -56) { resetGesture(); return revealDetails() }
+  const destination = x < 0 ? nextAssetId.value : previousAssetId.value
+  if (axis === 'x' && Math.abs(x) > 56 && destination) {
+    gestureActive.value = false
+    gestureX.value = x < 0 ? -window.innerWidth : window.innerWidth
+    swipeNavigationTarget = destination
+    swipeTimer = setTimeout(() => navigateAsset(destination), 220)
+    return
+  }
+  resetGesture()
 }
+watch(() => props.assetId, id => {
+  if (!swipeNavigationTarget || id !== swipeNavigationTarget) return
+  swipeNavigationTarget = ''
+  gestureActive.value = true
+  gestureAxis.value = ''
+  gestureX.value = 0
+  gestureY.value = 0
+  nextTick(() => requestAnimationFrame(() => { gestureActive.value = false }))
+})
 </script>
 
 <template>
@@ -195,7 +218,7 @@ class="close-button" type="button" aria-label="Close asset details" autofocus
             <path d="M5 5l14 14M19 5 5 19" />
           </svg></button></div>
       <main v-if="status === 'pending' && !asset" class="overlay-content overlay-loading" role="status" aria-label="Loading asset details">
-        <section class="asset-visual" :class="{ 'skeleton-visual': !resolvedPreviewUrl }" aria-hidden="true"><img v-if="resolvedPreviewUrl" :src="resolvedPreviewUrl" alt=""></section>
+        <section class="asset-visual" :class="{ 'skeleton-visual': !resolvedPreviewUrl }" aria-hidden="true"><img v-if="resolvedPreviewUrl" class="current-preview" :src="resolvedPreviewUrl" alt=""></section>
         <aside class="skeleton-panel" aria-hidden="true">
           <span class="skeleton-line skeleton-status" />
           <span class="skeleton-line skeleton-title" />
@@ -209,7 +232,7 @@ class="close-button" type="button" aria-label="Close asset details" autofocus
       <div v-else-if="error" class="overlay-state" role="alert"><strong>Unable to load this asset.</strong><button
           @click="refresh()">Try again</button></div>
       <main v-else-if="asset" ref="overlayContent" class="overlay-content">
-        <section class="asset-visual" :class="{ 'skeleton-visual': !resolvedPreviewUrl, 'is-dragging': gestureActive }" :style="gestureStyle" aria-describedby="mobile-gesture-hint" @pointerdown="startGesture" @pointermove="moveGesture" @pointerup="finishGesture" @pointercancel="resetGesture"><span id="mobile-gesture-hint" class="sr-only">Swipe left or right to browse assets. Pull down to close.</span><button class="pull-handle" type="button" aria-label="Close asset details" @pointerdown.stop @click="close" /><img v-if="resolvedPreviewUrl" :src="resolvedPreviewUrl" :alt="`Preview of ${asset.title}`" draggable="false"><button class="details-hint" type="button" aria-label="Show asset details" @pointerdown.stop @click="revealDetails"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg><span>Details</span></button><button v-if="previousAssetId && !editing" class="asset-navigation previous" type="button" aria-label="Previous asset" @click="navigateAsset(previousAssetId)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7" /></svg></button><button v-if="nextAssetId && !editing" class="asset-navigation next" type="button" aria-label="Next asset" @click="navigateAsset(nextAssetId)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7" /></svg></button></section>
+        <section class="asset-visual" :class="{ 'skeleton-visual': !resolvedPreviewUrl, 'is-dragging': gestureActive }" :style="gestureStyle" aria-describedby="mobile-gesture-hint" @pointerdown="startGesture" @pointermove="moveGesture" @pointerup="finishGesture" @pointercancel="resetGesture"><span id="mobile-gesture-hint" class="sr-only">Swipe left or right to browse assets. Pull down to close.</span><button class="pull-handle" type="button" aria-label="Close asset details" @pointerdown.stop @click="close" /><img v-if="previousPreviewUrl" class="swipe-preview previous-preview" :src="previousPreviewUrl" alt="" draggable="false"><img v-if="resolvedPreviewUrl" class="current-preview" :src="resolvedPreviewUrl" :alt="`Preview of ${asset.title}`" draggable="false"><img v-if="nextPreviewUrl" class="swipe-preview next-preview" :src="nextPreviewUrl" alt="" draggable="false"><button class="details-hint" type="button" aria-label="Show asset details" @pointerdown.stop @click="revealDetails"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg><span>Details</span></button><button v-if="previousAssetId && !editing" class="asset-navigation previous" type="button" aria-label="Previous asset" @click="navigateAsset(previousAssetId)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7" /></svg></button><button v-if="nextAssetId && !editing" class="asset-navigation next" type="button" aria-label="Next asset" @click="navigateAsset(nextAssetId)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7" /></svg></button></section>
         <aside>
           <span class="asset-status">{{ asset.status }}</span>
           <form v-if="editing" class="edit-form" @submit.prevent="saveDetails">
@@ -408,6 +431,7 @@ v-if="role === 'admin'"
   height: 100%;
   object-fit: contain
 }
+.swipe-preview { display: none }
 
 .skeleton-visual,
 .skeleton-line,
@@ -706,8 +730,14 @@ li span {
     padding: max(calc(var(--space)*3), env(safe-area-inset-top)) var(--space) max(calc(var(--space)*3), env(safe-area-inset-bottom));
     object-fit: contain;
     pointer-events: none;
-    view-transition-name: asset-preview
+    transition: transform .22s cubic-bezier(.2, 0, 0, 1)
   }
+
+  .asset-visual.is-dragging img { transition-duration: 0s }
+  .asset-visual .current-preview { transform: translate3d(var(--swipe-x), 0, 0);view-transition-name:asset-preview }
+  .asset-visual .swipe-preview { display:block }
+  .asset-visual .previous-preview { transform:translate3d(calc(-100% + var(--swipe-x)),0,0) }
+  .asset-visual .next-preview { transform:translate3d(calc(100% + var(--swipe-x)),0,0) }
 
   .overlay-toolbar {
     position: absolute;

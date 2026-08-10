@@ -140,6 +140,7 @@ const selectedAssetPreviewUrl = computed(() => {
   const selected = displayedAssets.value.find(asset => asset.id === selectedAssetId.value)
   return selected?.preview2xUrl ?? selected?.previewUrl ?? ''
 })
+const assetPreviewUrls = computed(() => Object.fromEntries(displayedAssets.value.map(asset => [asset.id, asset.preview2xUrl ?? asset.previewUrl])))
 const closeAsset = () => router.replace({ path: '/library', query: selectedBoardId.value ? { board: selectedBoardId.value } : {} })
 const navigateAsset = (id: string) => router.replace({ path: '/library', query: { ...route.query, asset: id } })
 const handleAssetDeleted = (id: string) => {
@@ -218,7 +219,7 @@ onBeforeUnmount(() => {
       <AssetMasonry v-else :assets="displayedAssets" :hidden="cardsHidden" :stable-columns="Boolean(selectedBoardId)" :animate-changes="!cardsHidden" interactive />
       <nav v-if="!selectedBoardId && totalPages > 1" class="pagination" aria-label="Pagination"><button :disabled="page === 1" @click="page--">Previous</button><span>Page {{ page }} of {{ totalPages }}</span><button :disabled="page === totalPages" @click="page++">Next</button></nav>
     </main>
-    <AssetOverlay v-if="selectedAssetId" :asset-id="selectedAssetId" :asset-ids="displayedAssets.map(asset => asset.id)" :preview-url="selectedAssetPreviewUrl" @close="closeAsset" @deleted="handleAssetDeleted" @navigate="navigateAsset" />
+    <AssetOverlay v-if="selectedAssetId" :asset-id="selectedAssetId" :asset-ids="displayedAssets.map(asset => asset.id)" :preview-url="selectedAssetPreviewUrl" :preview-urls="assetPreviewUrls" @close="closeAsset" @deleted="handleAssetDeleted" @navigate="navigateAsset" />
   </div>
 </template>
 
