@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { MoreH, X } from 'reicon-vue'
+
 const props = withDefaults(defineProps<{ assetId: string; assetIds?: string[]; previewUrl?: string; previewUrls?: Record<string, string> }>(), { assetIds: () => [], previewUrl: '', previewUrls: () => ({}) })
 const emit = defineEmits<{ close: []; deleted: [id: string]; navigate: [id: string] }>()
 interface AssetDetail { id: string; uploaded_by: string; title: string; description: string | null; width: number; height: number; file_size: number; mime_type: string; status: string; version: number; created_at: string; updated_at: string; figma_url: string; language: string | null; content_type: string | null; project_id: string | null; campaign_id: string | null; projects: { name: string } | null; campaigns: { name: string } | null; asset_tags: Array<{ tags: { id: string; name: string } | null }>; allowed_users: { figma_handle: string | null } | null; versions: Array<{ id: string; version: number; width: number; height: number; file_size: number; created_at: string }> }
@@ -243,9 +245,7 @@ ref="dialog" class="asset-dialog" :class="{ 'is-closing': isClosing }"
       <div class="overlay-toolbar"><span id="asset-overlay-title">Asset details</span><span v-if="asset" class="muted">Version {{ asset.version
           }}</span><button
 class="close-button" type="button" aria-label="Close asset details" autofocus
-          @click="close"><svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M5 5l14 14M19 5 5 19" />
-          </svg></button></div>
+          @click="close"><X :size="22" aria-hidden="true" /></button></div>
       <main v-if="status === 'pending' && !asset" class="overlay-content overlay-loading" role="status" aria-label="Loading asset details">
         <section class="asset-visual" :class="{ 'skeleton-visual': !resolvedPreviewUrl }" aria-hidden="true"><img v-if="resolvedPreviewUrl" class="current-preview" :src="resolvedPreviewUrl" alt=""></section>
         <aside class="skeleton-panel" aria-hidden="true">
@@ -281,20 +281,8 @@ class="close-button" type="button" aria-label="Close asset details" autofocus
             <h1>{{ asset.title }}</h1>
             <p v-if="asset.description" class="description">{{ asset.description }}</p>
           </template>
-          <div v-if="!editing" class="primary-actions"><button :disabled="downloading" @click="download">{{
-            downloading ? 'Preparing…' :'Download'
-              }}</button><a
-class="button button-secondary" :href="asset.figma_url" target="_blank"
-              rel="noopener noreferrer">Open in
-              Figma</a></div>
+          <div v-if="!editing" class="primary-actions"><a class="button" :href="asset.figma_url" target="_blank" rel="noopener noreferrer">Open in Figma</a><details class="asset-more"><summary class="button-secondary" aria-label="More asset actions"><MoreH :size="20" aria-hidden="true" /></summary><div class="asset-more-menu"><button class="button-secondary" type="button" :disabled="downloading" @click="download">{{ downloading ? 'Preparing…' : 'Download' }}</button><button v-if="canEdit" class="button-secondary" type="button" @click="startEditing">Edit details</button><button v-if="canApprove && asset.status !== 'approved'" class="button-secondary" type="button" @click="patchAsset({ status: 'approved' })">Approve</button><button v-if="canEdit && asset.status !== 'archived'" class="button-secondary" type="button" @click="patchAsset({ status: 'archived' })">Archive</button><button v-if="role === 'admin'" class="button-secondary danger-button" type="button" @click="remove">Delete asset</button></div></details></div>
           <div v-if="!editing && asset.status==='approved' && eligibleBoards.length" class="board-action"><label><span>Add to board</span><select v-model="boardId"><option value="">Choose a static board</option><option v-for="board in eligibleBoards" :key="board.id" :value="board.id">{{ board.title }}</option></select></label><button class="button-secondary" type="button" :disabled="!boardId" @click="addToBoard">Add</button></div>
-          <div v-if="!editing && canEdit" class="manage-actions"><button class="button-secondary" type="button" @click="startEditing">Edit details</button><button
-v-if="canApprove && asset.status !== 'approved'" class="button-secondary" type="button"
-              @click="patchAsset({ status: 'approved' })">Approve</button><button
-v-if="asset.status !== 'archived'"
-              class="button-secondary" type="button" @click="patchAsset({ status: 'archived' })">Archive</button><button
-v-if="role === 'admin'"
-              class="button-secondary danger-button" type="button" @click="remove">Delete asset</button></div>
           <p v-if="actionError" class="error" role="alert">{{ actionError }}</p>
           <p v-if="actionMessage" class="success" role="status">{{ actionMessage }}</p>
           <dl v-if="!editing">
@@ -599,8 +587,7 @@ h1 {
 }
 
 .primary-actions,
-.action-row,
-.manage-actions {
+.action-row {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -616,6 +603,44 @@ h1 {
   display: inline-flex;
   align-items: center;
   justify-content: center
+}
+
+.asset-more {
+  position: relative
+}
+
+.asset-more summary {
+  width: var(--control-height);
+  height: var(--control-height);
+  min-height: var(--control-height);
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  cursor: pointer
+}
+
+.asset-more summary::-webkit-details-marker { display: none }
+
+.asset-more-menu {
+  position: absolute;
+  z-index: 5;
+  right: 0;
+  bottom: calc(100% + 8px);
+  min-width: max-content;
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  border-radius: calc(var(--radius)*2);
+  background: var(--color-bg);
+  box-shadow: 0 12px 40px rgb(0 0 0/.18)
+}
+
+.asset-more-menu .button-secondary.button-secondary {
+  width: 100%;
+  margin: 0;
+  justify-content: flex-start
 }
 
 .danger-button {
