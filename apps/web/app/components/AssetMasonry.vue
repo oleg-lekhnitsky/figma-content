@@ -46,7 +46,9 @@ const selectedIdSet = computed(() => new Set(props.selectedIds))
 const isSelected = (id: string) => selectedIdSet.value.has(id)
 const masonry = ref<HTMLElement | null>(null)
 const layoutReady = ref(false)
-const draggedIndex = ref<number | null>(null)
+const renderedAssets = shallowRef<T[]>([...props.assets])
+const draggedId = ref<string | null>(null)
+const draggedOriginalIndex = ref<number | null>(null)
 const dropIndex = ref<number | null>(null)
 let resizeObserver: ResizeObserver | undefined
 let measureFrame = 0
@@ -82,27 +84,41 @@ const openAsset = (event: MouseEvent, id: string) => {
 const cardStagger = (index: number) => `${Math.min(index * 18, 144)}ms`
 const startDrag = (event: DragEvent, index: number) => {
   if (!props.reorderable || !event.dataTransfer) return
-  draggedIndex.value = index
+  const asset = renderedAssets.value[index]
+  if (!asset) return
+  draggedId.value = asset.id
+  draggedOriginalIndex.value = props.assets.findIndex(item => item.id === asset.id)
   dropIndex.value = index
   event.dataTransfer.effectAllowed = 'move'
-  event.dataTransfer.setData('text/plain', props.assets[index]?.id ?? '')
+  event.dataTransfer.setData('text/plain', asset.id)
 }
 const dragOver = (event: DragEvent, index: number) => {
-  if (draggedIndex.value === null) return
+  if (!draggedId.value) return
   event.preventDefault()
   if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
+  const fromIndex = renderedAssets.value.findIndex(asset => asset.id === draggedId.value)
+  if (fromIndex < 0 || fromIndex === index) return
+  const next = [...renderedAssets.value]
+  const [moved] = next.splice(fromIndex, 1)
+  if (!moved) return
+  next.splice(index, 0, moved)
+  renderedAssets.value = next
   dropIndex.value = index
+  nextTick(measureCards)
 }
-const finishDrag = () => {
-  draggedIndex.value = null
+const finishDrag = (restore = true) => {
+  if (restore) renderedAssets.value = [...props.assets]
+  draggedId.value = null
+  draggedOriginalIndex.value = null
   dropIndex.value = null
 }
-const dropAsset = (event: DragEvent, index: number) => {
-  if (draggedIndex.value === null) return
+const dropAsset = (event: DragEvent) => {
+  if (!draggedId.value || draggedOriginalIndex.value === null) return
   event.preventDefault()
-  const fromIndex = draggedIndex.value
-  finishDrag()
-  if (fromIndex !== index) emit('reorder', fromIndex, index)
+  const fromIndex = draggedOriginalIndex.value
+  const toIndex = renderedAssets.value.findIndex(asset => asset.id === draggedId.value)
+  finishDrag(false)
+  if (toIndex >= 0 && fromIndex !== toIndex) emit('reorder', fromIndex, toIndex)
 }
 const measureCards = () => {
   cancelAnimationFrame(measureFrame)
@@ -157,11 +173,14 @@ const projectAndTags = (asset: AssetMasonryItem) => {
   return `${asset.projects?.name ?? 'No project'}${tags.length ? ` · ${tags.join(', ')}` : ''}`
 }
 watch(() => [props.assets.map(asset => asset.id).join(','), props.rowFlow], async () => {
+  if (!draggedId.value) renderedAssets.value = [...props.assets]
   layoutReady.value = false
   await nextTick()
   observeCards()
 })
-onMounted(observeCards)
+onMounted(() => {
+  observeCards()
+})
 onBeforeUnmount(() => {
   cancelAnimationFrame(measureFrame)
   cancelAnimationFrame(revealFrame)
@@ -173,7 +192,7 @@ onBeforeUnmount(() => {
 <template>
   <section ref="masonry" class="asset-masonry" :class="{ 'cards-hidden': hidden || !layoutReady, 'column-layout': layout === 'column', 'stable-columns': stableColumns }" :aria-label="label">
     <TransitionGroup name="card-list" :css="animateChanges">
-    <article v-for="(asset, index) in assets" :key="asset.id" class="asset-card" :class="{ 'is-selected': isSelected(asset.id), 'is-dragging': draggedIndex === index, 'is-drop-target': dropIndex === index && draggedIndex !== index }" :style="{ '--card-stagger': cardStagger(index) }" :draggable="reorderable" @dragstart="startDrag($event, index)" @dragover="dragOver($event, index)" @drop="dropAsset($event, index)" @dragend="finishDrag">
+    <article v-for="(asset, index) in renderedAssets" :key="asset.id" class="asset-card" :class="{ 'is-selected': isSelected(asset.id), 'is-dragging': draggedId === asset.id, 'is-drop-target': dropIndex === index && draggedId !== asset.id }" :style="{ '--card-stagger': cardStagger(index) }" :draggable="reorderable" @dragstart="startDrag($event, index)" @dragover="dragOver($event, index)" @drop="dropAsset" @dragend="finishDrag()">
       <div class="preview" :class="{ 'is-loading': !loadedImages.has(asset.id) }" :style="{ aspectRatio: `${asset.width} / ${asset.height}` }">
         <NuxtLink v-if="interactive" class="preview-link" :to="assetLink(asset.id)" :aria-label="`View ${asset.title}`" @click="openAsset($event, asset.id)">
           <img :class="{ 'is-loaded': loadedImages.has(asset.id) }" :data-asset-id="asset.id" :src="asset.previewUrl" :srcset="asset.preview2xUrl ? `${asset.previewUrl} 1x, ${asset.preview2xUrl} 2x` : undefined" :width="asset.width" :height="asset.height" :alt="`Preview of ${asset.title}`" :loading="index < 6 ? 'eager' : 'lazy'" :fetchpriority="index < 2 ? 'high' : 'auto'" decoding="async" @load="markImageLoaded(asset.id)">
@@ -212,6 +231,7 @@ onBeforeUnmount(() => {
 @media(hover:hover) and (pointer:fine){.asset-card:hover .selection-control,.asset-card:focus-within .selection-control{opacity:1}.asset-card:hover .figma-button,.asset-card:focus-within .figma-button{opacity:1;transform:translate(-50%,0);pointer-events:auto}.asset-card:hover .preview-actions,.asset-card:focus-within .preview-actions{opacity:1;transform:translateY(0);pointer-events:auto}}
 .asset-masonry.cards-hidden .asset-card{opacity:0;transform:translateY(16px);transition-delay:var(--card-stagger,0ms)}
 .card-list-enter-active,.card-list-leave-active{transition-property:opacity,transform;transition-duration:.18s,.22s;transition-delay:0ms;transition-timing-function:ease-out,cubic-bezier(.2,0,0,1)}.card-list-enter-active{animation:none}.card-list-enter-from{opacity:0;transform:translateY(12px)}.card-list-leave-to{opacity:0;transform:translateY(-4px)}
+.card-list-move{transition:transform .2s cubic-bezier(.2,0,0,1)}
 @media(max-width:2200px){.asset-masonry{grid-template-columns:repeat(6,minmax(0,1fr))}.asset-masonry.stable-columns .asset-card:nth-child(n){grid-column:auto}.asset-masonry.stable-columns .asset-card:nth-child(6n + 1){grid-column:1}.asset-masonry.stable-columns .asset-card:nth-child(6n + 2){grid-column:2}.asset-masonry.stable-columns .asset-card:nth-child(6n + 3){grid-column:3}.asset-masonry.stable-columns .asset-card:nth-child(6n + 4){grid-column:4}.asset-masonry.stable-columns .asset-card:nth-child(6n + 5){grid-column:5}.asset-masonry.stable-columns .asset-card:nth-child(6n){grid-column:6}}
 @media(max-width:1680px){.asset-masonry{grid-template-columns:repeat(5,minmax(0,1fr))}.asset-masonry.stable-columns .asset-card:nth-child(n){grid-column:auto}.asset-masonry.stable-columns .asset-card:nth-child(5n + 1){grid-column:1}.asset-masonry.stable-columns .asset-card:nth-child(5n + 2){grid-column:2}.asset-masonry.stable-columns .asset-card:nth-child(5n + 3){grid-column:3}.asset-masonry.stable-columns .asset-card:nth-child(5n + 4){grid-column:4}.asset-masonry.stable-columns .asset-card:nth-child(5n){grid-column:5}}
 @media(max-width:1280px){.asset-masonry{grid-template-columns:repeat(4,minmax(0,1fr))}.asset-masonry.stable-columns .asset-card:nth-child(n){grid-column:auto}.asset-masonry.stable-columns .asset-card:nth-child(4n + 1){grid-column:1}.asset-masonry.stable-columns .asset-card:nth-child(4n + 2){grid-column:2}.asset-masonry.stable-columns .asset-card:nth-child(4n + 3){grid-column:3}.asset-masonry.stable-columns .asset-card:nth-child(4n){grid-column:4}}

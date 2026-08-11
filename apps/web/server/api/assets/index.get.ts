@@ -15,6 +15,14 @@ export default defineEventHandler(async (event) => {
     title: ['title', true], dimensions: ['width', false]
   } as const
   const standardSort = q.sort === 'submitter' ? null : ordering[q.sort]
+  let taggedAssetIds: string[] | null = null
+  const tagIds = q.tagIds?.length ? q.tagIds : q.tagId ? [q.tagId] : []
+  if (tagIds.length) {
+    const { data: taggedAssets, error: taggedAssetsError } = await useSupabaseAdmin().from('asset_tags')
+      .select('asset_id').eq('organization_id', session.user.organization_id).in('tag_id', tagIds).limit(1000)
+    if (taggedAssetsError) throw databaseError('filter assets by tag', taggedAssetsError)
+    taggedAssetIds = taggedAssets.map((item: { asset_id: string }) => item.asset_id)
+  }
   let query = useSupabaseAdmin().from('assets')
     .select('id,title,description,thumbnail_path,thumbnail_2x_path,image_path,width,height,status,figma_url,created_at,updated_at,language,content_type,projects(name),asset_tags(tags(id,name,slug)),allowed_users!assets_uploaded_by_fkey(figma_handle,avatar_url)', { count: 'exact' })
     .eq('organization_id', session.user.organization_id).neq('status', 'archived')
@@ -22,6 +30,8 @@ export default defineEventHandler(async (event) => {
   if (q.mine) query = query.eq('uploaded_by', session.user.id)
   if (q.status) query = query.eq('status', q.status)
   if (q.projectId) query = query.eq('project_id', q.projectId)
+  if (q.projectIds?.length) query = query.in('project_id', q.projectIds)
+  if (taggedAssetIds) query = query.in('id', taggedAssetIds.length ? taggedAssetIds : ['00000000-0000-0000-0000-000000000000'])
   if (q.dateFrom) query = query.gte('created_at', q.dateFrom)
   if (q.dateTo) query = query.lte('created_at', q.dateTo)
   if (q.language) query = query.eq('language', q.language)

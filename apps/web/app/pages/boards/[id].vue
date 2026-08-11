@@ -8,7 +8,7 @@ type WorkspaceRole = 'viewer' | 'contributor' | 'editor' | 'admin'
 interface ContactLink { label:string; url:string }
 interface Collection { id:string; slug:string; title:string; purpose:'showcase'|'review'|'portfolio'|'case'; review_month:string|null; submission_deadline:string|null; portfolio_kind:'main'|'client'|null; portfolio_client:string|null; introduction:string|null; contact_heading:string|null; contact_links:ContactLink[]|null; mode:'dynamic'|'static'; layout:BoardLayout; expires_at:string|null; publication_enabled:boolean; content_strategy:'dynamic'|'snapshot'|'manual'; updated_at:string }
 interface Member { user_id:string; role:BoardRole; allowed_users:{email:string|null;figma_handle:string|null;avatar_url:string|null}|null }
-interface Filters { search:string; projectId:string|null; tagId:string|null; uploadedBy:string|null; dateFrom:string|null; dateTo:string|null }
+interface Filters { search:string; projectId:string|null; tagId:string|null; projectIds:string[]; tagIds:string[]; uploadedBy:string|null; dateFrom:string|null; dateTo:string|null }
 interface Asset { id:string; title:string; description:string|null; previewUrl:string; preview2xUrl?:string|null; width:number; height:number; status:'draft'|'approved'; uploaded_by:string; projects?:{name:string}|null; allowed_users?:{email:string|null;figma_handle:string|null;avatar_url:string|null}|null; submission?:{review_status:'ready'|'reviewed';created_at:string;reviewed_at:string|null}|null }
 interface Option { id:string; name:string }
 interface PortfolioCase { id:string; title:string; itemCount:number; previewAssets:Array<{id:string;previewUrl:string}> }
@@ -59,12 +59,12 @@ const portfolioCases = ref<PortfolioCase[]>([])
 const selectedCaseIds = ref<string[]>([])
 const filters = reactive({
   search: collection.filters.search,
-  projectId: collection.filters.projectId ?? '',
-  tagId: collection.filters.tagId ?? '',
+  projectIds: collection.filters.projectIds.length ? [...collection.filters.projectIds] : collection.filters.projectId ? [collection.filters.projectId] : [],
+  tagIds: collection.filters.tagIds.length ? [...collection.filters.tagIds] : collection.filters.tagId ? [collection.filters.tagId] : [],
   dateFrom: collection.filters.dateFrom?.slice(0,10) ?? '',
   dateTo: collection.filters.dateTo?.slice(0,10) ?? ''
 })
-const activeFilterCount = computed(() => [filters.search,filters.projectId,filters.tagId,filters.dateFrom,filters.dateTo].filter(Boolean).length)
+const activeFilterCount = computed(() => [filters.search,filters.projectIds.length,filters.tagIds.length,filters.dateFrom,filters.dateTo].filter(Boolean).length)
 let filterSaveTimer: ReturnType<typeof setTimeout> | undefined
 
 const publicUrl = computed(() => `/s/${collection.slug}`)
@@ -170,7 +170,7 @@ const saveFilters = async () => {
   contentBusy.value=true; feedback.text=''; feedback.error=false
   try {
     await apiFetch(`/api/shares/${id}`,{method:'PATCH',body:{action:'settings',filters:{
-      search:filters.search,projectId:filters.projectId||null,tagId:filters.tagId||null,
+      search:filters.search,projectId:null,tagId:null,projectIds:filters.projectIds,tagIds:filters.tagIds,
       uploadedBy:collection.filters.uploadedBy,dateFrom:isoDate(filters.dateFrom),dateTo:isoDate(filters.dateTo,true)
     }}})
     await loadContent()
@@ -178,7 +178,7 @@ const saveFilters = async () => {
   } catch { feedback.text='Unable to save board filters.'; feedback.error=true }
   finally { contentBusy.value=false }
 }
-watch(() => [filters.search,filters.projectId,filters.tagId,filters.dateFrom,filters.dateTo], () => {
+watch(() => [filters.search,filters.projectIds.join(','),filters.tagIds.join(','),filters.dateFrom,filters.dateTo], () => {
   clearTimeout(filterSaveTimer)
   filterSaveTimer=setTimeout(() => { void saveFilters() },450)
 })
@@ -359,7 +359,7 @@ const deleteBoard = async () => {
         <div><p class="section-label">Content</p><h2 id="content-title">{{ collection.purpose === 'case' ? 'Arrange case work' : collection.mode==='dynamic' ? 'Choose what appears' : 'Manage snapshot' }}</h2></div>
         <div class="content-settings">
           <p class="muted content-explanation">{{ collection.mode==='dynamic' ? 'Approved items matching these filters appear automatically. Drag to arrange them; newly matching items appear first.' : collection.content_strategy==='manual' ? 'This board uses a manual selection. Rebuilding from filters will replace it.' : 'This frozen snapshot was generated from the saved filters. Adding or removing one item switches it to manual selection.' }}</p>
-          <SelectionPanel v-if="canEdit" label="Board asset filters" :wide="filtersExpanded" :bare="!filtersExpanded"><Transition name="filter-controls"><form v-if="filtersExpanded" class="board-filters" aria-label="Filter board assets" @submit.prevent><input v-model="filters.search" type="search" aria-label="Search assets" placeholder="Search"><select v-model="filters.projectId" aria-label="Filter by project"><option value="">Any project</option><option v-for="project in projects" :key="project.id" :value="project.id">{{ project.name }}</option></select><select v-model="filters.tagId" aria-label="Filter by tag"><option value="">Any tag</option><option v-for="tag in tags" :key="tag.id" :value="tag.id">{{ tag.name }}</option></select><label class="date-field"><span>From</span><input v-model="filters.dateFrom" type="date" :max="filters.dateTo||undefined"></label><label class="date-field"><span>To</span><input v-model="filters.dateTo" type="date" :min="filters.dateFrom||undefined"></label></form></Transition><button class="filter-panel-toggle" :class="{ 'is-expanded': filtersExpanded }" type="button" :aria-label="filtersExpanded ? 'Hide filters' : 'Show filters'" :aria-expanded="filtersExpanded" @click="filtersExpanded=!filtersExpanded"><svg v-if="filtersExpanded" aria-hidden="true" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></svg><span v-if="!filtersExpanded">Filters</span><span v-if="!filtersExpanded&&activeFilterCount" class="filter-count">{{ activeFilterCount }}</span></button></SelectionPanel>
+          <SelectionPanel v-if="canEdit" label="Board asset filters" :wide="filtersExpanded" :bare="!filtersExpanded"><Transition name="filter-controls"><AssetFilterControls v-if="filtersExpanded" v-model:search="filters.search" v-model:project-ids="filters.projectIds" v-model:tag-ids="filters.tagIds" v-model:date-from="filters.dateFrom" v-model:date-to="filters.dateTo" class="board-filters" :projects="projects" :tags="tags" show-search /></Transition><button class="filter-panel-toggle" :class="{ 'is-expanded': filtersExpanded }" type="button" :aria-label="filtersExpanded ? 'Hide filters' : 'Show filters'" :aria-expanded="filtersExpanded" @click="filtersExpanded=!filtersExpanded"><svg v-if="filtersExpanded" aria-hidden="true" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></svg><span v-if="!filtersExpanded">Filters</span><span v-if="!filtersExpanded&&activeFilterCount" class="filter-count">{{ activeFilterCount }}</span></button></SelectionPanel>
           <div class="content-heading"><strong>{{ boardAssets.length }} {{ boardAssets.length===1 ? 'item' : 'items' }} on this board</strong><button v-if="collection.mode==='static'&&canEdit" class="button-secondary" type="button" :disabled="busy" @click="refreshSnapshot">Replace with filter snapshot</button></div>
           <AssetMasonry v-if="boardAssets.length" :assets="boardAssets" label="Board content" heading-tag="h3" :reorderable="canEdit&&!contentBusy" @reorder="reorderBoardAssets"><template #details="{asset}"><p>{{ asset.projects?.name ?? 'No project' }}</p></template><template #previewActions="{asset}"><div v-if="canEdit" class="asset-order-actions" role="group" :aria-label="`Reorder ${asset.title}`"><button class="button-secondary order-button" type="button" :disabled="contentBusy||boardAssetIndex(asset.id)===0" :aria-label="`Move ${asset.title} up`" title="Move up" @click="moveBoardAsset(asset.id,-1)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 14 6-6 6 6" /></svg></button><button class="button-secondary order-button" type="button" :disabled="contentBusy||boardAssetIndex(asset.id)===boardAssets.length-1" :aria-label="`Move ${asset.title} down`" title="Move down" @click="moveBoardAsset(asset.id,1)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 10 6 6 6-6" /></svg></button></div></template><template #actions="{asset}"><button v-if="collection.mode==='static'&&canRemoveAsset(asset)" class="button-secondary" type="button" :disabled="contentBusy" @click="removeAsset(asset)">Remove</button></template></AssetMasonry>
           <p v-else class="muted">No content matches this board yet.</p>
@@ -774,72 +774,6 @@ const deleteBoard = async () => {
   display: flex;
   justify-content: flex-end;
   gap: calc(var(--space) / 2);
-}
-
-.board-filters {
-  width: max-content;
-  min-height: 36px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.board-filters label {
-  position: relative;
-  width: max-content;
-  height: 36px;
-}
-
-.board-filters :is(input, select) {
-  box-sizing: border-box;
-  width: auto;
-  min-width: 0;
-  max-width: 11rem;
-  height: 36px;
-  min-height: 36px;
-  padding: 0 var(--space);
-  border: 0;
-  border-radius: 999px;
-  appearance: none;
-  color: var(--color-fg);
-  background: var(--color-surface);
-  font-size: 13px;
-}
-
-.board-filters > input[type='search'] {
-  padding-inline: var(--space);
-}
-
-.board-filters > input[type='search']::-webkit-search-cancel-button {
-  appearance: none;
-}
-
-.board-filters > select {
-  padding-right: calc(var(--space) * 2);
-  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
-  background-position: calc(100% - var(--space) + 1px) 50%, calc(100% - var(--space) + 6px) 50%;
-  background-size: 5px 5px;
-  background-repeat: no-repeat;
-}
-
-.board-filters :is(input, select):focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
-
-.board-filters .date-field span {
-  position: absolute;
-  z-index: 1;
-  top: 3px;
-  left: var(--space);
-  color: var(--color-muted);
-  font-size: 10px;
-  pointer-events: none;
-}
-
-.board-filters .date-field input {
-  padding: calc(var(--space) / 2) var(--space) 0;
-  appearance: auto;
 }
 
 .filter-panel-toggle {

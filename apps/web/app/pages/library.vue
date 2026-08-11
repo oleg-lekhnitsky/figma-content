@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Search, X } from 'reicon-vue'
+import { Plus, Search, Undo3, X } from 'reicon-vue'
 
 definePageMeta({ middleware: 'auth' })
 const route = useRoute()
@@ -13,8 +13,9 @@ interface AssetCard {
 }
 interface Submitter { id: string; figma_handle: string | null; avatar_url: string | null }
 interface Project { id: string; name: string; slug: string }
+interface Tag { id: string; name: string; slug: string }
 interface AssetList { data: { assets: AssetCard[]; submitters: Submitter[]; total: number; page: number; pageSize: number } }
-interface SessionResponse { data: { authenticated: boolean; user?: { role: string; workspace?: { name: string } | null } } }
+interface SessionResponse { data: { authenticated: boolean; user?: { role: string; email?: string; figmaHandle?: string | null; avatarUrl?: string | null; workspace?: { name: string } | null } } }
 interface BoardSummary {
   id: string
   title: string
@@ -28,7 +29,8 @@ interface BoardContent { data: { assets: AssetCard[] } }
 
 const search = ref('')
 const status = ref('')
-const projectId = ref('')
+const projectIds = ref<string[]>([])
+const tagIds = ref<string[]>([])
 const dateRange = ref<'all'|'today'|'week'|'two-weeks'|'month'|'custom'>('all')
 const customDateFrom = ref('')
 const customDateTo = ref('')
@@ -47,11 +49,14 @@ const dateFrom = computed(() => {
   return date.toISOString()
 })
 const dateTo = computed(() => dateRange.value === 'custom' && customDateTo.value ? new Date(`${customDateTo.value}T23:59:59.999`).toISOString() : '')
-const query = computed(() => ({ search: search.value, ...(status.value ? { status: status.value } : {}), ...(projectId.value ? { projectId: projectId.value } : {}), ...(dateFrom.value ? { dateFrom: dateFrom.value } : {}), ...(dateTo.value ? { dateTo: dateTo.value } : {}), sort: sort.value, page: page.value }))
+const query = computed(() => ({ search: search.value, ...(status.value ? { status: status.value } : {}), ...(projectIds.value.length ? { projectIds: projectIds.value.join(',') } : {}), ...(tagIds.value.length ? { tagIds: tagIds.value.join(',') } : {}), ...(dateFrom.value ? { dateFrom: dateFrom.value } : {}), ...(dateTo.value ? { dateTo: dateTo.value } : {}), sort: sort.value, page: page.value }))
 const { data, status: loadStatus, error, refresh } = await useFetch<AssetList>('/api/assets', { query, watch: [query] })
 const { data: projectData } = await useFetch<{data:{projects:Project[]}}>('/api/projects')
-const { data: boardData } = await useFetch<BoardList>('/api/shares')
+const { data: tagData } = await useFetch<{data:{tags:Tag[]}}>('/api/tags')
+const { data: boardData, refresh: refreshBoards } = await useFetch<BoardList>('/api/shares')
+const boardCreator = ref<{ openCreate: () => Promise<void>; openCreateFromCurrentView: () => Promise<void> }>()
 const projects = computed(() => projectData.value?.data.projects ?? [])
+const tags = computed(() => tagData.value?.data.tags ?? [])
 const boards = computed(() => boardData.value?.data.collections.filter(board => board.purpose !== 'case') ?? [])
 const selectedBoardId = computed(() => typeof route.query.board === 'string' ? route.query.board : '')
 const selectedBoard = computed(() => boards.value.find(board => board.id === selectedBoardId.value))
@@ -123,19 +128,31 @@ const finishBoardSwipe = (event: TouchEvent) => {
   const boardId = boardSequence.value[nextIndex]
   if (boardId !== undefined) void selectBoard(boardId)
 }
-const selectedProjectName = computed(() => projects.value.find(project => project.id === projectId.value)?.name)
+const selectedProjectNames = computed(() => projects.value.filter(project => projectIds.value.includes(project.id)).map(project => project.name))
+const selectedTagNames = computed(() => tags.value.filter(tag => tagIds.value.includes(tag.id)).map(tag => tag.name))
 const dateRangeLabel = computed(() => dateRange.value === 'today' ? 'Today' : dateRange.value === 'week' ? 'This week' : dateRange.value === 'two-weeks' ? 'Last two weeks' : dateRange.value === 'month' ? 'This month' : dateRange.value === 'custom' ? 'Custom dates' : '')
 const currentBoardFilters = computed(() => ({
   search: search.value.trim(),
-  projectId: projectId.value,
-  projectName: selectedProjectName.value,
+  projectIds: projectIds.value,
+  projectNames: selectedProjectNames.value,
+  tagIds: tagIds.value,
+  tagNames: selectedTagNames.value,
   dateFrom: dateFrom.value,
   dateTo: dateTo.value || (dateRange.value !== 'all' ? new Date().toISOString() : ''),
   dateLabel: dateRangeLabel.value,
   status: status.value
 }))
-const hasFilters = computed(() => Boolean(search.value || status.value || projectId.value || dateRange.value !== 'all'))
-const activeFilterCount = computed(() => [status.value, projectId.value, dateRange.value !== 'all'].filter(Boolean).length)
+const hasFilters = computed(() => Boolean(search.value || status.value || projectIds.value.length || tagIds.value.length || dateRange.value !== 'all'))
+const activeFilterCount = computed(() => [status.value, projectIds.value.length, tagIds.value.length, dateRange.value !== 'all'].filter(Boolean).length)
+const clearFilters = () => {
+  search.value = ''
+  status.value = ''
+  projectIds.value = []
+  tagIds.value = []
+  dateRange.value = 'all'
+  customDateFrom.value = ''
+  customDateTo.value = ''
+}
 const assets = ref<AssetCard[]>([])
 let liveRefreshTimer: ReturnType<typeof setTimeout> | undefined
 let assetPollTimer: ReturnType<typeof setInterval> | undefined
@@ -156,6 +173,8 @@ const resultMessage = computed(() => {
   return loadStatus.value === 'success' ? `${total.value} ${total.value === 1 ? 'asset' : 'assets'}` : ''
 })
 const { data: session } = await useFetch<SessionResponse>('/api/auth/session')
+const accountName = computed(() => session.value?.data.user?.figmaHandle || session.value?.data.user?.email || 'Account')
+const accountInitial = computed(() => accountName.value.trim().charAt(0).toUpperCase() || '?')
 const isAdmin = computed(() => session.value?.data?.user?.role === 'admin')
 const canManageProjects = computed(() => ['editor', 'admin'].includes(session.value?.data?.user?.role ?? ''))
 const canShare = computed(() => ['contributor', 'editor', 'admin'].includes(session.value?.data?.user?.role ?? ''))
@@ -192,7 +211,7 @@ const updateToolbar = () => {
 const refreshWhenVisible = () => {
   if (document.visibilityState === 'visible') void refresh()
 }
-watch([search, status, projectId, dateRange, customDateFrom, customDateTo, sort], () => { page.value = 1 })
+watch([search, status, projectIds, tagIds, dateRange, customDateFrom, customDateTo, sort], () => { page.value = 1 }, { deep: true })
 onMounted(() => {
   lastScrollY = window.scrollY
   window.addEventListener('scroll', updateToolbar, { passive: true })
@@ -221,10 +240,10 @@ onBeforeUnmount(() => {
   <div class="library-shell">
     <main id="main-content">
       <header class="index-toolbar" :class="{ 'toolbar-hidden': !toolbarVisible }">
-        <WorkspaceSwitcher class="brand" />
+        <div class="header-identity"><NuxtLink class="account-link" to="/account" :aria-label="`Open account for ${accountName}`" :title="accountName"><img v-if="session?.data.user?.avatarUrl" :src="session.data.user.avatarUrl" alt=""><span v-else aria-hidden="true">{{ accountInitial }}</span></NuxtLink><WorkspaceSwitcher class="brand" /></div>
         <form class="toolbar-search" role="search" @submit.prevent><label><span class="sr-only">Search assets</span><input v-model="search" type="search" name="search" placeholder="Search"></label></form>
         <p class="count sr-only" role="status" aria-live="polite">{{ resultMessage }}</p>
-        <nav aria-label="Library controls"><NuxtLink to="/portfolio">Portfolio</NuxtLink><ShareCollection v-if="canShare" :current-filters="currentBoardFilters" /><NuxtLink v-if="isAdmin" to="/admin/users">Admin</NuxtLink><NuxtLink v-else-if="canManageProjects" to="/admin/projects">Projects</NuxtLink><NuxtLink to="/account">Account</NuxtLink></nav>
+        <nav aria-label="Library controls"><NuxtLink class="button-secondary" to="/portfolio">Portfolio</NuxtLink><button v-if="canShare" class="button-secondary button-icon board-create-button" type="button" aria-label="Create board" title="Create board" @click="boardCreator?.openCreate()"><Plus :size="20" aria-hidden="true" /></button><ShareCollection ref="boardCreator" hide-trigger :current-filters="currentBoardFilters" @created="refreshBoards" /><NuxtLink v-if="isAdmin" class="button-secondary" to="/admin/users">Admin</NuxtLink><NuxtLink v-else-if="canManageProjects" class="button-secondary" to="/admin/projects">Projects</NuxtLink></nav>
       </header>
 
       <div v-if="boards.length" class="board-tabs-shell" :class="{ 'toolbar-hidden': !toolbarVisible }">
@@ -234,7 +253,21 @@ onBeforeUnmount(() => {
         </nav>
       </div>
 
-      <SelectionPanel v-if="!selectedBoardId" label="Asset filters" :wide="filtersExpanded||searchExpanded" :bare="!filtersExpanded&&!searchExpanded" raised><Transition name="filter-controls"><form v-if="searchExpanded" class="filters search-only" role="search" @submit.prevent><label class="search-field"><span class="sr-only">Search assets</span><input v-model="search" type="search" name="filter-search" placeholder="Search" autofocus></label></form><form v-else-if="filtersExpanded" class="filters" aria-label="Filter and sort assets" @submit.prevent><label><span class="sr-only">Status</span><select v-model="status" name="status"><option value="">All statuses</option><option value="approved">Approved</option><option value="draft">Draft</option></select></label><label><span class="sr-only">Project</span><select v-model="projectId" name="project"><option value="">All projects</option><option v-for="project in projects" :key="project.id" :value="project.id">{{ project.name }}</option></select></label><label><span class="sr-only">Date</span><select v-model="dateRange" name="date"><option value="all">All dates</option><option value="today">Today</option><option value="week">This week</option><option value="two-weeks">Last two weeks</option><option value="month">This month</option><option value="custom">Custom range</option></select></label><label v-if="dateRange==='custom'" class="date-field"><span>From</span><input v-model="customDateFrom" type="date" name="date-from" :max="customDateTo || undefined"></label><label v-if="dateRange==='custom'" class="date-field"><span>To</span><input v-model="customDateTo" type="date" name="date-to" :min="customDateFrom || undefined"></label><label><span class="sr-only">Sort</span><select v-model="sort" name="sort"><option value="newest">Newest</option><option value="oldest">Oldest</option><option value="updated">Recently updated</option><option value="title">Title</option><option value="dimensions">Dimensions</option><option value="submitter">Submitter</option></select></label><div v-if="submitters.length" class="submitter-stack" role="list" aria-label="People who submitted assets"><span v-for="submitter in visibleSubmitters" :key="submitter.id" class="submitter-avatar" role="listitem" :title="submitterName(submitter)"><img v-if="submitter.avatar_url" :src="submitter.avatar_url" alt=""><span v-else aria-hidden="true">{{ submitterInitial(submitter) }}</span><span class="sr-only">{{ submitterName(submitter) }}</span></span><span v-if="submitters.length > visibleSubmitters.length" class="submitter-more" :title="`${submitters.length-visibleSubmitters.length} more submitters`">+{{ submitters.length-visibleSubmitters.length }}</span></div></form></Transition><button class="filter-panel-toggle" :class="{ 'is-expanded': filtersExpanded }" type="button" :aria-label="filtersExpanded ? 'Hide filters' : 'Show filters'" :aria-expanded="filtersExpanded" @click="searchExpanded=false;filtersExpanded=!filtersExpanded"><svg v-if="filtersExpanded" aria-hidden="true" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></svg><span v-if="!filtersExpanded">Filters</span><span v-if="!filtersExpanded&&activeFilterCount" class="filter-count">{{ activeFilterCount }}</span></button><button class="mobile-filter-search" :class="{ 'is-expanded': searchExpanded }" type="button" :aria-label="searchExpanded ? 'Hide search' : 'Search assets'" :aria-expanded="searchExpanded" @click="filtersExpanded=false;searchExpanded=!searchExpanded"><X v-if="searchExpanded" :size="20" aria-hidden="true" /><Search v-else :size="20" aria-hidden="true" /></button></SelectionPanel>
+      <SelectionPanel v-if="!selectedBoardId" label="Asset filters" :wide="filtersExpanded||searchExpanded" :bare="!filtersExpanded&&!searchExpanded" raised>
+        <Transition name="filter-controls">
+          <form v-if="searchExpanded" class="filters search-only" role="search" @submit.prevent>
+            <label class="search-field"><span class="sr-only">Search assets</span><input v-model="search" type="search" name="filter-search" placeholder="Search" autofocus></label>
+          </form>
+          <AssetFilterControls v-else-if="filtersExpanded" v-model:status="status" v-model:project-ids="projectIds" v-model:tag-ids="tagIds" v-model:date-range="dateRange" v-model:date-from="customDateFrom" v-model:date-to="customDateTo" v-model:sort="sort" class="filters" :projects="projects" :tags="tags" show-status use-date-presets show-sort>
+            <button v-if="hasFilters" class="clear-filters-button" type="button" aria-label="Clear filters" title="Clear filters" @click="clearFilters"><Undo3 :size="18" aria-hidden="true" /></button>
+            <button v-if="hasFilters && canShare" class="filter-create-board" type="button" @click="boardCreator?.openCreateFromCurrentView()">Create board</button>
+            <div v-if="submitters.length" class="submitter-stack" role="list" aria-label="People who submitted assets"><span v-for="submitter in visibleSubmitters" :key="submitter.id" class="submitter-avatar" role="listitem" :title="submitterName(submitter)"><img v-if="submitter.avatar_url" :src="submitter.avatar_url" alt=""><span v-else aria-hidden="true">{{ submitterInitial(submitter) }}</span><span class="sr-only">{{ submitterName(submitter) }}</span></span><span v-if="submitters.length > visibleSubmitters.length" class="submitter-more" :title="`${submitters.length-visibleSubmitters.length} more submitters`">+{{ submitters.length-visibleSubmitters.length }}</span></div>
+          </AssetFilterControls>
+        </Transition>
+        <button class="filter-panel-toggle" :class="{ 'is-expanded': filtersExpanded }" type="button" :aria-label="filtersExpanded ? 'Hide filters' : 'Show filters'" :aria-expanded="filtersExpanded" @click="searchExpanded=false;filtersExpanded=!filtersExpanded"><X v-if="filtersExpanded" :size="20" aria-hidden="true" /><span v-if="!filtersExpanded">Filters</span><span v-if="!filtersExpanded&&activeFilterCount" class="filter-count">{{ activeFilterCount }}</span></button>
+        <button class="mobile-filter-search" :class="{ 'is-expanded': searchExpanded }" type="button" :aria-label="searchExpanded ? 'Hide search' : 'Search assets'" :aria-expanded="searchExpanded" @click="filtersExpanded=false;searchExpanded=!searchExpanded"><X v-if="searchExpanded" :size="20" aria-hidden="true" /><Search v-else :size="20" aria-hidden="true" /></button>
+      </SelectionPanel>
+      <SelectionPanel v-else label="Board settings" bare raised><button class="filter-panel-toggle" type="button" @click="router.push(`/boards/${selectedBoardId}`)">Board settings</button></SelectionPanel>
 
       <div class="board-swipe-region" @touchstart.passive="startBoardSwipe" @touchend.passive="finishBoardSwipe">
         <span v-if="selectedBoardId && selectedBoardStatus === 'pending' && displayedAssets.length" class="sr-only" role="status">Loading the rest of {{ selectedBoard?.title ?? 'this board' }}</span>
@@ -242,7 +275,7 @@ onBeforeUnmount(() => {
         <div v-else-if="selectedBoardId && selectedBoardError && displayedAssets.length === 0" class="state error" role="alert"><strong>Unable to load this board.</strong><span>Try another board or return to all assets.</span></div>
         <AssetMasonrySkeleton v-else-if="!selectedBoardId && loadStatus === 'pending' && assets.length === 0" />
         <div v-else-if="!selectedBoardId && error" class="state error" role="alert"><strong>Unable to load assets.</strong><span>Check your connection and try again.</span><button type="button" @click="refresh()">Try again</button></div>
-        <div v-else-if="displayedAssets.length === 0" class="state"><strong>{{ selectedBoardId ? 'No matching assets on this board' : hasFilters ? 'No matching assets' : 'No assets yet' }}</strong><span>{{ selectedBoardId ? 'Try another board or change your search.' : hasFilters ? 'Change your search or clear the filters.' : 'Upload frames from the Figma plugin to build this library.' }}</span><button v-if="!selectedBoardId && hasFilters" type="button" @click="search = ''; status = ''; projectId = ''; dateRange = 'all'; customDateFrom = ''; customDateTo = ''">Clear filters</button></div>
+        <div v-else-if="displayedAssets.length === 0" class="state"><strong>{{ selectedBoardId ? 'No matching assets on this board' : hasFilters ? 'No matching assets' : 'No assets yet' }}</strong><span>{{ selectedBoardId ? 'Try another board or change your search.' : hasFilters ? 'Change your search or clear the filters.' : 'Upload frames from the Figma plugin to build this library.' }}</span><button v-if="!selectedBoardId && hasFilters" type="button" @click="clearFilters">Clear filters</button></div>
         <AssetMasonry v-else :assets="displayedAssets" :hidden="cardsHidden" :stable-columns="Boolean(selectedBoardId)" :animate-changes="!cardsHidden" interactive />
         <nav v-if="!selectedBoardId && totalPages > 1" class="pagination" aria-label="Pagination"><button :disabled="page === 1" @click="page--">Previous</button><span>Page {{ page }} of {{ totalPages }}</span><button :disabled="page === totalPages" @click="page++">Next</button></nav>
       </div>
@@ -252,7 +285,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.library-shell{--space:clamp(12px,1vw,24px);--muted:.45;min-height:100vh;color:#000;background:var(--color-bg);font-size:16px;font-weight:700;letter-spacing:-.015em;line-height:1.15}main{min-height:100vh;padding:var(--space);padding-bottom:calc(var(--space) + 68px)}.index-toolbar{position:sticky;z-index:4;top:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-items:start;gap:var(--space);min-height:68px;margin-top:calc(var(--space)*-1);padding:var(--space) 0;background:var(--color-bg)}.brand{text-decoration:none}.filters{width:100%;display:flex;flex-wrap:nowrap;gap:2px var(--space)}.filters label{min-width:7rem;flex:1}.filters input,.filters select{width:100%;min-height:24px;padding:0;border:0;border-bottom:1px solid rgb(0 0 0/.18);border-radius:0;color:inherit;background:transparent;font:inherit}.filters input::placeholder{color:inherit;opacity:var(--muted)}.count{margin:0;opacity:var(--muted);text-align:right;font-variant-numeric:tabular-nums}.index-toolbar nav{grid-column:4;position:absolute;top:calc(var(--space) + 27px);right:0;display:flex;gap:var(--space)}.index-toolbar nav a{text-decoration:none}.masonry{column-count:6;column-gap:var(--space)}.asset-card{display:inline-block;width:100%;break-inside:avoid;margin-bottom:calc(var(--space)*2);color:inherit;background:transparent;text-decoration:none}.preview{overflow:hidden;border-radius:8px;background:transparent;clip-path:inset(0 round 8px)}.preview img{display:block;width:100%;height:100%;object-fit:cover}.asset-card:hover{opacity:1}.card-body{display:flex;justify-content:space-between;align-items:flex-start;gap:var(--space);padding-top:8px}.card-body h2,.card-body p{margin:0;font:inherit}.card-body p,.card-body>span{opacity:.3}.card-body>span{text-transform:capitalize}.state{min-height:45vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center}.state span{opacity:var(--muted)}button{min-height:44px;padding:0 18px;border:0;border-radius:999px;color:white;background:black;font:inherit;cursor:pointer;transition-property:scale,opacity;transition-duration:150ms}.state button:active,.pagination button:active{scale:.96}.pagination{display:flex;align-items:center;justify-content:center;gap:var(--space);padding:calc(var(--space)*2) 0}.pagination span{opacity:var(--muted)}:is(a,button):focus-visible{outline:2px solid #06f90e;outline-offset:2px}.sr-only{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}@media(max-width:2200px){.masonry{column-count:5}}@media(max-width:1680px){.masonry{column-count:4}}@media(max-width:1280px){.masonry{column-count:3}}@media(max-width:900px){.index-toolbar{grid-template-columns:1fr 2fr auto}.count{display:none}.masonry{column-count:2}}@media(max-width:520px){.index-toolbar{grid-template-columns:1fr auto;gap:8px}.brand{grid-column:1}.index-toolbar nav{position:static;grid-column:2;grid-row:1}.card-body{font-size:14px}.masonry{column-count:1}}@media(prefers-reduced-motion:reduce){.preview img,button{transition:none}.state button:active,.pagination button:active{scale:1}}
+.library-shell{--space:clamp(12px,1vw,24px);--muted:.45;min-height:100vh;color:#000;background:var(--color-bg);font-size:16px;font-weight:700;letter-spacing:-.015em;line-height:1.15}main{min-height:100vh;padding:var(--space);padding-bottom:calc(var(--space) + 68px)}.index-toolbar{position:sticky;z-index:4;top:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-items:start;gap:var(--space);min-height:68px;margin-top:calc(var(--space)*-1);padding:var(--space) 0;background:var(--color-bg)}.brand{text-decoration:none}.filters{width:100%;display:flex;flex-wrap:nowrap;gap:2px var(--space)}.filters label{min-width:7rem;flex:1}.filters input,.filters select{width:100%;min-height:24px;padding:0;border:0;border-bottom:1px solid rgb(0 0 0/.18);border-radius:0;color:inherit;background:transparent;font:inherit}.filters input::placeholder{color:inherit;opacity:var(--muted)}.count{margin:0;opacity:var(--muted);text-align:right;font-variant-numeric:tabular-nums}.index-toolbar nav{grid-column:4;position:absolute;top:calc(var(--space) + 27px);right:0;display:flex;gap:var(--space)}.index-toolbar nav a{text-decoration:none}.masonry{column-count:6;column-gap:var(--space)}.asset-card{display:inline-block;width:100%;break-inside:avoid;margin-bottom:calc(var(--space)*2);color:inherit;background:transparent;text-decoration:none}.preview{overflow:hidden;border-radius:8px;background:transparent;clip-path:inset(0 round 8px)}.preview img{display:block;width:100%;height:100%;object-fit:cover}.asset-card:hover{opacity:1}.card-body{display:flex;justify-content:space-between;align-items:flex-start;gap:var(--space);padding-top:8px}.card-body h2,.card-body p{margin:0;font:inherit}.card-body p,.card-body>span{opacity:.3}.card-body>span{text-transform:capitalize}.state{min-height:45vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:calc(var(--space)/3);padding:var(--space);text-align:center}.state strong{font-size:16px;line-height:1.15}.state span{font-size:14px;line-height:1.25;opacity:var(--muted)}.state button{min-height:36px;margin-top:calc(var(--space)/3);padding:0 calc(var(--space)*.75);font-size:13px;line-height:1}button{min-height:44px;padding:0 18px;border:0;border-radius:999px;color:white;background:black;font:inherit;cursor:pointer;transition-property:scale,opacity;transition-duration:150ms}.state button:active,.pagination button:active{scale:.96}.pagination{display:flex;align-items:center;justify-content:center;gap:var(--space);padding:calc(var(--space)*2) 0}.pagination span{opacity:var(--muted)}:is(a,button):focus-visible{outline:2px solid #06f90e;outline-offset:2px}.sr-only{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}@media(max-width:2200px){.masonry{column-count:5}}@media(max-width:1680px){.masonry{column-count:4}}@media(max-width:1280px){.masonry{column-count:3}}@media(max-width:900px){.index-toolbar{grid-template-columns:1fr 2fr auto}.count{display:none}.masonry{column-count:2}}@media(max-width:520px){.index-toolbar{grid-template-columns:1fr auto;gap:8px}.brand{grid-column:1}.index-toolbar nav{position:static;grid-column:2;grid-row:1}.card-body{font-size:14px}.masonry{column-count:1}.state button{min-height:44px}}@media(prefers-reduced-motion:reduce){.preview img,button{transition:none}.state button:active,.pagination button:active{scale:1}}
 .index-toolbar{transition:opacity .18s ease-out,transform .24s cubic-bezier(.2,0,0,1)}
 .library-shell{--header-height:calc(44px + var(--space)*2)}
 .board-tabs-shell{position:sticky;z-index:3;top:var(--header-height);margin:0 calc(var(--space)*-1) calc(var(--space)*2);overflow:hidden;background:var(--color-bg);transition:opacity .18s ease-out,transform .24s cubic-bezier(.2,0,0,1)}.board-tabs{display:flex;gap:var(--space);padding:0 var(--space);overflow-x:auto;overscroll-behavior-x:none;background:var(--color-bg);scrollbar-width:none}.board-tabs::-webkit-scrollbar{display:none}.board-tabs button{position:relative;min-height:44px;max-width:18ch;flex:0 0 auto;overflow:hidden;padding:0;color:inherit;background:transparent;border-radius:0;text-overflow:ellipsis;white-space:nowrap}.board-tabs button:first-child{max-width:none}.board-tabs button[aria-pressed=true]::after{content:"";position:absolute;right:0;bottom:4px;left:0;height:2px;background:currentColor}.board-tabs button:hover{opacity:.5}.board-tabs-shell.toolbar-hidden{pointer-events:none;opacity:0;transform:translateY(calc((var(--header-height) + 100%)*-1))}
@@ -262,7 +295,11 @@ onBeforeUnmount(() => {
 .index-toolbar.toolbar-hidden{pointer-events:none;opacity:0;transform:translateY(calc(-100% - var(--space)))}
 .index-toolbar{min-height:0}
 .brand,.index-toolbar nav,.toolbar-search,.filters{min-height:44px;align-items:center}.brand{display:flex}
-.index-toolbar nav{position:static;display:flex;justify-content:flex-end;gap:var(--space)}
+.index-toolbar nav{position:static;display:flex;justify-content:flex-end;gap:calc(var(--space)/2)}
+.index-toolbar nav>.button-secondary{margin-left:0}
+.header-identity{min-width:0;min-height:var(--control-height);display:flex;align-items:center;gap:calc(var(--space)/2)}
+.board-create-button{width:calc(var(--control-height) - var(--space)/2);height:calc(var(--control-height) - var(--space)/2);min-width:calc(var(--control-height) - var(--space)/2);min-height:calc(var(--control-height) - var(--space)/2);padding:0;display:grid;place-items:center;border-radius:50%;color:var(--color-fg);background:var(--color-surface)}.board-create-button svg{fill:none;stroke:currentColor;stroke-width:1.8}
+.account-link{width:calc(var(--control-height) - var(--space)/2);height:calc(var(--control-height) - var(--space)/2);flex:0 0 auto;display:grid;place-items:center;overflow:hidden;border-radius:50%;background:var(--color-surface)}.account-link img{display:block;width:100%;height:100%;object-fit:cover}.account-link:hover{opacity:1}
 .mobile-filter-search{display:none}
 .toolbar-search{grid-column:2/4;display:flex}.toolbar-search label{width:100%}.toolbar-search input{width:100%;height:44px;padding:0 8px}.toolbar-search input::-webkit-search-cancel-button{appearance:none}
 .count{position:absolute}
@@ -277,12 +314,14 @@ onBeforeUnmount(() => {
 .figma-button{bottom:10px;min-height:32px;padding:0 13px;color:#000;background:#fff;font-size:12px;box-shadow:0 1px 3px rgb(0 0 0/.12)}
 .filter-panel-toggle{display:flex;align-items:center;gap:8px;white-space:nowrap}.filter-panel-toggle:not(.is-expanded){min-height:44px;padding:0 20px;box-shadow:0 12px 36px rgb(0 0 0/.2)}.filter-panel-toggle.filter-panel-toggle.is-expanded{width:36px;padding:0;justify-content:center;box-shadow:none}.filter-panel-toggle svg{width:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round}.filter-count{min-width:20px;height:20px;display:grid;place-items:center;padding:0 5px;border-radius:999px;color:var(--color-fg);background:var(--color-bg);font-size:11px}.filter-controls-enter-active,.filter-controls-leave-active{transition:opacity 140ms ease,transform 180ms cubic-bezier(.2,0,0,1)}.filter-controls-enter-from,.filter-controls-leave-to{opacity:0;transform:translateX(8px)}
 .submitter-stack{min-width:max-content;height:36px;display:flex;align-items:center;padding-left:2px}.submitter-avatar,.submitter-more{width:36px;height:36px;display:grid;place-items:center;border:2px solid var(--color-bg);border-radius:50%;overflow:hidden;background:var(--color-surface);font-size:11px}.submitter-avatar+.submitter-avatar,.submitter-more{margin-left:-8px}.submitter-avatar img{width:100%;height:100%;object-fit:cover}.submitter-more{width:auto;min-width:36px;padding:0 7px;border-radius:999px;overflow:visible}.filters{width:max-content;min-height:36px;gap:6px}.filters label{width:max-content;min-width:0;height:36px;flex:0 0 auto;border:0}.filters input,.filters select{width:auto;min-width:0;max-width:11rem;height:36px;min-height:36px;padding:0 36px 0 14px;border:0;border-radius:999px;color:var(--color-fg);background:var(--color-surface);font-size:13px}.filters :is(input,select):focus-visible{outline:2px solid var(--color-accent);outline-offset:2px;border:0}.filters label:not(.search-field):not(.date-field)::after{top:12px;right:14px;width:7px;height:7px;border-color:var(--color-fg)}.filters .date-field span{top:3px;left:14px;color:var(--color-muted)}.filters .date-field input{padding:11px 12px 0}
+.filter-create-board{height:36px;min-height:36px;padding:0 var(--space);font-size:13px;white-space:nowrap}
+.clear-filters-button{width:36px;height:36px;min-width:36px;min-height:36px;display:grid;place-items:center;padding:0;color:var(--color-fg);background:var(--color-surface)}.clear-filters-button :deep(svg){fill:none;stroke:currentColor}.clear-filters-button :deep(path){stroke-width:2.6}
 @media(max-width:900px){.toolbar-search{grid-column:2}.index-toolbar nav{grid-column:3}}
 @media(max-width:520px){
   .library-shell{--header-height:calc(44px + max(var(--space),env(safe-area-inset-top)) + var(--space))}
   .index-toolbar{grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:calc(var(--space)/2);margin:calc(var(--space)*-1) calc(var(--space)*-1) 0;padding:max(var(--space),env(safe-area-inset-top)) var(--space) var(--space)}
   .brand{min-width:0;overflow:hidden}
-  .index-toolbar nav{min-width:0;grid-column:2;grid-row:1;justify-content:flex-start;gap:var(--space);overflow-x:auto;overscroll-behavior-inline:contain;scrollbar-width:none}
+  .index-toolbar nav{min-width:0;grid-column:2;grid-row:1;justify-content:flex-start;gap:calc(var(--space)/2);overflow-x:auto;overscroll-behavior-inline:contain;scrollbar-width:none}
   .index-toolbar nav::-webkit-scrollbar{display:none}
   .toolbar-search{display:none}
   .mobile-filter-search.mobile-filter-search{width:44px;height:44px;min-height:44px;display:grid;place-items:center;padding:0;box-shadow:0 12px 36px rgb(0 0 0/.2)}
@@ -293,6 +332,8 @@ onBeforeUnmount(() => {
   .search-only~.filter-panel-toggle,.filters:not(.search-only)~.mobile-filter-search{display:none}
   .filters label{height:44px}
   .filters input,.filters select{height:44px;min-height:44px}
+  .filter-create-board{height:44px;min-height:44px}
+  .clear-filters-button{width:44px;height:44px;min-width:44px;min-height:44px}.clear-filters-button :deep(path){stroke-width:2.1}
   .search-only,.search-only label{width:100%}
   .search-only label{flex:1 1 auto}
   .search-only input{width:100%;max-width:none;font-size:16px}

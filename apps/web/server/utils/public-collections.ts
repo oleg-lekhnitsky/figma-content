@@ -6,9 +6,10 @@ const cleanSearch = (value: string) => value.replace(/[%_,()]/g, '')
 
 export const matchingApprovedAssetIds = async (organizationId: string, filters: PublicCollectionFilters) => {
   let taggedIds: string[] | null = null
-  if (filters.tagId) {
+  const tagIds = filters.tagIds.length ? filters.tagIds : filters.tagId ? [filters.tagId] : []
+  if (tagIds.length) {
     const { data, error } = await useSupabaseAdmin().from('asset_tags')
-      .select('asset_id').eq('organization_id', organizationId).eq('tag_id', filters.tagId).limit(1000)
+      .select('asset_id').eq('organization_id', organizationId).in('tag_id', tagIds).limit(1000)
     if (error) throw databaseError('filter shared assets by tag', error)
     const matchingTagIds: string[] = data.map((item: { asset_id: string }) => item.asset_id)
     if (!matchingTagIds.length) return []
@@ -18,6 +19,7 @@ export const matchingApprovedAssetIds = async (organizationId: string, filters: 
   let query = useSupabaseAdmin().from('assets').select('id')
     .eq('organization_id', organizationId).eq('status', 'approved')
   if (filters.projectId) query = query.eq('project_id', filters.projectId)
+  if (filters.projectIds.length) query = query.in('project_id', filters.projectIds)
   if (filters.uploadedBy) query = query.eq('uploaded_by', filters.uploadedBy)
   if (filters.dateFrom) query = query.gte('created_at', filters.dateFrom)
   if (filters.dateTo) query = query.lte('created_at', filters.dateTo)

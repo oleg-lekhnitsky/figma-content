@@ -15,6 +15,8 @@ export const publicCollectionFiltersSchema = z.object({
   search: z.string().trim().max(200).default(''),
   projectId: z.uuid().nullable().default(null),
   tagId: z.uuid().nullable().default(null),
+  projectIds: z.array(z.uuid()).max(50).default([]),
+  tagIds: z.array(z.uuid()).max(50).default([]),
   uploadedBy: z.uuid().nullable().default(null),
   dateFrom: z.iso.datetime({ offset: true }).nullable().default(null),
   dateTo: z.iso.datetime({ offset: true }).nullable().default(null)

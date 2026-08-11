@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { BoardLayout } from '@content-library/shared'
 
-interface CurrentFilters { search?: string; projectId?: string; projectName?: string; dateFrom?: string; dateTo?: string; dateLabel?: string; status?: string }
+interface CurrentFilters { search?: string; projectIds?: string[]; projectNames?: string[]; tagIds?: string[]; tagNames?: string[]; dateFrom?: string; dateTo?: string; dateLabel?: string; status?: string }
 const props = withDefaults(defineProps<{ currentFilters?: CurrentFilters; portfolioOnly?: boolean; hideTrigger?: boolean }>(), { portfolioOnly: false, hideTrigger: false })
 const emit = defineEmits<{ created: [] }>()
 
@@ -25,8 +25,8 @@ const mode = ref<'dynamic' | 'static'>('dynamic')
 const range = ref<'all' | 'day' | 'month' | 'custom'>('month')
 const dateFrom = ref('')
 const dateTo = ref('')
-const projectId = ref('')
-const tagId = ref('')
+const projectIds = ref<string[]>([])
+const tagIds = ref<string[]>([])
 const searchFilter = ref('')
 const expiry = ref('')
 const reviewMonth = ref(new Date().toISOString().slice(0, 7))
@@ -87,11 +87,12 @@ const defaultTitle = () => range.value === 'day'
     : 'Shared collection'
 const reviewTitle = () => new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' })
   .format(new Date(`${reviewMonth.value}-01T12:00:00`))
-const hasCurrentFilters = computed(() => Boolean(props.currentFilters?.search || props.currentFilters?.projectId || props.currentFilters?.dateFrom || props.currentFilters?.dateTo || props.currentFilters?.status))
+const hasCurrentFilters = computed(() => Boolean(props.currentFilters?.search || props.currentFilters?.projectIds?.length || props.currentFilters?.tagIds?.length || props.currentFilters?.dateFrom || props.currentFilters?.dateTo || props.currentFilters?.status))
 const currentFilterLabels = computed(() => {
   const labels: string[] = []
   if (props.currentFilters?.search) labels.push(`Search “${props.currentFilters.search}”`)
-  if (props.currentFilters?.projectId) labels.push(`Project: ${props.currentFilters.projectName ?? 'Selected project'}`)
+  if (props.currentFilters?.projectIds?.length) labels.push(`Projects: ${props.currentFilters.projectNames?.join(', ') ?? props.currentFilters.projectIds.length}`)
+  if (props.currentFilters?.tagIds?.length) labels.push(`Tags: ${props.currentFilters.tagNames?.join(', ') ?? props.currentFilters.tagIds.length}`)
   if (props.currentFilters?.dateLabel) labels.push(props.currentFilters.dateLabel)
   return labels
 })
@@ -131,8 +132,8 @@ const showCreate = async (fromCurrentView = false) => {
   introduction.value = ''
   mode.value = 'dynamic'
   searchFilter.value = fromCurrentView ? props.currentFilters?.search ?? '' : ''
-  projectId.value = fromCurrentView ? props.currentFilters?.projectId ?? '' : ''
-  tagId.value = ''
+  projectIds.value = fromCurrentView ? [...(props.currentFilters?.projectIds ?? [])] : []
+  tagIds.value = fromCurrentView ? [...(props.currentFilters?.tagIds ?? [])] : []
   if (fromCurrentView && (props.currentFilters?.dateFrom || props.currentFilters?.dateTo)) {
     range.value = 'custom'
     dateFrom.value = props.currentFilters?.dateFrom?.slice(0, 10) ?? ''
@@ -151,7 +152,11 @@ const openCreate = async () => {
   await open()
   if (!props.portfolioOnly) await showCreate(false)
 }
-defineExpose({ openCreate })
+const openCreateFromCurrentView = async () => {
+  await open()
+  if (!props.portfolioOnly) await showCreate(true)
+}
+defineExpose({ openCreate, openCreateFromCurrentView })
 const showList = async () => {
   errorMessage.value = ''
   view.value = 'list'
@@ -177,8 +182,8 @@ const createCollection = async () => {
         purpose: purpose.value,
         mode: review || portfolio ? 'static' : mode.value,
         filters: review
-          ? { search: '', projectId: null, tagId: null, uploadedBy: null, dateFrom: reviewStart?.toISOString(), dateTo: reviewEnd?.toISOString() }
-          : { search: searchFilter.value, projectId: projectId.value || null, tagId: tagId.value || null, ...datesForRange() },
+          ? { search: '', projectId: null, tagId: null, projectIds: [], tagIds: [], uploadedBy: null, dateFrom: reviewStart?.toISOString(), dateTo: reviewEnd?.toISOString() }
+          : { search: searchFilter.value, projectId: null, tagId: null, projectIds: projectIds.value, tagIds: tagIds.value, ...datesForRange() },
         expiresAt: review || portfolio ? null : isoAt(expiry.value, true),
         reviewMonth: review ? `${reviewMonth.value}-01` : null,
         submissionDeadline: review ? isoAt(submissionDeadline.value, true) : null,
@@ -281,7 +286,13 @@ type="button"
           <div v-if="purpose === 'portfolio'" class="form-grid"><label v-if="portfolioKind === 'client'">Client or recipient<input v-model="portfolioClient" name="portfolio-client" required maxlength="120" placeholder="Acme Studio"></label><label>Introduction<textarea v-model="introduction" name="introduction" rows="3" maxlength="2000" placeholder="A short note about this selection" /></label></div>
           <div v-if="usingCurrentFilters" class="filter-context"><strong>Starting with current filters</strong><span>{{ currentFilterLabels.join(' · ') || 'All dates' }}</span><small v-if="props.currentFilters?.status==='draft'">Draft status is not included because showcase boards contain approved assets only.</small><small v-else>Showcase boards contain approved assets only.</small></div>
           <fieldset v-if="purpose === 'showcase'"><legend>Updates</legend><label class="choice"><input v-model="mode" type="radio" value="dynamic" name="mode"><span><strong>Dynamic</strong><small>New approved items matching the filters appear automatically.</small></span></label><label class="choice"><input v-model="mode" type="radio" value="static" name="mode"><span><strong>Static</strong><small>Freeze the current results and update the snapshot manually.</small></span></label></fieldset>
-          <div v-if="purpose !== 'review'" class="form-grid"><label>Search<input v-model="searchFilter" type="search" name="search" maxlength="200"></label><label>Date range<select v-model="range" name="range"><option value="month">This month</option><option value="day">Today</option><option value="all">Any date</option><option value="custom">Custom dates</option></select></label><label>Project<select v-model="projectId" name="project"><option value="">Any project</option><option v-for="project in projects" :key="project.id" :value="project.id">{{ project.name }}</option></select></label><label>Tag<select v-model="tagId" name="tag"><option value="">Any tag</option><option v-for="tag in tags" :key="tag.id" :value="tag.id">{{ tag.name }}</option></select></label><label v-if="purpose === 'showcase'">Link expiry <span>(optional)</span><input v-model="expiry" type="date" name="expiry"></label></div>
+          <div v-if="purpose !== 'review'" class="form-grid">
+            <label>Search<input v-model="searchFilter" type="search" name="search" maxlength="200"></label>
+            <label>Date range<select v-model="range" name="range"><option value="month">This month</option><option value="day">Today</option><option value="all">Any date</option><option value="custom">Custom dates</option></select></label>
+            <div class="multi-filter-field"><span>Projects</span><FilterMultiSelect v-model="projectIds" label="Projects" :options="projects" /></div>
+            <div class="multi-filter-field"><span>Tags</span><FilterMultiSelect v-model="tagIds" label="Tags" :options="tags" /></div>
+            <label v-if="purpose === 'showcase'">Link expiry <span>(optional)</span><input v-model="expiry" type="date" name="expiry"></label>
+          </div>
           <div v-else class="form-grid"><label>Review month<input v-model="reviewMonth" type="month" required name="review-month"></label><label>Submission deadline <span>(optional)</span><input v-model="submissionDeadline" type="date" name="submission-deadline"></label></div>
           <div v-if="purpose !== 'review' && range === 'custom'" class="form-grid custom-dates"><label>Start date<input v-model="dateFrom" type="date" name="dateFrom" required></label><label>End date<input v-model="dateTo" type="date" name="dateTo" required></label></div>
           <p class="approval-note">{{ purpose === 'review' ? 'Review boards start private. Contributors can add their own work.' : purpose === 'portfolio' ? 'Portfolio projects start private. Publish when the order and layout are ready.' : 'Only approved items can appear on a public link.' }}</p>
@@ -425,6 +436,19 @@ legend {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--space);
+}
+
+.multi-filter-field {
+  display: grid;
+  align-content: start;
+  gap: calc(var(--space) / 4);
+  color: var(--color-muted);
+}
+
+.multi-filter-field :deep(.multi-select-trigger) {
+  width: 100%;
+  min-height: var(--control-height);
+  justify-content: space-between;
 }
 
 .filter-context {
