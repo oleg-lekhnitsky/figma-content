@@ -1090,7 +1090,6 @@ li span {
   }
 
   .asset-visual {
-    --visual-shift-y: -2dvh;
     width: 100%;
     height: 100dvh;
     border-radius: 0;
@@ -1103,6 +1102,7 @@ li span {
   .asset-visual img {
     padding: max(calc(var(--space)*3), env(safe-area-inset-top)) var(--space) max(calc(var(--space)*3), env(safe-area-inset-bottom));
     object-fit: contain;
+    object-position: 50% calc(50% - 2dvh);
     pointer-events: none;
     transition: transform .22s cubic-bezier(.2, 0, 0, 1)
   }
@@ -1112,7 +1112,7 @@ li span {
   }
 
   .asset-visual .current-preview {
-    transform: translate3d(var(--swipe-x), var(--visual-shift-y), 0);
+    transform: translate3d(var(--swipe-x), 0, 0);
     view-transition-name: asset-preview
   }
 
@@ -1121,11 +1121,11 @@ li span {
   }
 
   .asset-visual .previous-preview {
-    transform: translate3d(calc(-100% + var(--swipe-x)), var(--visual-shift-y), 0)
+    transform: translate3d(calc(-100% + var(--swipe-x)), 0, 0)
   }
 
   .asset-visual .next-preview {
-    transform: translate3d(calc(100% + var(--swipe-x)), var(--visual-shift-y), 0)
+    transform: translate3d(calc(100% + var(--swipe-x)), 0, 0)
   }
 
   .overlay-toolbar {
