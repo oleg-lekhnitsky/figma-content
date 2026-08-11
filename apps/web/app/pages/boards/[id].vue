@@ -57,10 +57,12 @@ const projects = ref<Option[]>([])
 const tags = ref<Option[]>([])
 const portfolioCases = ref<PortfolioCase[]>([])
 const selectedCaseIds = ref<string[]>([])
+const initialProjectIds = Array.isArray(collection.filters.projectIds) ? collection.filters.projectIds : []
+const initialTagIds = Array.isArray(collection.filters.tagIds) ? collection.filters.tagIds : []
 const filters = reactive({
   search: collection.filters.search,
-  projectIds: collection.filters.projectIds.length ? [...collection.filters.projectIds] : collection.filters.projectId ? [collection.filters.projectId] : [],
-  tagIds: collection.filters.tagIds.length ? [...collection.filters.tagIds] : collection.filters.tagId ? [collection.filters.tagId] : [],
+  projectIds: initialProjectIds.length ? [...initialProjectIds] : collection.filters.projectId ? [collection.filters.projectId] : [],
+  tagIds: initialTagIds.length ? [...initialTagIds] : collection.filters.tagId ? [collection.filters.tagId] : [],
   dateFrom: collection.filters.dateFrom?.slice(0,10) ?? '',
   dateTo: collection.filters.dateTo?.slice(0,10) ?? ''
 })
@@ -96,8 +98,8 @@ const loadAvailableAssets = async () => {
 await Promise.all([loadMembers(),loadContent(),loadOptions(),loadAvailableAssets()])
 if (collection.purpose === 'portfolio') {
   const response=await apiFetch<{data:{cases:PortfolioCase[];selectedIds:string[]}}>(`/api/shares/${id}/cases`)
-  portfolioCases.value=response.data.cases
-  selectedCaseIds.value=response.data.selectedIds
+  portfolioCases.value=Array.isArray(response.data?.cases) ? response.data.cases : []
+  selectedCaseIds.value=Array.isArray(response.data?.selectedIds) ? response.data.selectedIds : []
 }
 
 const rename = async (event:Event) => {
