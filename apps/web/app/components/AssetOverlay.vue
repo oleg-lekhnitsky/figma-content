@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { MoreH, X } from 'reicon-vue'
+import { MoreH, Search, X } from 'reicon-vue'
 
 const props = withDefaults(defineProps<{ assetId: string; assetIds?: string[]; previewUrl?: string; previewUrls?: Record<string, string> }>(), { assetIds: () => [], previewUrl: '', previewUrls: () => ({}) })
 const emit = defineEmits<{ close: []; deleted: [id: string]; navigate: [id: string] }>()
@@ -412,12 +412,7 @@ watch(() => props.assetId, id => {
       </main>
       <section v-if="boardPickerOpen" class="board-picker" role="dialog" aria-modal="true"
         aria-labelledby="board-picker-title">
-        <header><button class="close-button" type="button" aria-label="Close board picker"
-            @click="boardPickerOpen = false">
-            <X :size="22" aria-hidden="true" />
-          </button>
-          <h2 id="board-picker-title">Add to board</h2><span aria-hidden="true" />
-        </header>
+        <header><h2 id="board-picker-title">Add to board</h2></header>
         <label class="board-picker-search">
           <Search :size="22" aria-hidden="true" /><span class="sr-only">Search boards</span><input v-model="boardSearch"
             type="search" placeholder="Search" autofocus>
@@ -437,7 +432,8 @@ watch(() => props.assetId, id => {
         </div>
         <footer class="board-picker-footer"><button class="button" type="button"
             @click="boardCreator?.openCreate()">Create
-            board</button>
+            board</button><button class="button-secondary board-picker-cancel" type="button" aria-label="Close board picker"
+            @click="boardPickerOpen = false"><X :size="20" aria-hidden="true" /></button>
           <ShareCollection ref="boardCreator" hide-trigger @created="refreshBoards" />
         </footer>
       </section>
@@ -822,20 +818,14 @@ h1 {
 }
 
 .board-picker header {
-  display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  display: flex;
   align-items: center;
-  gap: var(--space)
-}
-
-.board-picker .close-button {
-  display: grid;
-  pointer-events: auto
+  justify-content: center
 }
 
 .board-picker h2 {
   margin: 0;
-  font-size: 20px;
+  font-size: 1.25rem;
   line-height: 1;
   text-align: center;
   white-space: nowrap
@@ -848,20 +838,16 @@ h1 {
   justify-self: center
 }
 
-.board-picker-footer button{
-  padding: calc(var(--space)*1.5);
-}
-
 .board-picker-search {
-  height: 52px;
+  height: calc(var(--control-height) + var(--space) / 2);
   display: grid;
   grid-template-columns: auto 1fr;
   align-items: center;
-  gap: 12px;
+  gap: calc(var(--space) / 2);
   box-sizing: border-box;
   margin: 0;
-  padding: 0 16px;
-  border-radius: 999px;
+  padding-inline: var(--space);
+  border-radius: calc(var(--control-height) + var(--space));
   background: var(--color-surface);
   color: var(--color-muted)
 }
@@ -898,12 +884,12 @@ h1 {
 
 .board-picker-option {
   width: 100%;
-  min-height: 72px;
+  min-height: calc(var(--control-height) + var(--space) * 2);
   display: grid;
-  grid-template-columns: 56px minmax(0, 1fr);
+  grid-template-columns: calc(var(--control-height) + var(--space) / 2) minmax(0, 1fr);
   align-items: center;
   gap: var(--space);
-  padding: 8px;
+  padding: calc(var(--space) / 2);
   color: var(--color-fg);
   background: transparent;
   text-align: left
@@ -915,8 +901,8 @@ h1 {
 }
 
 .board-picker-preview {
-  width: 56px;
-  height: 56px;
+  width: calc(var(--control-height) + var(--space) / 2);
+  height: calc(var(--control-height) + var(--space) / 2);
   display: block;
   overflow: hidden;
   border-radius: var(--radius);
@@ -962,12 +948,29 @@ h1 {
 }
 
 .board-picker-footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: calc(var(--space) / 2);
   padding-top: var(--space);
   background: var(--color-bg)
 }
 
-.board-picker-footer>.button {
-  width: 100%
+.board-picker-footer>button {
+  min-height: calc(var(--control-height) + var(--space) / 2);
+  padding-inline: calc(var(--space) * 1.5)
+}
+
+.board-picker-footer>.board-picker-cancel {
+  width: calc(var(--control-height) + var(--space) / 2);
+  padding: 0
+}
+
+.board-picker-cancel svg {
+  width: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.1;
+  stroke-linecap: round
 }
 
 label {
@@ -1087,6 +1090,7 @@ li span {
   }
 
   .asset-visual {
+    --visual-shift-y: -2dvh;
     width: 100%;
     height: 100dvh;
     border-radius: 0;
@@ -1108,7 +1112,7 @@ li span {
   }
 
   .asset-visual .current-preview {
-    transform: translate3d(var(--swipe-x), 0, 0);
+    transform: translate3d(var(--swipe-x), var(--visual-shift-y), 0);
     view-transition-name: asset-preview
   }
 
@@ -1117,11 +1121,11 @@ li span {
   }
 
   .asset-visual .previous-preview {
-    transform: translate3d(calc(-100% + var(--swipe-x)), 0, 0)
+    transform: translate3d(calc(-100% + var(--swipe-x)), var(--visual-shift-y), 0)
   }
 
   .asset-visual .next-preview {
-    transform: translate3d(calc(100% + var(--swipe-x)), 0, 0)
+    transform: translate3d(calc(100% + var(--swipe-x)), var(--visual-shift-y), 0)
   }
 
   .overlay-toolbar {

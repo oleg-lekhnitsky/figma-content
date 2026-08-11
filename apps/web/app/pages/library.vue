@@ -287,9 +287,9 @@ onBeforeUnmount(() => {
   .toolbar-search{display:none}
   .mobile-filter-search.mobile-filter-search{width:44px;height:44px;min-height:44px;display:grid;place-items:center;padding:0;box-shadow:0 12px 36px rgb(0 0 0/.2)}
   .filter-panel-toggle:is(:hover,:active,:focus),.mobile-filter-search:is(:hover,:active,:focus){opacity:1}
-  .mobile-filter-search svg{width:19px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round}
+  .mobile-filter-search svg{width:19px;fill:none;stroke:currentColor;stroke-width:2.1;stroke-linecap:round}
   .filter-panel-toggle.filter-panel-toggle.is-expanded{width:44px;height:44px;min-height:44px}
-  .filter-panel-toggle svg{width:19px;stroke-width:2.4}
+  .filter-panel-toggle svg{width:19px;stroke-width:2.1}
   .search-only~.filter-panel-toggle,.filters:not(.search-only)~.mobile-filter-search{display:none}
   .filters label{height:44px}
   .filters input,.filters select{height:44px;min-height:44px}
