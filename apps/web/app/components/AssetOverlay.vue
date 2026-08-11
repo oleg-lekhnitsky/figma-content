@@ -45,6 +45,7 @@ const nextPreviewUrl = computed(() => nextAssetId.value ? props.previewUrls[next
 const boardId = ref('')
 const editing = ref(false); const title = ref(''); const description = ref(''); const projectId = ref(''); const campaignId = ref(''); const tagsText = ref(''); const language = ref(''); const contentType = ref(''); const actionError = ref(''); const actionMessage = ref(''); const downloading = ref(false); const saving = ref(false)
 const isClosing = ref(false)
+const isMobile = ref(false)
 const gestureX = ref(0)
 const gestureY = ref(0)
 const gestureActive = ref(false)
@@ -59,6 +60,8 @@ let previousBodyOverflow = ''
 let previousRootOverflow = ''
 let scrollLocked = false
 let closeTimer: ReturnType<typeof setTimeout> | undefined
+let mobileQuery: MediaQueryList | undefined
+const updateMobile = () => { isMobile.value = mobileQuery?.matches ?? false }
 const resetEditor = () => {
   if (!asset.value) return
   title.value = asset.value.title
@@ -85,11 +88,19 @@ const unlockPageScroll = () => {
   scrollLocked = false
 }
 onMounted(() => {
+  mobileQuery = window.matchMedia('(max-width: 760px)')
+  updateMobile()
+  mobileQuery.addEventListener('change', updateMobile)
   lockPageScroll()
   dialog.value?.showModal()
-  if (!props.previewUrl || !window.matchMedia('(max-width: 760px)').matches) void loadFullPreview()
+  if (!props.previewUrl || !isMobile.value) void loadFullPreview()
 })
-onBeforeUnmount(() => { clearTimeout(closeTimer); clearTimeout(swipeTimer); unlockPageScroll() })
+onBeforeUnmount(() => {
+  clearTimeout(closeTimer)
+  clearTimeout(swipeTimer)
+  mobileQuery?.removeEventListener('change', updateMobile)
+  unlockPageScroll()
+})
 const finishClose = () => {
   unlockPageScroll()
   dialog.value?.close()
@@ -250,7 +261,7 @@ class="close-button" type="button" aria-label="Close asset details" autofocus
       <div v-else-if="error" class="overlay-state" role="alert"><strong>Unable to load this asset.</strong><button
           @click="refresh()">Try again</button></div>
       <main v-else-if="asset" ref="overlayContent" class="overlay-content">
-        <section ref="assetVisual" class="asset-visual" :class="{ 'skeleton-visual': !resolvedPreviewUrl, 'is-dragging': gestureActive }" :style="gestureStyle" aria-describedby="mobile-gesture-hint" @pointerdown="startGesture" @pointermove="moveGesture" @pointerup="finishGesture" @pointercancel="resetGesture" @transitionend="finishSwipeTransition"><span id="mobile-gesture-hint" class="sr-only">Swipe left or right to browse assets. Pull down to close.</span><button class="pull-handle" type="button" aria-label="Close asset details" @pointerdown.stop @click="close" /><img v-if="previousPreviewUrl" class="swipe-preview previous-preview" :src="previousPreviewUrl" alt="" draggable="false"><img v-if="resolvedPreviewUrl" class="current-preview" :src="resolvedPreviewUrl" :alt="`Preview of ${asset.title}`" draggable="false"><img v-if="nextPreviewUrl" class="swipe-preview next-preview" :src="nextPreviewUrl" alt="" draggable="false"><button class="details-hint" type="button" aria-label="Show asset details" @pointerdown.stop @click="revealDetails"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg><span>Details</span></button><button v-if="previousAssetId && !editing" class="asset-navigation previous" type="button" aria-label="Previous asset" @click="navigateAsset(previousAssetId)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7" /></svg></button><button v-if="nextAssetId && !editing" class="asset-navigation next" type="button" aria-label="Next asset" @click="navigateAsset(nextAssetId)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7" /></svg></button></section>
+        <section ref="assetVisual" class="asset-visual" :class="{ 'skeleton-visual': !resolvedPreviewUrl, 'is-dragging': isMobile&&gestureActive }" :style="isMobile ? gestureStyle : undefined" aria-describedby="mobile-gesture-hint" @pointerdown="startGesture" @pointermove="moveGesture" @pointerup="finishGesture" @pointercancel="resetGesture" @transitionend="finishSwipeTransition"><span id="mobile-gesture-hint" class="sr-only">Swipe left or right to browse assets. Pull down to close.</span><button class="pull-handle" type="button" aria-label="Close asset details" @pointerdown.stop @click="close" /><img v-if="isMobile&&previousPreviewUrl" class="swipe-preview previous-preview" :src="previousPreviewUrl" alt="" draggable="false"><img v-if="resolvedPreviewUrl" class="current-preview" :src="resolvedPreviewUrl" :alt="`Preview of ${asset.title}`" draggable="false"><img v-if="isMobile&&nextPreviewUrl" class="swipe-preview next-preview" :src="nextPreviewUrl" alt="" draggable="false"><button class="details-hint" type="button" aria-label="Show asset details" @pointerdown.stop @click="revealDetails"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg><span>Details</span></button><button v-if="previousAssetId && !editing" class="asset-navigation previous" type="button" aria-label="Previous asset" @click.stop="navigateAsset(previousAssetId)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7" /></svg></button><button v-if="nextAssetId && !editing" class="asset-navigation next" type="button" aria-label="Next asset" @click.stop="navigateAsset(nextAssetId)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7" /></svg></button></section>
         <aside>
           <span class="asset-status">{{ asset.status }}</span>
           <form v-if="editing" class="edit-form" @submit.prevent="saveDetails">

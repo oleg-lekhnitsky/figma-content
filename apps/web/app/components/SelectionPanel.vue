@@ -4,12 +4,14 @@ withDefaults(defineProps<{
   label: string
   wide?: boolean
   bare?: boolean
+  raised?: boolean
   closeLabel?: string
   closeDisabled?: boolean
 }>(), {
   visible: true,
   wide: false,
   bare: false,
+  raised: false,
   closeLabel: '',
   closeDisabled: false
 })
@@ -21,7 +23,7 @@ defineEmits<{ close: [] }>()
   <Teleport to="body">
     <Transition name="selection-panel">
       <div
-        v-if="visible" class="selection-panel" :class="{ 'selection-panel--wide': wide, 'selection-panel--bare': bare }" role="region"
+        v-if="visible" class="selection-panel" :class="{ 'selection-panel--wide': wide, 'selection-panel--bare': bare, 'selection-panel--raised': raised }" role="region"
         :aria-label="label">
         <slot />
         <button
@@ -69,6 +71,10 @@ defineEmits<{ close: [] }>()
   -webkit-backdrop-filter: none
 }
 
+.selection-panel--raised {
+  bottom: calc(var(--space)*2)
+}
+
 .selection-panel :slotted(strong) {
   padding: 0 10px;
   white-space: nowrap
@@ -104,6 +110,30 @@ defineEmits<{ close: [] }>()
 .selection-panel-enter-from,
 .selection-panel-leave-to {
   opacity: 0
+}
+
+@media (max-width: 520px) {
+  .selection-panel--wide {
+    width: calc(100vw - var(--space)*2);
+    box-sizing: border-box;
+    overflow: hidden
+  }
+
+  .selection-panel--wide :slotted(form) {
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: none
+  }
+
+  .selection-panel--wide :slotted(form::-webkit-scrollbar) {
+    display: none
+  }
+
+  .selection-panel--wide :slotted(button) {
+    flex: 0 0 auto
+  }
 }
 
 </style>

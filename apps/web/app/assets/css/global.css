@@ -27,7 +27,7 @@
   line-height: 1.15;
 }
 
-* { box-sizing: border-box; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 ::selection { color: #000; background: var(--color-accent); }
 body { margin: 0; color: var(--color-fg); background: var(--color-bg); }
 h1, h2 { margin: 0; letter-spacing: -.055em; }
