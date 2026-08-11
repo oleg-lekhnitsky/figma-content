@@ -5,17 +5,18 @@ const props = withDefaults(defineProps<{ assetId: string; assetIds?: string[]; p
 const emit = defineEmits<{ close: []; deleted: [id: string]; navigate: [id: string] }>()
 interface AssetDetail { id: string; uploaded_by: string; title: string; description: string | null; width: number; height: number; file_size: number; mime_type: string; status: string; version: number; created_at: string; updated_at: string; figma_url: string; language: string | null; content_type: string | null; project_id: string | null; campaign_id: string | null; projects: { name: string } | null; campaigns: { name: string } | null; asset_tags: Array<{ tags: { id: string; name: string } | null }>; allowed_users: { figma_handle: string | null } | null; versions: Array<{ id: string; version: number; width: number; height: number; file_size: number; created_at: string }> }
 interface SessionResponse { data: { authenticated: boolean; user?: { id: string; role: string } } }
-interface Board { id:string; title:string; mode:'dynamic'|'static'; role:'owner'|'editor'|'contributor'|'viewer'; itemCount:number; previewAssets:Array<{id:string;previewUrl:string;width:number;height:number}> }
-interface Option { id:string; name:string }
+interface Board { id: string; title: string; mode: 'dynamic' | 'static'; role: 'owner' | 'editor' | 'contributor' | 'viewer'; itemCount: number; previewAssets: Array<{ id: string; previewUrl: string; width: number; height: number }> }
+interface Option { id: string; name: string }
 const dialog = ref<HTMLDialogElement>()
 const overlayContent = ref<HTMLElement>()
 const assetVisual = ref<HTMLElement>()
 const { data, status, error, refresh } = await useLazyFetch<{ data: { asset: AssetDetail } }>(() => `/api/assets/${props.assetId}`)
 const { data: previewData, execute: loadFullPreview } = await useLazyFetch<{ data: { id: string; url: string } }>(() => `/api/assets/${props.assetId}/preview`, { immediate: false })
 const { data: session } = await useLazyFetch<SessionResponse>('/api/auth/session')
-const { data: boardData } = await useLazyFetch<{data:{collections:Board[]}}>('/api/shares')
-const { data: projectData } = await useLazyFetch<{data:{projects:Option[]}}>('/api/projects')
-const { data: campaignData } = await useLazyFetch<{data:{campaigns:Option[]}}>('/api/campaigns')
+const { data: boardData, refresh: refreshBoards } = await useLazyFetch<{ data: { collections: Board[] } }>('/api/shares')
+const boardCreator = ref<{ openCreate: () => Promise<void> }>()
+const { data: projectData } = await useLazyFetch<{ data: { projects: Option[] } }>('/api/projects')
+const { data: campaignData } = await useLazyFetch<{ data: { campaigns: Option[] } }>('/api/campaigns')
 const fetchedAsset = computed(() => data.value?.data.asset)
 const retainedAsset = shallowRef<AssetDetail>()
 watch(fetchedAsset, next => { if (next) retainedAsset.value = next }, { immediate: true })
@@ -38,7 +39,12 @@ const resolvedPreviewUrl = computed(() => displayedPreviewUrl.value)
 const role = computed(() => session.value?.data.user?.role)
 const canEdit = computed(() => ['editor', 'admin'].includes(role.value ?? '') || (role.value === 'contributor' && asset.value?.uploaded_by === session.value?.data.user?.id))
 const canApprove = computed(() => ['editor', 'admin'].includes(role.value ?? ''))
-const eligibleBoards = computed(() => (boardData.value?.data.collections ?? []).filter(board => board.mode==='static' && ['owner','editor','contributor'].includes(board.role) && (board.role!=='contributor' || asset.value?.uploaded_by===session.value?.data.user?.id)))
+const eligibleBoards = computed(() => (boardData.value?.data.collections ?? []).filter(board => board.mode === 'static' && ['owner', 'editor', 'contributor'].includes(board.role) && (board.role !== 'contributor' || asset.value?.uploaded_by === session.value?.data.user?.id)))
+const boardSearch = ref('')
+const filteredEligibleBoards = computed(() => {
+  const term = boardSearch.value.trim().toLocaleLowerCase()
+  return term ? eligibleBoards.value.filter(board => board.title.toLocaleLowerCase().includes(term)) : eligibleBoards.value
+})
 const assetIndex = computed(() => props.assetIds.indexOf(props.assetId))
 const previousAssetId = computed(() => assetIndex.value > 0 ? props.assetIds[assetIndex.value - 1] : undefined)
 const nextAssetId = computed(() => assetIndex.value >= 0 && assetIndex.value < props.assetIds.length - 1 ? props.assetIds[assetIndex.value + 1] : undefined)
@@ -162,6 +168,10 @@ const cancelOverlay = () => {
   if (boardPickerOpen.value) boardPickerOpen.value = false
   else close()
 }
+const openBoardPicker = () => {
+  boardSearch.value = ''
+  boardPickerOpen.value = true
+}
 const handleArrowNavigation = (event: KeyboardEvent, direction: -1 | 1) => {
   const target = event.target as HTMLElement | null
   if (editing.value || target?.matches('input, textarea, select, [contenteditable="true"]')) return
@@ -186,7 +196,7 @@ const startGesture = (event: PointerEvent) => {
   gestureStartY = event.clientY
   gestureAxis.value = ''
   gestureActive.value = true
-  ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
+    ; (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
 }
 const moveGesture = (event: PointerEvent) => {
   if (!gestureActive.value || event.pointerId !== gesturePointerId) return
@@ -257,15 +267,17 @@ watch(() => props.assetId, id => {
 
 <template>
   <Teleport to="body">
-    <dialog
-ref="dialog" class="asset-dialog" :class="{ 'is-closing': isClosing }"
-      aria-labelledby="asset-overlay-title" @cancel.prevent="cancelOverlay" @keydown="handleAssetNavigationKey">
-      <div class="overlay-toolbar"><span id="asset-overlay-title">Asset details</span><span v-if="asset" class="muted">Version {{ asset.version
-          }}</span><button
-class="close-button" type="button" aria-label="Close asset details" autofocus
-          @click="close"><X :size="22" aria-hidden="true" /></button></div>
-      <main v-if="status === 'pending' && !asset" class="overlay-content overlay-loading" role="status" aria-label="Loading asset details">
-        <section class="asset-visual" :class="{ 'skeleton-visual': !resolvedPreviewUrl }" aria-hidden="true"><img v-if="resolvedPreviewUrl" class="current-preview" :src="resolvedPreviewUrl" alt=""></section>
+    <dialog ref="dialog" class="asset-dialog" :class="{ 'is-closing': isClosing }" aria-labelledby="asset-overlay-title"
+      @cancel.prevent="cancelOverlay" @keydown="handleAssetNavigationKey">
+      <div class="overlay-toolbar"><span id="asset-overlay-title">Asset details</span><span v-if="asset"
+          class="muted">Version {{ asset.version
+          }}</span><button class="close-button" type="button" aria-label="Close asset details" autofocus @click="close">
+          <X :size="22" aria-hidden="true" />
+        </button></div>
+      <main v-if="status === 'pending' && !asset" class="overlay-content overlay-loading" role="status"
+        aria-label="Loading asset details">
+        <section class="asset-visual" :class="{ 'skeleton-visual': !resolvedPreviewUrl }" aria-hidden="true"><img
+            v-if="resolvedPreviewUrl" class="current-preview" :src="resolvedPreviewUrl" alt=""></section>
         <aside class="skeleton-panel" aria-hidden="true">
           <span class="skeleton-line skeleton-status" />
           <span class="skeleton-line skeleton-title" />
@@ -279,28 +291,79 @@ class="close-button" type="button" aria-label="Close asset details" autofocus
       <div v-else-if="error" class="overlay-state" role="alert"><strong>Unable to load this asset.</strong><button
           @click="refresh()">Try again</button></div>
       <main v-else-if="asset" ref="overlayContent" class="overlay-content">
-        <section ref="assetVisual" class="asset-visual" :class="{ 'skeleton-visual': !resolvedPreviewUrl, 'is-dragging': isMobile&&gestureActive }" :style="isMobile ? gestureStyle : undefined" aria-describedby="mobile-gesture-hint" @pointerdown="startGesture" @pointermove="moveGesture" @pointerup="finishGesture" @pointercancel="resetGesture" @transitionend="finishSwipeTransition"><span id="mobile-gesture-hint" class="sr-only">Swipe left or right to browse assets. Pull down to close.</span><button class="pull-handle" type="button" aria-label="Close asset details" @pointerdown.stop @click="close" /><img v-if="isMobile&&previousPreviewUrl" class="swipe-preview previous-preview" :src="previousPreviewUrl" alt="" draggable="false"><img v-if="resolvedPreviewUrl" class="current-preview" :src="resolvedPreviewUrl" :alt="`Preview of ${asset.title}`" draggable="false"><img v-if="isMobile&&nextPreviewUrl" class="swipe-preview next-preview" :src="nextPreviewUrl" alt="" draggable="false"><button class="details-hint" type="button" aria-label="Show asset details" @pointerdown.stop @click="revealDetails"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg><span>Details</span></button><button v-if="previousAssetId && !editing" class="asset-navigation previous" type="button" aria-label="Previous asset" @click.stop="navigateAsset(previousAssetId)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7" /></svg></button><button v-if="nextAssetId && !editing" class="asset-navigation next" type="button" aria-label="Next asset" @click.stop="navigateAsset(nextAssetId)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7" /></svg></button></section>
+        <section ref="assetVisual" class="asset-visual"
+          :class="{ 'skeleton-visual': !resolvedPreviewUrl, 'is-dragging': isMobile && gestureActive }"
+          :style="isMobile ? gestureStyle : undefined" aria-describedby="mobile-gesture-hint"
+          @pointerdown="startGesture" @pointermove="moveGesture" @pointerup="finishGesture"
+          @pointercancel="resetGesture" @transitionend="finishSwipeTransition"><span id="mobile-gesture-hint"
+            class="sr-only">Swipe left or right to browse assets. Pull down to close.</span><button class="pull-handle"
+            type="button" aria-label="Close asset details" @pointerdown.stop @click="close" /><img
+            v-if="isMobile && previousPreviewUrl" class="swipe-preview previous-preview" :src="previousPreviewUrl" alt=""
+            draggable="false"><img v-if="resolvedPreviewUrl" class="current-preview" :src="resolvedPreviewUrl"
+            :alt="`Preview of ${asset.title}`" draggable="false"><img v-if="isMobile && nextPreviewUrl"
+            class="swipe-preview next-preview" :src="nextPreviewUrl" alt="" draggable="false"><button
+            class="details-hint" type="button" aria-label="Show asset details" @pointerdown.stop
+            @click="revealDetails"><svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m6 9 6 6 6-6" />
+            </svg><span>Details</span></button><button v-if="previousAssetId && !editing"
+            class="asset-navigation previous" type="button" aria-label="Previous asset"
+            @click.stop="navigateAsset(previousAssetId)"><svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m15 5-7 7 7 7" />
+            </svg></button><button v-if="nextAssetId && !editing" class="asset-navigation next" type="button"
+            aria-label="Next asset" @click.stop="navigateAsset(nextAssetId)"><svg viewBox="0 0 24 24"
+              aria-hidden="true">
+              <path d="m9 5 7 7-7 7" />
+            </svg></button></section>
         <aside>
           <span class="asset-status">{{ asset.status }}</span>
           <form v-if="editing" class="edit-form" @submit.prevent="saveDetails">
             <label>Title<input v-model="title" name="title" required maxlength="200"></label>
             <label>Description<textarea v-model="description" name="description" rows="4" maxlength="5000" /></label>
             <div class="edit-grid">
-              <label>Project<select v-model="projectId" name="project"><option value="">No project</option><option v-for="project in projectData?.data.projects ?? []" :key="project.id" :value="project.id">{{ project.name }}</option></select></label>
-              <label>Campaign<select v-model="campaignId" name="campaign"><option value="">No campaign</option><option v-for="campaign in campaignData?.data.campaigns ?? []" :key="campaign.id" :value="campaign.id">{{ campaign.name }}</option></select></label>
+              <label>Project<select v-model="projectId" name="project">
+                  <option value="">No project</option>
+                  <option v-for="project in projectData?.data.projects ?? []" :key="project.id" :value="project.id">{{
+                    project.name }}</option>
+                </select></label>
+              <label>Campaign<select v-model="campaignId" name="campaign">
+                  <option value="">No campaign</option>
+                  <option v-for="campaign in campaignData?.data.campaigns ?? []" :key="campaign.id"
+                    :value="campaign.id">{{ campaign.name }}</option>
+                </select></label>
               <label>Language<input v-model="language" name="language" maxlength="35" placeholder="English"></label>
-              <label>Content type<input v-model="contentType" name="contentType" maxlength="80" placeholder="Campaign image"></label>
+              <label>Content type<input v-model="contentType" name="contentType" maxlength="80"
+                  placeholder="Campaign image"></label>
             </div>
-            <label>Tags<textarea v-model="tagsText" name="tags" rows="2" maxlength="4049" aria-describedby="tags-hint" /></label>
+            <label>Tags<textarea v-model="tagsText" name="tags" rows="2" maxlength="4049"
+                aria-describedby="tags-hint" /></label>
             <small id="tags-hint" class="field-hint">Separate tags with commas.</small>
-            <div class="action-row"><button type="submit" :disabled="saving">{{ saving ? 'Saving…' : 'Save changes' }}</button><button class="button-secondary" type="button" :disabled="saving" @click="cancelEditing">Cancel</button></div>
+            <div class="action-row"><button type="submit" :disabled="saving">{{ saving ? 'Saving…' : 'Save changes'
+                }}</button><button class="button-secondary" type="button" :disabled="saving"
+                @click="cancelEditing">Cancel</button></div>
           </form>
           <template v-else>
             <h1>{{ asset.title }}</h1>
             <p v-if="asset.description" class="description">{{ asset.description }}</p>
           </template>
-          <div v-if="!editing" class="primary-actions"><a class="button" :href="asset.figma_url" target="_blank" rel="noopener noreferrer">Open in Figma</a><details class="asset-more"><summary class="button-secondary" aria-label="More asset actions"><MoreH :size="20" aria-hidden="true" /></summary><div class="asset-more-menu"><button class="button-secondary" type="button" :disabled="downloading" @click="download">{{ downloading ? 'Preparing…' : 'Download' }}</button><button v-if="canEdit" class="button-secondary" type="button" @click="startEditing">Edit details</button><button v-if="canApprove && asset.status !== 'approved'" class="button-secondary" type="button" @click="patchAsset({ status: 'approved' })">Approve</button><button v-if="canEdit && asset.status !== 'archived'" class="button-secondary" type="button" @click="patchAsset({ status: 'archived' })">Archive</button><button v-if="role === 'admin'" class="button-secondary danger-button" type="button" @click="remove">Delete asset</button></div></details></div>
-          <button v-if="!editing && asset.status==='approved' && eligibleBoards.length" class="button board-picker-trigger" type="button" @click="boardPickerOpen=true">Add</button>
+          <div v-if="!editing" class="primary-actions"><button v-if="asset.status === 'approved' && eligibleBoards.length"
+              class="button board-picker-trigger" type="button" @click="openBoardPicker">Add</button><a
+              class="button-secondary action-button" :href="asset.figma_url" target="_blank"
+              rel="noopener noreferrer">Open in
+              Figma</a>
+            <details class="asset-more">
+              <summary class="button-secondary" aria-label="More asset actions">
+                <MoreH :size="20" aria-hidden="true" />
+              </summary>
+              <div class="asset-more-menu"><button class="button-secondary" type="button" :disabled="downloading"
+                  @click="download">{{ downloading ? 'Preparing…' : 'Download' }}</button><button v-if="canEdit"
+                  class="button-secondary" type="button" @click="startEditing">Edit details</button><button
+                  v-if="canApprove && asset.status !== 'approved'" class="button-secondary" type="button"
+                  @click="patchAsset({ status: 'approved' })">Approve</button><button
+                  v-if="canEdit && asset.status !== 'archived'" class="button-secondary" type="button"
+                  @click="patchAsset({ status: 'archived' })">Archive</button><button v-if="role === 'admin'"
+                  class="button-secondary danger-button" type="button" @click="remove">Delete asset</button></div>
+            </details>
+          </div>
           <p v-if="actionError" class="error" role="alert">{{ actionError }}</p>
           <p v-if="actionMessage" class="success" role="status">{{ actionMessage }}</p>
           <dl v-if="!editing">
@@ -341,20 +404,42 @@ class="close-button" type="button" aria-label="Close asset details" autofocus
             <h2>Version history</h2>
             <ol>
               <li v-for="item in asset.versions" :key="item.id"><strong>Version {{ item.version }}</strong><span>{{
-                  item.width }}
+                item.width }}
                   × {{ item.height }} · {{ new Date(item.created_at).toLocaleDateString() }}</span></li>
             </ol>
           </section>
         </aside>
       </main>
-      <section v-if="boardPickerOpen" class="board-picker" role="dialog" aria-modal="true" aria-labelledby="board-picker-title">
-        <header><h2 id="board-picker-title">Add to board</h2><button class="close-button" type="button" aria-label="Close board picker" autofocus @click="boardPickerOpen=false"><X :size="22" aria-hidden="true" /></button></header>
-        <div class="board-picker-list">
-          <button v-for="board in eligibleBoards" :key="board.id" class="board-picker-option" type="button" :disabled="Boolean(addingBoardId)" :aria-label="`Add asset to ${board.title}`" @click="addToBoard(board.id)">
-            <span class="board-picker-preview" :class="{ 'is-empty': !board.previewAssets.length }"><template v-if="board.previewAssets.length"><img v-for="preview in board.previewAssets" :key="preview.id" :src="preview.previewUrl" :width="preview.width" :height="preview.height" alt="" loading="lazy" decoding="async"></template><span v-else>No items yet</span></span>
-            <span class="board-picker-info"><strong>{{ board.title }}</strong><span>{{ addingBoardId===board.id ? 'Adding…' : `${board.itemCount} ${board.itemCount===1 ? 'item' : 'items'}` }}</span></span>
+      <section v-if="boardPickerOpen" class="board-picker" role="dialog" aria-modal="true"
+        aria-labelledby="board-picker-title">
+        <header><button class="close-button" type="button" aria-label="Close board picker"
+            @click="boardPickerOpen = false">
+            <X :size="22" aria-hidden="true" />
           </button>
+          <h2 id="board-picker-title">Add to board</h2><span aria-hidden="true" />
+        </header>
+        <label class="board-picker-search">
+          <Search :size="22" aria-hidden="true" /><span class="sr-only">Search boards</span><input v-model="boardSearch"
+            type="search" placeholder="Search" autofocus>
+        </label>
+        <div class="board-picker-list">
+          <button v-for="board in filteredEligibleBoards" :key="board.id" class="board-picker-option" type="button"
+            :disabled="Boolean(addingBoardId)" :aria-label="`Add asset to ${board.title}`"
+            @click="addToBoard(board.id)">
+            <span class="board-picker-preview" :class="{ 'is-empty': !board.previewAssets.length }"><img
+                v-if="board.previewAssets[0]" :src="board.previewAssets[0].previewUrl" alt="" loading="lazy"
+                decoding="async"><span v-else aria-hidden="true" /></span>
+            <span class="board-picker-info"><strong>{{ board.title }}</strong><span>{{ addingBoardId === board.id ?
+              'Adding…' :
+              `${board.itemCount} ${board.itemCount===1 ? 'item' : 'items'}` }}</span></span>
+          </button>
+          <p v-if="!filteredEligibleBoards.length" class="board-picker-empty">No boards found</p>
         </div>
+        <footer class="board-picker-footer"><button class="button" type="button"
+            @click="boardCreator?.openCreate()">Create
+            board</button>
+          <ShareCollection ref="boardCreator" hide-trigger @created="refreshBoards" />
+        </footer>
       </section>
     </dialog>
   </Teleport>
@@ -462,10 +547,27 @@ class="close-button" type="button" aria-label="Close asset details" autofocus
   transition-timing-function: cubic-bezier(.2, 0, 0, 1)
 }
 
-.asset-visual.is-dragging { transition-duration: 0s }
-.pull-handle { display: none }
-.details-hint { display: none }
-.sr-only{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
+.asset-visual.is-dragging {
+  transition-duration: 0s
+}
+
+.pull-handle {
+  display: none
+}
+
+.details-hint {
+  display: none
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap
+}
 
 .asset-visual img {
   position: absolute;
@@ -475,7 +577,10 @@ class="close-button" type="button" aria-label="Close asset details" autofocus
   height: 100%;
   object-fit: contain
 }
-.swipe-preview { display: none }
+
+.swipe-preview {
+  display: none
+}
 
 .skeleton-visual,
 .skeleton-line,
@@ -621,9 +726,23 @@ h1 {
   margin: var(--space) 0;
 }
 
-.primary-actions > :first-child,
-.action-row > :first-child {
+.primary-actions> :first-child,
+.action-row> :first-child {
   margin-left: -2px
+}
+
+.primary-actions>.button,
+.primary-actions>.action-button.action-button,
+.primary-actions>.asset-more,
+.primary-actions>.asset-more>summary {
+  box-sizing: border-box;
+  height: var(--control-height);
+  min-height: var(--control-height);
+}
+
+.primary-actions>.action-button.action-button {
+  margin-left: 0;
+  padding-inline: 1.25rem
 }
 
 .button {
@@ -648,7 +767,9 @@ h1 {
   cursor: pointer
 }
 
-.asset-more summary::-webkit-details-marker { display: none }
+.asset-more summary::-webkit-details-marker {
+  display: none
+}
 
 .asset-more-menu {
   position: absolute;
@@ -678,9 +799,176 @@ h1 {
   color: var(--color-danger)
 }
 
-.success { color: var(--color-muted) }
-.board-picker-trigger{margin-bottom:var(--space)}
-.board-picker{position:fixed;z-index:20;inset:0;box-sizing:border-box;display:grid;grid-template-rows:auto minmax(0,1fr);padding:var(--space);color:var(--color-fg);background:var(--color-bg);overflow:hidden}.board-picker header{display:flex;align-items:center;justify-content:space-between;gap:var(--space);padding-bottom:var(--space)}.board-picker h2{margin:0}.board-picker-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,22rem),1fr));align-content:start;gap:calc(var(--space)*2) var(--space);overflow-y:auto;overscroll-behavior:contain}.board-picker-option{min-width:0;display:grid;gap:calc(var(--space)/2);padding:0;color:var(--color-fg);background:transparent;border-radius:0;text-align:left}.board-picker-preview{min-height:140px;display:flex;align-items:center;gap:calc(var(--space)/4);overflow:hidden;border-radius:var(--radius);background:var(--color-bg)}.board-picker-preview img{display:block;width:100%;height:auto;max-height:220px;min-width:0;flex:1 1 0;object-fit:contain}.board-picker-preview.is-empty{place-items:center;justify-content:center;color:var(--color-muted);background:var(--color-surface)}.board-picker-info{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space)}.board-picker-info>span{flex:0 0 auto;color:var(--color-muted)}
+.success {
+  color: var(--color-muted)
+}
+
+.board-picker-trigger {
+  margin-bottom: var(--space)
+}
+
+.board-picker {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: var(--space);
+  padding: var(--space);
+  color: var(--color-fg);
+  background: var(--color-bg);
+  overflow: hidden
+}
+
+.board-picker header {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: var(--space)
+}
+
+.board-picker .close-button {
+  display: grid;
+  pointer-events: auto
+}
+
+.board-picker h2 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap
+}
+
+.board-picker-search,
+.board-picker-list,
+.board-picker-footer {
+  width: min(100%, 40rem);
+  justify-self: center
+}
+
+.board-picker-footer button{
+  padding: calc(var(--space)*1.5);
+}
+
+.board-picker-search {
+  height: 52px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 12px;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0 16px;
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-muted)
+}
+
+.board-picker-search input {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-fg);
+  font: inherit
+}
+
+.board-picker-search input::placeholder {
+  color: var(--color-muted)
+}
+
+.board-picker-search input:focus {
+  outline: 0
+}
+
+.board-picker-search input::-webkit-search-cancel-button {
+  appearance: none
+}
+
+.board-picker-list {
+  align-content: start;
+  overflow-y: auto;
+  overscroll-behavior: contain
+}
+
+.board-picker-option {
+  width: 100%;
+  min-height: 72px;
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space);
+  padding: 8px;
+  color: var(--color-fg);
+  background: transparent;
+  text-align: left
+}
+
+.board-picker-option:hover {
+  opacity: 1;
+  background: var(--color-surface)
+}
+
+.board-picker-preview {
+  width: 56px;
+  height: 56px;
+  display: block;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--color-surface)
+}
+
+.board-picker-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover
+}
+
+.board-picker-preview.is-empty span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--color-surface)
+}
+
+.board-picker-info {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space)
+}
+
+.board-picker-info strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap
+}
+
+.board-picker-info>span {
+  flex: 0 0 auto;
+  color: var(--color-muted)
+}
+
+.board-picker-empty {
+  color: var(--color-muted);
+  text-align: center
+}
+
+.board-picker-footer {
+  padding-top: var(--space);
+  background: var(--color-bg)
+}
+
+.board-picker-footer>.button {
+  width: 100%
+}
 
 label {
   display: block;
@@ -815,11 +1103,26 @@ li span {
     transition: transform .22s cubic-bezier(.2, 0, 0, 1)
   }
 
-  .asset-visual.is-dragging img { transition-duration: 0s }
-  .asset-visual .current-preview { transform: translate3d(var(--swipe-x), 0, 0);view-transition-name:asset-preview }
-  .asset-visual .swipe-preview { display:block }
-  .asset-visual .previous-preview { transform:translate3d(calc(-100% + var(--swipe-x)),0,0) }
-  .asset-visual .next-preview { transform:translate3d(calc(100% + var(--swipe-x)),0,0) }
+  .asset-visual.is-dragging img {
+    transition-duration: 0s
+  }
+
+  .asset-visual .current-preview {
+    transform: translate3d(var(--swipe-x), 0, 0);
+    view-transition-name: asset-preview
+  }
+
+  .asset-visual .swipe-preview {
+    display: block
+  }
+
+  .asset-visual .previous-preview {
+    transform: translate3d(calc(-100% + var(--swipe-x)), 0, 0)
+  }
+
+  .asset-visual .next-preview {
+    transform: translate3d(calc(100% + var(--swipe-x)), 0, 0)
+  }
 
   .overlay-toolbar {
     position: absolute;
@@ -894,11 +1197,15 @@ li span {
     stroke-linejoin: round
   }
 
-  .details-hint span { font-size: 12px }
+  .details-hint span {
+    font-size: 12px
+  }
 
-  .asset-navigation { display: none }
+  .asset-navigation {
+    display: none
+  }
 
-  .overlay-content > aside,
+  .overlay-content>aside,
   .skeleton-panel {
     min-height: 100dvh;
     display: block;
@@ -909,10 +1216,17 @@ li span {
     overflow: visible
   }
 
-  .skeleton-panel { display: grid }
+  .skeleton-panel {
+    display: grid
+  }
 
-  h1 { font-size: clamp(2rem, 10vw, 3rem) }
-  .board-picker{padding:max(var(--space),env(safe-area-inset-top)) var(--space) max(var(--space),env(safe-area-inset-bottom))}
+  h1 {
+    font-size: clamp(2rem, 10vw, 3rem)
+  }
+
+  .board-picker {
+    padding: max(var(--space), env(safe-area-inset-top)) var(--space) max(var(--space), env(safe-area-inset-bottom))
+  }
 }
 
 :global(::view-transition-group(asset-preview)) {
@@ -935,12 +1249,15 @@ li span {
 }
 
 @media(prefers-reduced-motion:reduce) {
+
   .asset-dialog,
   .asset-dialog::backdrop,
   .asset-navigation {
     transition-duration: .01ms
   }
 
-  .asset-visual { transition-duration: .01ms }
+  .asset-visual {
+    transition-duration: .01ms
+  }
 }
 </style>

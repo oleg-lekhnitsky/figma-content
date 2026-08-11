@@ -2,7 +2,8 @@
 import type { BoardLayout } from '@content-library/shared'
 
 interface CurrentFilters { search?: string; projectId?: string; projectName?: string; dateFrom?: string; dateTo?: string; dateLabel?: string; status?: string }
-const props = withDefaults(defineProps<{ currentFilters?: CurrentFilters; portfolioOnly?: boolean }>(), { portfolioOnly: false })
+const props = withDefaults(defineProps<{ currentFilters?: CurrentFilters; portfolioOnly?: boolean; hideTrigger?: boolean }>(), { portfolioOnly: false, hideTrigger: false })
+const emit = defineEmits<{ created: [] }>()
 
 interface Option { id: string; name: string }
 type BoardRole = 'owner' | 'editor' | 'contributor' | 'viewer' | 'admin'
@@ -146,6 +147,11 @@ const showCreate = async (fromCurrentView = false) => {
   await nextTick()
   titleInput.value?.focus()
 }
+const openCreate = async () => {
+  await open()
+  if (!props.portfolioOnly) await showCreate(false)
+}
+defineExpose({ openCreate })
 const showList = async () => {
   errorMessage.value = ''
   view.value = 'list'
@@ -183,6 +189,7 @@ const createCollection = async () => {
     })
     const createdCollection: Collection = { ...response.data.collection, itemCount: response.data.collection.itemCount ?? 0, previewAssets: [] }
     collections.value.unshift(createdCollection)
+    emit('created')
     if (createdCollection.purpose === 'showcase') await copyLink(createdCollection)
     message.value = response.data.collection.purpose === 'review'
       ? 'Monthly review created. Add contributors so they can submit their work.'
@@ -236,7 +243,7 @@ const closeActionMenu = (event: Event) => {
 </script>
 
 <template>
-  <button type="button" :class="[props.portfolioOnly ? 'button' : 'button-plain', 'share-trigger']" :disabled="opening" @click="open">{{ props.portfolioOnly ? 'Create edition' : 'Boards' }}</button>
+  <button v-if="!props.hideTrigger" type="button" :class="[props.portfolioOnly ? 'button' : 'button-plain', 'share-trigger']" :disabled="opening" @click="open">{{ props.portfolioOnly ? 'Create edition' : 'Boards' }}</button>
   <dialog
 ref="dialog" class="share-dialog" aria-labelledby="share-title" @click.self="close" @cancel.prevent="close"
     @close="unlockPageScroll">
