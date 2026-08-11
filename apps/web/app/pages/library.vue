@@ -265,7 +265,7 @@ onBeforeUnmount(() => {
   .filters input,.filters select{height:44px;min-height:44px}
   .search-only,.search-only label{width:100%}
   .search-only label{flex:1 1 auto}
-  .search-only input{width:100%;max-width:none}
+  .search-only input{width:100%;max-width:none;font-size:16px}
   .search-only input::placeholder{color:var(--color-muted);opacity:1}
   .search-only input:focus-visible{outline:0;box-shadow:none}
   .filters label:not(.search-field):not(.date-field)::after{top:15px}
