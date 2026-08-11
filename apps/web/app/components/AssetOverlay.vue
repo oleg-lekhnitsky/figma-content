@@ -5,7 +5,7 @@ const props = withDefaults(defineProps<{ assetId: string; assetIds?: string[]; p
 const emit = defineEmits<{ close: []; deleted: [id: string]; navigate: [id: string] }>()
 interface AssetDetail { id: string; uploaded_by: string; title: string; description: string | null; width: number; height: number; file_size: number; mime_type: string; status: string; version: number; created_at: string; updated_at: string; figma_url: string; language: string | null; content_type: string | null; project_id: string | null; campaign_id: string | null; projects: { name: string } | null; campaigns: { name: string } | null; asset_tags: Array<{ tags: { id: string; name: string } | null }>; allowed_users: { figma_handle: string | null } | null; versions: Array<{ id: string; version: number; width: number; height: number; file_size: number; created_at: string }> }
 interface SessionResponse { data: { authenticated: boolean; user?: { id: string; role: string } } }
-interface Board { id:string; title:string; mode:'dynamic'|'static'; role:'owner'|'editor'|'contributor'|'viewer' }
+interface Board { id:string; title:string; mode:'dynamic'|'static'; role:'owner'|'editor'|'contributor'|'viewer'; itemCount:number; previewAssets:Array<{id:string;previewUrl:string;width:number;height:number}> }
 interface Option { id:string; name:string }
 const dialog = ref<HTMLDialogElement>()
 const overlayContent = ref<HTMLElement>()
@@ -45,6 +45,8 @@ const nextAssetId = computed(() => assetIndex.value >= 0 && assetIndex.value < p
 const previousPreviewUrl = computed(() => previousAssetId.value ? props.previewUrls[previousAssetId.value] : undefined)
 const nextPreviewUrl = computed(() => nextAssetId.value ? props.previewUrls[nextAssetId.value] : undefined)
 const boardId = ref('')
+const boardPickerOpen = ref(false)
+const addingBoardId = ref('')
 const editing = ref(false); const title = ref(''); const description = ref(''); const projectId = ref(''); const campaignId = ref(''); const tagsText = ref(''); const language = ref(''); const contentType = ref(''); const actionError = ref(''); const actionMessage = ref(''); const downloading = ref(false); const saving = ref(false)
 const isClosing = ref(false)
 const isMobile = ref(false)
@@ -135,14 +137,30 @@ const saveDetails = async () => {
 }
 const download = async () => { if (!asset.value) return; downloading.value = true; try { const response = await $fetch<{ data: { url: string } }>(`/api/assets/${props.assetId}/download-url`, { method: 'POST' }); window.location.assign(response.data.url) } catch { actionError.value = 'Unable to prepare the download.' } finally { downloading.value = false } }
 const remove = async () => { if (!confirm('Permanently delete this asset and every version?')) return; try { await $fetch(`/api/assets/${props.assetId}`, { method: 'DELETE' }); emit('deleted', props.assetId); close() } catch { actionError.value = 'Unable to delete this asset.' } }
-const addToBoard = async () => { if(!boardId.value)return; actionError.value=''; actionMessage.value=''; try { await $fetch(`/api/shares/${boardId.value}/assets`,{method:'POST',body:{assetId:props.assetId}}); actionMessage.value='Added to board.' } catch { actionError.value='Unable to add this asset to the board.' } }
+const addToBoard = async (targetBoardId = boardId.value) => {
+  if (!targetBoardId || addingBoardId.value) return
+  actionError.value = ''
+  actionMessage.value = ''
+  addingBoardId.value = targetBoardId
+  try {
+    await $fetch(`/api/shares/${targetBoardId}/assets`, { method: 'POST', body: { assetId: props.assetId } })
+    actionMessage.value = 'Added to board.'
+    boardPickerOpen.value = false
+  } catch { actionError.value = 'Unable to add this asset to the board.' }
+  finally { addingBoardId.value = '' }
+}
 const formatBytes = (bytes: number) => `${(bytes / 1_048_576).toFixed(1)} MB`
 const navigateAsset = (id?: string) => {
   if (!id || editing.value) return
   actionError.value = ''
   actionMessage.value = ''
   boardId.value = ''
+  boardPickerOpen.value = false
   emit('navigate', id)
+}
+const cancelOverlay = () => {
+  if (boardPickerOpen.value) boardPickerOpen.value = false
+  else close()
 }
 const handleArrowNavigation = (event: KeyboardEvent, direction: -1 | 1) => {
   const target = event.target as HTMLElement | null
@@ -241,7 +259,7 @@ watch(() => props.assetId, id => {
   <Teleport to="body">
     <dialog
 ref="dialog" class="asset-dialog" :class="{ 'is-closing': isClosing }"
-      aria-labelledby="asset-overlay-title" @cancel.prevent="close" @keydown="handleAssetNavigationKey">
+      aria-labelledby="asset-overlay-title" @cancel.prevent="cancelOverlay" @keydown="handleAssetNavigationKey">
       <div class="overlay-toolbar"><span id="asset-overlay-title">Asset details</span><span v-if="asset" class="muted">Version {{ asset.version
           }}</span><button
 class="close-button" type="button" aria-label="Close asset details" autofocus
@@ -282,7 +300,7 @@ class="close-button" type="button" aria-label="Close asset details" autofocus
             <p v-if="asset.description" class="description">{{ asset.description }}</p>
           </template>
           <div v-if="!editing" class="primary-actions"><a class="button" :href="asset.figma_url" target="_blank" rel="noopener noreferrer">Open in Figma</a><details class="asset-more"><summary class="button-secondary" aria-label="More asset actions"><MoreH :size="20" aria-hidden="true" /></summary><div class="asset-more-menu"><button class="button-secondary" type="button" :disabled="downloading" @click="download">{{ downloading ? 'Preparing…' : 'Download' }}</button><button v-if="canEdit" class="button-secondary" type="button" @click="startEditing">Edit details</button><button v-if="canApprove && asset.status !== 'approved'" class="button-secondary" type="button" @click="patchAsset({ status: 'approved' })">Approve</button><button v-if="canEdit && asset.status !== 'archived'" class="button-secondary" type="button" @click="patchAsset({ status: 'archived' })">Archive</button><button v-if="role === 'admin'" class="button-secondary danger-button" type="button" @click="remove">Delete asset</button></div></details></div>
-          <div v-if="!editing && asset.status==='approved' && eligibleBoards.length" class="board-action"><label><span>Add to board</span><select v-model="boardId"><option value="">Choose a static board</option><option v-for="board in eligibleBoards" :key="board.id" :value="board.id">{{ board.title }}</option></select></label><button class="button-secondary" type="button" :disabled="!boardId" @click="addToBoard">Add</button></div>
+          <button v-if="!editing && asset.status==='approved' && eligibleBoards.length" class="button board-picker-trigger" type="button" @click="boardPickerOpen=true">Add</button>
           <p v-if="actionError" class="error" role="alert">{{ actionError }}</p>
           <p v-if="actionMessage" class="success" role="status">{{ actionMessage }}</p>
           <dl v-if="!editing">
@@ -329,6 +347,15 @@ class="close-button" type="button" aria-label="Close asset details" autofocus
           </section>
         </aside>
       </main>
+      <section v-if="boardPickerOpen" class="board-picker" role="dialog" aria-modal="true" aria-labelledby="board-picker-title">
+        <header><h2 id="board-picker-title">Add to board</h2><button class="close-button" type="button" aria-label="Close board picker" autofocus @click="boardPickerOpen=false"><X :size="22" aria-hidden="true" /></button></header>
+        <div class="board-picker-list">
+          <button v-for="board in eligibleBoards" :key="board.id" class="board-picker-option" type="button" :disabled="Boolean(addingBoardId)" :aria-label="`Add asset to ${board.title}`" @click="addToBoard(board.id)">
+            <span class="board-picker-preview" :class="{ 'is-empty': !board.previewAssets.length }"><template v-if="board.previewAssets.length"><img v-for="preview in board.previewAssets" :key="preview.id" :src="preview.previewUrl" :width="preview.width" :height="preview.height" alt="" loading="lazy" decoding="async"></template><span v-else>No items yet</span></span>
+            <span class="board-picker-info"><strong>{{ board.title }}</strong><span>{{ addingBoardId===board.id ? 'Adding…' : `${board.itemCount} ${board.itemCount===1 ? 'item' : 'items'}` }}</span></span>
+          </button>
+        </div>
+      </section>
     </dialog>
   </Teleport>
 </template>
@@ -652,7 +679,8 @@ h1 {
 }
 
 .success { color: var(--color-muted) }
-.board-action{display:flex;align-items:end;gap:8px;margin:var(--space) 0}.board-action label{min-width:0;flex:1;margin:0}.board-action label span{display:block;margin-bottom:4px}.board-action select{width:100%;min-height:36px}.board-action button{flex:0 0 auto}
+.board-picker-trigger{margin-bottom:var(--space)}
+.board-picker{position:fixed;z-index:20;inset:0;box-sizing:border-box;display:grid;grid-template-rows:auto minmax(0,1fr);padding:var(--space);color:var(--color-fg);background:var(--color-bg);overflow:hidden}.board-picker header{display:flex;align-items:center;justify-content:space-between;gap:var(--space);padding-bottom:var(--space)}.board-picker h2{margin:0}.board-picker-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,22rem),1fr));align-content:start;gap:calc(var(--space)*2) var(--space);overflow-y:auto;overscroll-behavior:contain}.board-picker-option{min-width:0;display:grid;gap:calc(var(--space)/2);padding:0;color:var(--color-fg);background:transparent;border-radius:0;text-align:left}.board-picker-preview{min-height:140px;display:flex;align-items:center;gap:calc(var(--space)/4);overflow:hidden;border-radius:var(--radius);background:var(--color-bg)}.board-picker-preview img{display:block;width:100%;height:auto;max-height:220px;min-width:0;flex:1 1 0;object-fit:contain}.board-picker-preview.is-empty{place-items:center;justify-content:center;color:var(--color-muted);background:var(--color-surface)}.board-picker-info{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space)}.board-picker-info>span{flex:0 0 auto;color:var(--color-muted)}
 
 label {
   display: block;
@@ -883,7 +911,8 @@ li span {
 
   .skeleton-panel { display: grid }
 
-  h1 { font-size: var(--font-size-h1-mobile) }
+  h1 { font-size: clamp(2rem, 10vw, 3rem) }
+  .board-picker{padding:max(var(--space),env(safe-area-inset-top)) var(--space) max(var(--space),env(safe-area-inset-bottom))}
 }
 
 :global(::view-transition-group(asset-preview)) {
