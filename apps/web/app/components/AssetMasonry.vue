@@ -51,21 +51,33 @@ const dropIndex = ref<number | null>(null)
 let resizeObserver: ResizeObserver | undefined
 let measureFrame = 0
 let revealFrame = 0
+let activeViewTransition: { finished: Promise<void>; skipTransition?: () => void } | undefined
 const assetLink = (id: string): RouteLocationRaw => ({ path: '/library', query: { ...route.query, asset: id } })
 const openAsset = (event: MouseEvent, id: string) => {
   if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-  const transitionDocument = document as Document & { startViewTransition?: (update: () => Promise<void>) => { finished: Promise<void> } }
+  const transitionDocument = document as Document & { startViewTransition?: (update: () => Promise<void>) => { finished: Promise<void>; skipTransition?: () => void } }
   if (!transitionDocument.startViewTransition || !window.matchMedia('(max-width: 760px)').matches || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
   event.preventDefault()
   const image = (event.currentTarget as HTMLElement).querySelector<HTMLImageElement>('img')
   if (!image) return void router.push(assetLink(id))
   image.style.viewTransitionName = 'asset-preview'
-  const transition = transitionDocument.startViewTransition(async () => {
-    await router.push(assetLink(id))
+  try {
+    activeViewTransition?.skipTransition?.()
+    const transition = transitionDocument.startViewTransition(async () => {
+      await router.push(assetLink(id))
+      image.style.viewTransitionName = ''
+      await nextTick()
+    })
+    activeViewTransition = transition
+    transition.finished.catch(() => undefined).finally(() => {
+      image.style.viewTransitionName = ''
+      if (activeViewTransition === transition) activeViewTransition = undefined
+    })
+  } catch {
     image.style.viewTransitionName = ''
-    await nextTick()
-  })
-  transition.finished.finally(() => { image.style.viewTransitionName = '' })
+    activeViewTransition = undefined
+    void router.push(assetLink(id))
+  }
 }
 const cardStagger = (index: number) => `${Math.min(index * 18, 144)}ms`
 const startDrag = (event: DragEvent, index: number) => {
@@ -153,6 +165,7 @@ onMounted(observeCards)
 onBeforeUnmount(() => {
   cancelAnimationFrame(measureFrame)
   cancelAnimationFrame(revealFrame)
+  activeViewTransition?.skipTransition?.()
   resizeObserver?.disconnect()
 })
 </script>
