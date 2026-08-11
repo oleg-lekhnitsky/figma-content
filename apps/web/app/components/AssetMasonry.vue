@@ -174,7 +174,6 @@ const projectAndTags = (asset: AssetMasonryItem) => {
 }
 watch(() => [props.assets.map(asset => asset.id).join(','), props.rowFlow], async () => {
   if (!draggedId.value) renderedAssets.value = [...props.assets]
-  layoutReady.value = false
   await nextTick()
   observeCards()
 })

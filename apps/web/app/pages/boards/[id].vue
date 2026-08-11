@@ -247,15 +247,26 @@ const applyDecision = async (assets:Asset[],decision:'approve'|'pass'|'reopen') 
   finally { contentBusy.value=false }
 }
 const addAsset = async (asset:Asset) => {
+  if (hasAsset(asset.id) || contentBusy.value) return
+  const previous=[...boardAssets.value]
+  boardAssets.value=[...previous,asset]
+  collection.content_strategy='manual'
+  feedback.text=`${asset.title} added.`; feedback.error=false
   contentBusy.value=true
-  try { await apiFetch(`/api/shares/${id}/assets`,{method:'POST',body:{assetId:asset.id}}); collection.content_strategy='manual'; await loadContent(); feedback.text=`${asset.title} added.`; feedback.error=false }
-  catch { feedback.text='Unable to add this item.'; feedback.error=true }
+  try { await apiFetch(`/api/shares/${id}/assets`,{method:'POST',body:{assetId:asset.id}}) }
+  catch { boardAssets.value=previous; feedback.text='Unable to add this item.'; feedback.error=true }
   finally { contentBusy.value=false }
 }
 const removeAsset = async (asset:Asset) => {
+  if (contentBusy.value) return
+  const previous=[...boardAssets.value]
+  boardAssets.value=previous.filter(item=>item.id!==asset.id)
+  selectedAssetIds.delete(asset.id)
+  collection.content_strategy='manual'
+  feedback.text=`${asset.title} removed.`; feedback.error=false
   contentBusy.value=true
-  try { await apiFetch(`/api/shares/${id}/assets/${asset.id}`,{method:'DELETE'}); selectedAssetIds.delete(asset.id); collection.content_strategy='manual'; await loadContent(); feedback.text=`${asset.title} removed.`; feedback.error=false }
-  catch { feedback.text='Unable to remove this item.'; feedback.error=true }
+  try { await apiFetch(`/api/shares/${id}/assets/${asset.id}`,{method:'DELETE'}) }
+  catch { boardAssets.value=previous; feedback.text='Unable to remove this item.'; feedback.error=true }
   finally { contentBusy.value=false }
 }
 const boardAssetIndex = (assetId:string) => boardAssets.value.findIndex(asset => asset.id===assetId)
