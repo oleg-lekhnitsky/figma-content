@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { BoardLayout } from '@content-library/shared'
 
-interface CurrentFilters { search?: string; projectIds?: string[]; projectNames?: string[]; tagIds?: string[]; tagNames?: string[]; dateFrom?: string; dateTo?: string; dateLabel?: string; status?: string }
+interface CurrentFilters { search?: string; projectIds?: string[]; projectNames?: string[]; tagIds?: string[]; tagNames?: string[]; uploadedBy?: string|null; dateFrom?: string; dateTo?: string; dateLabel?: string; status?: string }
 const props = withDefaults(defineProps<{ currentFilters?: CurrentFilters; portfolioOnly?: boolean; hideTrigger?: boolean }>(), { portfolioOnly: false, hideTrigger: false })
 const emit = defineEmits<{ created: [] }>()
 
@@ -87,7 +87,7 @@ const defaultTitle = () => range.value === 'day'
     : 'Shared collection'
 const reviewTitle = () => new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' })
   .format(new Date(`${reviewMonth.value}-01T12:00:00`))
-const hasCurrentFilters = computed(() => Boolean(props.currentFilters?.search || props.currentFilters?.projectIds?.length || props.currentFilters?.tagIds?.length || props.currentFilters?.dateFrom || props.currentFilters?.dateTo || props.currentFilters?.status))
+const hasCurrentFilters = computed(() => Boolean(props.currentFilters?.search || props.currentFilters?.projectIds?.length || props.currentFilters?.tagIds?.length || props.currentFilters?.uploadedBy || props.currentFilters?.dateFrom || props.currentFilters?.dateTo || props.currentFilters?.status))
 const currentFilterLabels = computed(() => {
   const labels: string[] = []
   if (props.currentFilters?.search) labels.push(`Search “${props.currentFilters.search}”`)
@@ -183,7 +183,7 @@ const createCollection = async () => {
         mode: review || portfolio ? 'static' : mode.value,
         filters: review
           ? { search: '', projectId: null, tagId: null, projectIds: [], tagIds: [], uploadedBy: null, dateFrom: reviewStart?.toISOString(), dateTo: reviewEnd?.toISOString() }
-          : { search: searchFilter.value, projectId: null, tagId: null, projectIds: projectIds.value, tagIds: tagIds.value, ...datesForRange() },
+          : { search: searchFilter.value, projectId: null, tagId: null, projectIds: projectIds.value, tagIds: tagIds.value, uploadedBy: usingCurrentFilters.value ? props.currentFilters?.uploadedBy ?? null : null, ...datesForRange() },
         expiresAt: review || portfolio ? null : isoAt(expiry.value, true),
         reviewMonth: review ? `${reviewMonth.value}-01` : null,
         submissionDeadline: review ? isoAt(submissionDeadline.value, true) : null,
@@ -289,8 +289,8 @@ type="button"
           <div v-if="purpose !== 'review'" class="form-grid">
             <label>Search<input v-model="searchFilter" type="search" name="search" maxlength="200"></label>
             <label>Date range<select v-model="range" name="range"><option value="month">This month</option><option value="day">Today</option><option value="all">Any date</option><option value="custom">Custom dates</option></select></label>
-            <div class="multi-filter-field"><span>Projects</span><FilterMultiSelect v-model="projectIds" label="Projects" :options="projects" /></div>
-            <div class="multi-filter-field"><span>Tags</span><FilterMultiSelect v-model="tagIds" label="Tags" :options="tags" /></div>
+            <div class="multi-filter-field"><span>Projects</span><FilterMultiSelect v-model="projectIds" label="Projects" :options="projects" block /></div>
+            <div class="multi-filter-field"><span>Tags</span><FilterMultiSelect v-model="tagIds" label="Tags" :options="tags" block /></div>
             <label v-if="purpose === 'showcase'">Link expiry <span>(optional)</span><input v-model="expiry" type="date" name="expiry"></label>
           </div>
           <div v-else class="form-grid"><label>Review month<input v-model="reviewMonth" type="month" required name="review-month"></label><label>Submission deadline <span>(optional)</span><input v-model="submissionDeadline" type="date" name="submission-deadline"></label></div>
@@ -443,12 +443,6 @@ legend {
   align-content: start;
   gap: calc(var(--space) / 4);
   color: var(--color-muted);
-}
-
-.multi-filter-field :deep(.multi-select-trigger) {
-  width: 100%;
-  min-height: var(--control-height);
-  justify-content: space-between;
 }
 
 .filter-context {

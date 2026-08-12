@@ -1,10 +1,12 @@
 <script setup lang="ts">
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   visible?: boolean
   label: string
   wide?: boolean
   bare?: boolean
   raised?: boolean
+  overlay?: boolean
+  instant?: boolean
   closeLabel?: string
   closeDisabled?: boolean
 }>(), {
@@ -12,19 +14,59 @@ withDefaults(defineProps<{
   wide: false,
   bare: false,
   raised: false,
+  overlay: false,
+  instant: false,
   closeLabel: '',
   closeDisabled: false
 })
 
-defineEmits<{ close: [] }>()
+const emit = defineEmits<{ close: []; afterLeave: [] }>()
+const panelRoot = ref<HTMLElement | null>(null)
+const renderedOverlay = ref(props.overlay)
+const overlayClosing = ref(false)
+
+const finishOverlayClose = () => {
+  if (!overlayClosing.value) return
+  renderedOverlay.value = false
+  overlayClosing.value = false
+}
+
+const handleOverlayAnimationEnd = (event: AnimationEvent) => {
+  if (event.animationName === 'filter-overlay-fade-out') finishOverlayClose()
+}
+
+watch(() => props.overlay, async (overlay) => {
+  if (overlay) {
+    renderedOverlay.value = true
+    overlayClosing.value = false
+    return
+  }
+  if (!renderedOverlay.value) return
+  overlayClosing.value = true
+  await nextTick()
+  if (panelRoot.value && getComputedStyle(panelRoot.value).animationName === 'none') finishOverlayClose()
+})
+
+const handleKeydown = (event: KeyboardEvent) => {
+  if (event.key !== 'Escape' || !props.visible || !props.overlay || props.closeDisabled) return
+  event.preventDefault()
+  emit('close')
+}
+
+const handleBackdropClick = () => {
+  if (props.overlay && !props.closeDisabled) emit('close')
+}
+
+onMounted(() => window.addEventListener('keydown', handleKeydown))
+onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
 </script>
 
 <template>
   <Teleport to="body">
-    <Transition name="selection-panel">
+    <Transition name="selection-panel" :css="!instant" @after-leave="$emit('afterLeave')">
       <div
-        v-if="visible" class="selection-panel" :class="{ 'selection-panel--wide': wide, 'selection-panel--bare': bare, 'selection-panel--raised': raised }" role="region"
-        :aria-label="label">
+        v-if="visible" ref="panelRoot" class="selection-panel" :class="{ 'selection-panel--wide': wide, 'selection-panel--bare': bare, 'selection-panel--raised': raised, 'selection-panel--filter-overlay': renderedOverlay, 'selection-panel--filter-closing': overlayClosing, 'selection-panel--instant': instant }" role="region"
+        :aria-label="label" @click.self="handleBackdropClick" @animationend.self="handleOverlayAnimationEnd">
         <slot />
         <button
           v-if="closeLabel" class="selection-panel-close" type="button" :disabled="closeDisabled"
@@ -47,7 +89,7 @@ defineEmits<{ close: [] }>()
   max-width: calc(100vw - var(--space)*2);
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--filter-panel-control-gap, .375rem);
   padding: 8px;
   border-radius: 999px;
   color: var(--color-fg);

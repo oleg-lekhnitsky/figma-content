@@ -1,0 +1,605 @@
+/*
+ * Optional filter presentation layer.
+ * Remove this file from the `css` array in nuxt.config.ts to disable it.
+ */
+
+:root {
+  --filter-control-height: 2.25rem;
+  --filter-control-height-mobile: 2.75rem;
+  --filter-control-padding: .875rem;
+  --filter-control-end-padding: 2.25rem;
+  --filter-control-font-size: .8125rem;
+  --filter-panel-control-gap: .375rem;
+  --filter-clear-segment-width: 2.5rem;
+  --filter-clear-icon-offset: -.125rem;
+  --filter-clear-divider-color: rgb(255 255 255 / .25);
+  --filter-caption-size: .75rem;
+  --filter-title-size: clamp(1.75rem, 3vw, 2.75rem);
+  --filter-pill-radius: 999rem;
+  --filter-focus-width: .125rem;
+  --filter-chevron-size: .4375rem;
+  --filter-overlay-blur: 5rem;
+  --filter-control-blur: 1.5rem;
+  --filter-overlay-enter-duration: 420ms;
+  --filter-overlay-enter-easing: cubic-bezier(.2, 0, 0, 1);
+  --filter-overlay-exit-easing: cubic-bezier(.4, 0, .2, 1);
+  --filter-panel-enter-delay: 60ms;
+  --filter-overlay-panel-background: rgb(0 0 0 / .3);
+  --filter-overlay-panel-color: #fff;
+  --filter-overlay-control-hover-background: rgb(0 0 0 / .4);
+  --filter-overlay-primary-background: rgb(255 255 255 / .9);
+  --filter-overlay-primary-color: var(--color-fg);
+  --filter-overlay-width: 30rem;
+  --filter-overlay-row-height: clamp(3.625rem, 8vh, 5.125rem);
+  --filter-overlay-margin: clamp(1.125rem, 3vw, 3.75rem);
+  --filter-overlay-padding: clamp(1.5rem, 4vw, 3.5rem);
+  --filter-overlay-radius: clamp(1.875rem, 5vw, 8.25rem);
+  --filter-overlay-group-gap: clamp(1.375rem, 3vh, 2.125rem);
+  --filter-option-gap: .375rem;
+  --filter-option-height: 2.125rem;
+  --filter-option-padding: .75rem;
+  --filter-option-font-size: .875rem;
+  --filter-action-gap: .5rem;
+  --filter-action-height: 2.75rem;
+  --filter-action-padding: 1.125rem;
+  --filter-action-font-size: .875rem;
+  --filter-action-transition-duration: 260ms;
+  --filter-action-transition-distance: .5rem;
+  --filter-morph-duration: var(--filter-overlay-enter-duration);
+  --filter-field-height: 2.625rem;
+  --filter-field-font-size: 1.125rem;
+  --filter-hairline: .0625rem;
+}
+
+html { scrollbar-gutter: stable; }
+
+@supports (view-transition-name: none) {
+  .selection-panel--filter-overlay .asset-filter-controls,
+  .selection-panel:not(.selection-panel--filter-overlay):has(> .filter-panel-toggle) { view-transition-name: filters-panel; }
+
+  html[data-filter-transition]::view-transition { background: #fff; }
+
+  html[data-filter-transition='opening']::view-transition-old(root) {
+    animation: filter-backdrop-in var(--filter-morph-duration) var(--filter-overlay-enter-easing) both;
+  }
+
+  html[data-filter-transition='opening']::view-transition-new(root),
+  html[data-filter-transition='closing']::view-transition-old(root) {
+    animation: none;
+    opacity: 0;
+  }
+
+  html[data-filter-transition='closing']::view-transition-new(root) {
+    animation: filter-backdrop-out var(--filter-morph-duration) var(--filter-overlay-exit-easing) both;
+  }
+
+  html[data-filter-transition] .selection-panel--filter-overlay {
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  ::view-transition-group(filters-panel) {
+    animation-duration: var(--filter-morph-duration);
+    animation-timing-function: var(--filter-overlay-enter-easing);
+  }
+
+  html[data-filter-transition='closing']::view-transition-group(filters-panel) {
+    animation-timing-function: var(--filter-overlay-exit-easing);
+  }
+
+  ::view-transition-group(filters-panel),
+  ::view-transition-image-pair(filters-panel),
+  ::view-transition-old(filters-panel),
+  ::view-transition-new(filters-panel) {
+    overflow: clip;
+    border-radius: var(--filter-overlay-radius);
+  }
+
+  ::view-transition-old(filters-panel),
+  ::view-transition-new(filters-panel) {
+    animation: none;
+    mix-blend-mode: normal;
+  }
+
+  ::view-transition-old(filters-panel) { opacity: 0; }
+  ::view-transition-new(filters-panel) { opacity: 1; }
+
+  html:active-view-transition .selection-panel--filter-overlay .asset-filter-controls,
+  .selection-panel--filter-overlay.selection-panel-leave-active .asset-filter-controls {
+    animation: none !important;
+  }
+
+  .selection-panel--filter-overlay.selection-panel-leave-active .asset-filter-controls {
+    view-transition-name: none;
+    visibility: hidden;
+  }
+}
+
+@keyframes filter-backdrop-in {
+  from {
+    filter: blur(0);
+    opacity: 1;
+  }
+  to {
+    filter: blur(var(--filter-overlay-blur));
+    opacity: .28;
+  }
+}
+
+@keyframes filter-backdrop-out {
+  from {
+    filter: blur(var(--filter-overlay-blur));
+    opacity: .28;
+  }
+  to {
+    filter: blur(0);
+    opacity: 1;
+  }
+}
+
+.selection-panel--instant.selection-panel--filter-overlay,
+.selection-panel--instant.selection-panel--filter-overlay .asset-filter-controls,
+.selection-panel--instant.selection-panel--filter-overlay > .filter-panel-toggle.is-expanded {
+  animation: none !important;
+}
+
+.asset-filter-controls {
+  width: max-content;
+  min-height: var(--filter-control-height);
+  display: flex;
+  align-items: center;
+  gap: calc(var(--space) / 4);
+}
+
+.asset-filter-controls > label,
+.filter-dropdown {
+  position: relative;
+  width: max-content;
+  height: var(--filter-control-height);
+}
+
+.asset-filter-controls > label > input,
+.filter-dropdown-trigger.filter-dropdown-trigger {
+  box-sizing: border-box;
+  width: auto;
+  min-width: 0;
+  max-width: 11rem;
+  height: var(--filter-control-height);
+  min-height: var(--filter-control-height);
+  padding: 0 var(--filter-control-end-padding) 0 var(--filter-control-padding);
+  border: 0;
+  border-radius: var(--filter-pill-radius);
+  color: var(--color-fg);
+  background: var(--color-surface);
+  font: inherit;
+  font-size: var(--filter-control-font-size);
+  line-height: 1.15;
+}
+
+.filter-dropdown-trigger.filter-dropdown-trigger { position: relative; appearance: none; }
+button.filter-dropdown-trigger { display: flex; align-items: center; white-space: nowrap; }
+
+.asset-filter-controls > label > input:focus-visible,
+.filter-dropdown-trigger.filter-dropdown-trigger:focus-visible {
+  outline: var(--filter-focus-width) solid var(--color-accent);
+  outline-offset: var(--filter-focus-width);
+  border: 0;
+}
+
+.asset-filter-controls > .search-field > input { padding-inline: calc(var(--space) / 2); }
+.asset-filter-controls input[type='search']::-webkit-search-cancel-button { appearance: none; }
+
+.asset-filter-controls > .date-field > span {
+  position: absolute;
+  z-index: 1;
+  top: .1875rem;
+  left: calc(var(--space) / 2);
+  color: var(--color-muted);
+  font-size: var(--filter-caption-size);
+  pointer-events: none;
+}
+
+.asset-filter-controls > .date-field > input {
+  padding: .6875rem calc(var(--space) / 2) 0;
+  appearance: auto;
+}
+
+.filter-dropdown-chevron {
+  position: absolute;
+  top: 50%;
+  right: var(--filter-control-padding);
+  width: var(--filter-chevron-size);
+  height: var(--filter-chevron-size);
+  border-right: calc(var(--icon-stroke-width) * 1px) solid currentColor;
+  border-bottom: calc(var(--icon-stroke-width) * 1px) solid currentColor;
+  translate: 0 -65%;
+  rotate: 45deg;
+  pointer-events: none;
+}
+
+@media (max-width: 520px) {
+  .asset-filter-controls { min-height: var(--filter-control-height-mobile); }
+  .asset-filter-controls > label,
+  .asset-filter-controls > label > input,
+  .filter-dropdown,
+  .filter-dropdown-trigger.filter-dropdown-trigger { height: var(--filter-control-height-mobile); min-height: var(--filter-control-height-mobile); }
+  .asset-filter-controls > .search-field { flex: 1 1 auto; }
+  .asset-filter-controls > .search-field > input { width: 100%; max-width: none; font-size: 1rem; }
+}
+
+/* OEM journal-inspired full-screen filter takeover. */
+body:has(.selection-panel--filter-overlay) { overflow: hidden; }
+
+/* Vue retains leaving content briefly; hide it before the container returns to pill layout. */
+.selection-panel:not(.selection-panel--filter-overlay) > .asset-filter-controls.filter-controls-leave-active {
+  display: none;
+}
+
+/* Closed control uses the same material as the open filter panel. */
+.selection-panel:not(.selection-panel--filter-overlay):has(> .filter-panel-toggle) {
+  border-radius: var(--filter-pill-radius);
+  backdrop-filter: blur(var(--filter-control-blur)) saturate(115%);
+  -webkit-backdrop-filter: blur(var(--filter-control-blur)) saturate(115%);
+}
+
+.selection-panel:not(.selection-panel--filter-overlay) > .filter-panel-toggle:not(.is-expanded),
+.selection-panel:not(.selection-panel--filter-overlay) > .filter-clear-compact {
+  color: var(--filter-overlay-panel-color);
+  background: var(--filter-overlay-panel-background);
+  box-shadow: none;
+}
+
+.selection-panel:not(.selection-panel--filter-overlay) > .filter-panel-toggle:not(.is-expanded):is(:hover, :focus-visible),
+.selection-panel:not(.selection-panel--filter-overlay) > .filter-clear-compact:is(:hover, :focus-visible) {
+  opacity: 1;
+  background: var(--filter-overlay-control-hover-background);
+}
+
+/* Keep clearing distinct for accessibility while presenting it as part of the closed Filters pill. */
+.selection-panel:not(.selection-panel--filter-overlay) > .filter-panel-toggle:has(+ .filter-clear-compact) {
+  padding-right: calc(var(--filter-control-padding) / 2);
+  border-radius: var(--filter-pill-radius) 0 0 var(--filter-pill-radius);
+}
+
+.selection-panel:not(.selection-panel--filter-overlay) > .filter-clear-compact {
+  position: relative;
+  width: var(--filter-clear-segment-width);
+  height: var(--filter-control-height-mobile);
+  min-width: var(--filter-clear-segment-width);
+  min-height: var(--filter-control-height-mobile);
+  display: grid;
+  place-items: center;
+  margin-left: calc(var(--filter-panel-control-gap) * -1);
+  padding: 0;
+  border-radius: 0 var(--filter-pill-radius) var(--filter-pill-radius) 0;
+}
+
+.selection-panel:not(.selection-panel--filter-overlay) > .filter-clear-compact::before {
+  content: '';
+  position: absolute;
+  top: 25%;
+  bottom: 25%;
+  left: 0;
+  width: var(--filter-hairline);
+  background: var(--filter-clear-divider-color);
+}
+
+.selection-panel:not(.selection-panel--filter-overlay) > .filter-clear-compact svg {
+  display: block;
+  width: 1rem;
+  height: 1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  transform: translateX(var(--filter-clear-icon-offset));
+}
+
+.selection-panel.selection-panel--filter-overlay {
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100dvh;
+  max-width: none !important;
+  display: grid;
+  align-items: start;
+  padding: 0 !important;
+  overflow-y: auto !important;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  border: 0;
+  border-radius: 0 !important;
+  background: rgb(255 255 255 / .72) !important;
+  box-shadow: none !important;
+  backdrop-filter: blur(var(--filter-overlay-blur)) !important;
+  -webkit-backdrop-filter: blur(var(--filter-overlay-blur)) !important;
+  transform: none !important;
+  animation: filter-overlay-fade-in var(--filter-overlay-enter-duration) var(--filter-overlay-enter-easing) both;
+}
+
+.selection-panel.selection-panel--filter-overlay::-webkit-scrollbar { display: none; }
+
+@keyframes filter-overlay-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.selection-panel.selection-panel--filter-overlay.selection-panel--filter-closing {
+  pointer-events: none;
+  animation: filter-overlay-fade-out var(--filter-overlay-enter-duration) var(--filter-overlay-enter-easing) both;
+}
+
+.selection-panel--filter-overlay > :is(.filter-controls-enter-active, .filter-controls-leave-active) {
+  transition-property: opacity !important;
+  transform: none !important;
+}
+
+.selection-panel--filter-overlay > :is(.filter-controls-enter-from, .filter-controls-leave-to) {
+  transform: none !important;
+}
+
+.selection-panel--filter-overlay.selection-panel--filter-closing > button {
+  visibility: hidden;
+}
+
+@keyframes filter-overlay-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+.selection-panel--filter-overlay .asset-filter-controls {
+  --filter-row-height: var(--filter-overlay-row-height);
+  width: min(100%, var(--filter-overlay-width));
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  margin: var(--filter-overlay-margin) auto;
+  padding: var(--filter-overlay-padding);
+  border-radius: var(--filter-overlay-radius);
+  color: var(--filter-overlay-panel-color);
+  background: var(--filter-overlay-panel-background);
+  max-width: 520px;
+  animation: filter-panel-fade-in var(--filter-overlay-enter-duration) var(--filter-overlay-enter-easing) var(--filter-panel-enter-delay) both;
+}
+
+@keyframes filter-panel-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.selection-panel--filter-overlay .asset-filter-controls--expanded {
+  gap: var(--filter-overlay-group-gap);
+}
+
+.selection-panel--filter-overlay .filter-overlay-title {
+  margin: 0 0 calc(var(--filter-overlay-group-gap) / 2);
+  color: #fff;
+  font-size: var(--filter-title-size);
+  font-weight: 500;
+  letter-spacing: -.04em;
+  line-height: .95;
+}
+
+.selection-panel--filter-overlay .filter-option-group {
+  display: grid;
+  gap: .625rem;
+  margin: 0;
+}
+
+.selection-panel--filter-overlay .filter-option-group h3 {
+  margin: 0;
+  color: rgb(255 255 255 / .58);
+  font-size: var(--filter-caption-size);
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+.selection-panel--filter-overlay .filter-option-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--filter-option-gap);
+}
+
+.selection-panel--filter-overlay .filter-option-list > button {
+  width: auto;
+  min-height: var(--filter-option-height);
+  padding: 0 var(--filter-option-padding);
+  border: var(--filter-hairline) solid rgb(255 255 255 / .42);
+  border-radius: var(--filter-pill-radius);
+  color: #fff;
+  background: transparent;
+  font-size: var(--filter-option-font-size);
+  font-weight: 500;
+  line-height: 1;
+}
+
+.selection-panel--filter-overlay .filter-option-list > button[aria-pressed='true'] {
+  border-color: #fff;
+  color: #595959;
+  background: #fff;
+}
+
+.selection-panel--filter-overlay .filter-visible-search { height: var(--filter-field-height); }
+.selection-panel--filter-overlay .filter-visible-search input {
+  width: 100%;
+  height: var(--filter-field-height);
+  padding: 0;
+  border: 0;
+  border-bottom: var(--filter-hairline) solid rgb(255 255 255 / .42);
+  border-radius: 0;
+  color: #fff;
+  background: transparent;
+  font-size: var(--filter-field-font-size);
+  font-weight: 500;
+}
+.selection-panel--filter-overlay .filter-visible-search input::placeholder { color: rgb(255 255 255 / .58); }
+
+.selection-panel--filter-overlay .filter-date-range {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .5rem;
+}
+
+.selection-panel--filter-overlay .filter-date-range label { display: grid; gap: .3125rem; }
+.selection-panel--filter-overlay .filter-date-range span {
+  color: rgb(255 255 255 / .58);
+  font-size: var(--filter-caption-size);
+}
+.selection-panel--filter-overlay .filter-date-range input {
+  width: 100%;
+  min-height: var(--filter-control-height);
+  padding: 0;
+  border: 0;
+  border-bottom: var(--filter-hairline) solid rgb(255 255 255 / .42);
+  border-radius: 0;
+  color: #fff;
+  background: transparent;
+  font-size: var(--filter-control-font-size);
+  font-weight: 500;
+}
+
+.selection-panel--filter-overlay .asset-filter-controls > label,
+.selection-panel--filter-overlay .asset-filter-controls > .filter-dropdown-trigger {
+  width: 100% !important;
+  max-width: none !important;
+  height: var(--filter-row-height);
+  min-height: var(--filter-row-height);
+  flex: 0 0 var(--filter-row-height);
+  margin: 0;
+  border-radius: 0 !important;
+  color: inherit;
+}
+
+.selection-panel--filter-overlay .multi-select-dialog:not([open]) { display: none !important; }
+
+.selection-panel--filter-overlay .asset-filter-controls > label > input,
+.selection-panel--filter-overlay .asset-filter-controls > label > select,
+.selection-panel--filter-overlay .asset-filter-controls > .filter-dropdown-trigger {
+  width: 100% !important;
+  max-width: none !important;
+  height: 100%;
+  min-height: 0;
+  justify-content: flex-start;
+  padding: 0 3rem 0 0;
+  border: 0 !important;
+  border-radius: 0 !important;
+  color: inherit;
+  background: transparent;
+  font-size: clamp(1.35rem, 2.5vw, 2.25rem);
+  font-weight: 500;
+  letter-spacing: -.035em;
+}
+
+.selection-panel--filter-overlay .asset-filter-controls > .search-field > input { padding-inline: 0; }
+
+.selection-panel--filter-overlay .asset-filter-controls > .date-field > span {
+  top: .5625rem;
+  left: 0;
+  color: rgb(255 255 255 / .62);
+  font-size: var(--filter-caption-size);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.selection-panel--filter-overlay .asset-filter-controls > .date-field > input { padding: .9375rem 0 0; }
+.selection-panel--filter-overlay .filter-dropdown-chevron { right: .3125rem; }
+
+.selection-panel--filter-overlay > .filter-panel-toggle.is-expanded {
+  position: fixed;
+  z-index: 2;
+  top: clamp(1.125rem, 2.5vw, 2.5rem);
+  right: clamp(1.125rem, 2.5vw, 2.5rem);
+  width: var(--control-height) !important;
+  height: var(--control-height) !important;
+  min-height: var(--control-height) !important;
+  display: grid;
+  place-items: center;
+  padding: 0 !important;
+  border-radius: 50%;
+  color: var(--filter-overlay-panel-color);
+  background: var(--filter-overlay-panel-background);
+  animation: filter-panel-fade-in var(--filter-overlay-enter-duration) var(--filter-overlay-enter-easing) var(--filter-panel-enter-delay) both;
+}
+
+.selection-panel--filter-overlay > .filter-panel-toggle.is-expanded:is(:hover, :focus-visible) {
+  opacity: 1;
+  background: var(--filter-overlay-control-hover-background);
+}
+
+.selection-panel--filter-overlay .filter-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--filter-action-gap);
+  flex-wrap: nowrap;
+  max-height: 0;
+  margin-top: calc(var(--filter-overlay-group-gap) * -1);
+  overflow: hidden;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(calc(var(--filter-action-transition-distance) * -1));
+  pointer-events: none;
+  transition:
+    max-height var(--filter-action-transition-duration) var(--filter-overlay-enter-easing),
+    margin-top var(--filter-action-transition-duration) var(--filter-overlay-enter-easing),
+    opacity var(--filter-action-transition-duration) ease,
+    transform var(--filter-action-transition-duration) var(--filter-overlay-enter-easing),
+    visibility 0s var(--filter-action-transition-duration);
+}
+
+.selection-panel--filter-overlay .filter-actions.is-visible {
+  max-height: var(--filter-action-height);
+  margin-top: 0;
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+
+.selection-panel--filter-overlay .filter-actions > button {
+  width: max-content;
+  height: var(--filter-action-height);
+  min-height: var(--filter-action-height);
+  margin: 0;
+  padding-inline: var(--filter-action-padding);
+  color: var(--filter-overlay-primary-color);
+  background: var(--filter-overlay-primary-background);
+  font-size: var(--filter-action-font-size);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.selection-panel--filter-overlay .submitter-stack { margin-top: var(--space); }
+
+.selection-panel--filter-overlay.selection-panel-enter-active,
+.selection-panel--filter-overlay.selection-panel-leave-active {
+  transition: opacity var(--filter-morph-duration) var(--filter-overlay-enter-easing);
+}
+
+@media (max-width: 520px) {
+  .selection-panel--filter-overlay .asset-filter-controls {
+    --filter-row-height: 3.75rem;
+    width: calc(100% - var(--space) * 2);
+    margin-block: var(--space);
+    padding: var(--space);
+    border-radius: 1.75rem;
+  }
+  .selection-panel--filter-overlay .asset-filter-controls > label > input,
+  .selection-panel--filter-overlay .asset-filter-controls > label > select,
+  .selection-panel--filter-overlay .asset-filter-controls > .filter-dropdown-trigger {
+    font-size: 1.35rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .selection-panel.selection-panel--filter-overlay,
+  .selection-panel--filter-overlay .asset-filter-controls,
+  .selection-panel--filter-overlay > .filter-panel-toggle.is-expanded,
+  .selection-panel--filter-overlay .filter-actions {
+    animation-duration: .01ms;
+    animation-delay: 0ms;
+    transition-duration: .01ms;
+  }
+}

@@ -2,7 +2,11 @@ export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
   modules: ['@nuxt/image', '@nuxt/eslint'],
-  css: ['~/assets/css/global.css'],
+  css: [
+    '~/assets/css/global.css',
+    // Optional filter layout experiment: remove this entry to unplug it.
+    '~/assets/css/filters.css'
+  ],
   app: {
     head: {
       meta: [

@@ -51,6 +51,8 @@ const deleteDialog = ref<HTMLDialogElement | null>(null)
 const deleteTrigger = ref<HTMLButtonElement | null>(null)
 const deleteError = ref('')
 const filtersExpanded = ref(false)
+const compactFiltersVisible = ref(true)
+const filtersMorphing = ref(false)
 const boardAssets = ref<Asset[]>([])
 const availableAssets = ref<Asset[]>([])
 const projects = ref<Option[]>([])
@@ -179,6 +181,33 @@ const saveFilters = async () => {
     feedback.text=collection.mode==='dynamic'?'Board updated.':'Filters updated. Replace the snapshot when you are ready.'
   } catch { feedback.text='Unable to save board filters.'; feedback.error=true }
   finally { contentBusy.value=false }
+}
+const clearFilters = () => {
+  filters.search=''
+  filters.projectIds=[]
+  filters.tagIds=[]
+  filters.dateFrom=''
+  filters.dateTo=''
+}
+const supportsFilterMorph = () => import.meta.client && 'startViewTransition' in document && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+const morphFilters = async (update: () => void,direction:'opening'|'closing',keepMorphMode=false) => {
+  const viewTransitionDocument=document as Document & {startViewTransition:(callback:()=>Promise<void>)=>{finished:Promise<void>}}
+  filtersMorphing.value=true
+  document.documentElement.dataset.filterTransition=direction
+  const transition=viewTransitionDocument.startViewTransition(async()=>{update();await nextTick()})
+  try{await transition.finished}finally{delete document.documentElement.dataset.filterTransition;if(!keepMorphMode)filtersMorphing.value=false}
+}
+const openFilters = () => {
+  const update=()=>{compactFiltersVisible.value=false;filtersExpanded.value=true}
+  if(supportsFilterMorph())void morphFilters(update,'opening',true)
+  else update()
+}
+const closeFilters = () => {
+  if(supportsFilterMorph())void morphFilters(()=>{filtersExpanded.value=false;compactFiltersVisible.value=true},'closing')
+  else filtersExpanded.value=false
+}
+const finishFiltersClose = () => {
+  if(!filtersExpanded.value) compactFiltersVisible.value=true
 }
 watch(() => [filters.search,filters.projectIds.join(','),filters.tagIds.join(','),filters.dateFrom,filters.dateTo], () => {
   clearTimeout(filterSaveTimer)
@@ -372,7 +401,7 @@ const deleteBoard = async () => {
         <div><p class="section-label">Content</p><h2 id="content-title">{{ collection.purpose === 'case' ? 'Arrange case work' : collection.mode==='dynamic' ? 'Choose what appears' : 'Manage snapshot' }}</h2></div>
         <div class="content-settings">
           <p class="muted content-explanation">{{ collection.mode==='dynamic' ? 'Approved items matching these filters appear automatically. Drag to arrange them; newly matching items appear first.' : collection.content_strategy==='manual' ? 'This board uses a manual selection. Rebuilding from filters will replace it.' : 'This frozen snapshot was generated from the saved filters. Adding or removing one item switches it to manual selection.' }}</p>
-          <SelectionPanel v-if="canEdit" label="Board asset filters" :wide="filtersExpanded" :bare="!filtersExpanded"><Transition name="filter-controls"><AssetFilterControls v-if="filtersExpanded" v-model:search="filters.search" v-model:project-ids="filters.projectIds" v-model:tag-ids="filters.tagIds" v-model:date-from="filters.dateFrom" v-model:date-to="filters.dateTo" class="board-filters" :projects="projects" :tags="tags" show-search /></Transition><button class="filter-panel-toggle" :class="{ 'is-expanded': filtersExpanded }" type="button" :aria-label="filtersExpanded ? 'Hide filters' : 'Show filters'" :aria-expanded="filtersExpanded" @click="filtersExpanded=!filtersExpanded"><svg v-if="filtersExpanded" aria-hidden="true" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></svg><span v-if="!filtersExpanded">Filters</span><span v-if="!filtersExpanded&&activeFilterCount" class="filter-count">{{ activeFilterCount }}</span></button></SelectionPanel>
+          <template v-if="canEdit"><SelectionPanel :visible="filtersExpanded" label="Board asset filters" wide overlay :instant="filtersMorphing" @close="closeFilters" @after-leave="finishFiltersClose"><AssetFilterControls v-model:search="filters.search" v-model:project-ids="filters.projectIds" v-model:tag-ids="filters.tagIds" v-model:date-from="filters.dateFrom" v-model:date-to="filters.dateTo" :projects="projects" :tags="tags" :heading="collection.title" show-search expanded :actions-visible="Boolean(activeFilterCount)"><template #actions><button class="clear-filters-button" type="button" @click="clearFilters">Clear filters</button></template></AssetFilterControls><button class="filter-panel-toggle is-expanded" type="button" aria-label="Hide filters" aria-expanded="true" @click="closeFilters"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></svg></button></SelectionPanel><SelectionPanel :visible="compactFiltersVisible && !filtersExpanded" label="Board asset filters" bare :instant="filtersMorphing"><button class="filter-panel-toggle" type="button" aria-label="Show filters" aria-expanded="false" @click="openFilters"><span>Filters</span><span v-if="activeFilterCount" class="filter-count">{{ activeFilterCount }}</span></button><button v-if="activeFilterCount" class="filter-clear-compact" type="button" aria-label="Clear filters" title="Clear filters" @click="clearFilters"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></svg></button></SelectionPanel></template>
           <div class="content-heading"><strong>{{ boardAssets.length }} {{ boardAssets.length===1 ? 'item' : 'items' }} on this board</strong><button v-if="collection.mode==='static'&&canEdit" class="button-secondary" type="button" :disabled="busy" @click="refreshSnapshot">Replace with filter snapshot</button></div>
           <AssetMasonry v-if="boardAssets.length" :assets="boardAssets" label="Board content" heading-tag="h3" :reorderable="canEdit&&!contentBusy" @reorder="reorderBoardAssets"><template #details="{asset}"><p>{{ asset.projects?.name ?? 'No project' }}</p></template><template #previewActions="{asset}"><div v-if="canEdit" class="asset-order-actions" role="group" :aria-label="`Reorder ${asset.title}`"><button class="button-secondary order-button" type="button" :disabled="contentBusy||boardAssetIndex(asset.id)===0" :aria-label="`Move ${asset.title} up`" title="Move up" @click="moveBoardAsset(asset.id,-1)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 14 6-6 6 6" /></svg></button><button class="button-secondary order-button" type="button" :disabled="contentBusy||boardAssetIndex(asset.id)===boardAssets.length-1" :aria-label="`Move ${asset.title} down`" title="Move down" @click="moveBoardAsset(asset.id,1)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 10 6 6 6-6" /></svg></button></div></template><template #actions="{asset}"><button v-if="collection.mode==='static'&&canRemoveAsset(asset)" class="button-secondary" type="button" :disabled="contentBusy" @click="removeAsset(asset)">Remove</button></template></AssetMasonry>
           <p v-else class="muted">No content matches this board yet.</p>
@@ -793,6 +822,15 @@ const deleteBoard = async () => {
   display: flex;
   align-items: center;
   gap: 8px;
+  white-space: nowrap;
+}
+
+.clear-filters-button {
+  width: max-content;
+  min-width: 0;
+  padding-inline: var(--space);
+  color: var(--color-fg);
+  background: var(--color-surface);
   white-space: nowrap;
 }
 

@@ -28,6 +28,7 @@ export default defineEventHandler(async (event) => {
     .eq('organization_id', session.user.organization_id).neq('status', 'archived')
   if (session.user.role === 'viewer') query = query.eq('status', 'approved')
   if (q.mine) query = query.eq('uploaded_by', session.user.id)
+  if (q.uploadedBy) query = query.eq('uploaded_by', q.uploadedBy)
   if (q.status) query = query.eq('status', q.status)
   if (q.projectId) query = query.eq('project_id', q.projectId)
   if (q.projectIds?.length) query = query.in('project_id', q.projectIds)
