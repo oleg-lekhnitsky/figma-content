@@ -24,6 +24,11 @@ const emit = defineEmits<{ close: []; afterLeave: [] }>()
 const panelRoot = ref<HTMLElement | null>(null)
 const renderedOverlay = ref(props.overlay)
 const overlayClosing = ref(false)
+const sheetDragY = ref(0)
+const sheetDragging = ref(false)
+let sheetPointerId: number | undefined
+let sheetStartY = 0
+let sheetStartTime = 0
 
 const finishOverlayClose = () => {
   if (!overlayClosing.value) return
@@ -42,6 +47,11 @@ watch(() => props.overlay, async (overlay) => {
     return
   }
   if (!renderedOverlay.value) return
+  if (document.documentElement.dataset.filterTransition === 'closing') {
+    renderedOverlay.value = false
+    overlayClosing.value = false
+    return
+  }
   overlayClosing.value = true
   await nextTick()
   if (panelRoot.value && getComputedStyle(panelRoot.value).animationName === 'none') finishOverlayClose()
@@ -57,6 +67,48 @@ const handleBackdropClick = () => {
   if (props.overlay && !props.closeDisabled) emit('close')
 }
 
+const handlePanelClick = (event: MouseEvent) => {
+  if (!props.overlay || props.closeDisabled) return
+  if ((event.target as HTMLElement).closest('.filter-sheet-handle')) emit('close')
+}
+
+const startSheetDrag = (event: PointerEvent) => {
+  if (event.pointerType !== 'touch' || !props.overlay || props.closeDisabled) return
+  const sheet = (event.target as HTMLElement).closest<HTMLElement>('.asset-filter-controls')
+  if (!sheet || sheet.scrollTop > 0) return
+  sheetPointerId = event.pointerId
+  sheetStartY = event.clientY
+  sheetStartTime = performance.now()
+  sheetDragging.value = true
+  panelRoot.value?.setPointerCapture(event.pointerId)
+}
+
+const moveSheetDrag = (event: PointerEvent) => {
+  if (!sheetDragging.value || event.pointerId !== sheetPointerId) return
+  sheetDragY.value = Math.max(0, event.clientY - sheetStartY)
+}
+
+const finishSheetDrag = (event: PointerEvent) => {
+  if (!sheetDragging.value || event.pointerId !== sheetPointerId) return
+  const elapsed = Math.max(performance.now() - sheetStartTime, 1)
+  const velocity = sheetDragY.value / elapsed
+  sheetDragging.value = false
+  sheetPointerId = undefined
+  if (sheetDragY.value > 56 || velocity > .45) {
+    emit('close')
+    return
+  }
+  sheetDragY.value = 0
+}
+
+watch(() => props.visible, visible => {
+  if (!visible) {
+    sheetDragY.value = 0
+    sheetDragging.value = false
+    sheetPointerId = undefined
+  }
+})
+
 onMounted(() => window.addEventListener('keydown', handleKeydown))
 onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
 </script>
@@ -65,8 +117,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
   <Teleport to="body">
     <Transition name="selection-panel" :css="!instant" @after-leave="$emit('afterLeave')">
       <div
-        v-if="visible" ref="panelRoot" class="selection-panel" :class="{ 'selection-panel--wide': wide, 'selection-panel--bare': bare, 'selection-panel--raised': raised, 'selection-panel--filter-overlay': renderedOverlay, 'selection-panel--filter-closing': overlayClosing, 'selection-panel--instant': instant }" role="region"
-        :aria-label="label" @click.self="handleBackdropClick" @animationend.self="handleOverlayAnimationEnd">
+        v-if="visible" ref="panelRoot" class="selection-panel" :class="{ 'selection-panel--wide': wide, 'selection-panel--bare': bare, 'selection-panel--raised': raised, 'selection-panel--filter-overlay': renderedOverlay, 'selection-panel--filter-closing': overlayClosing, 'selection-panel--instant': instant, 'selection-panel--sheet-dragging': sheetDragging }" role="region"
+        :style="renderedOverlay ? { '--sheet-drag-y': `${sheetDragY}px` } : undefined"
+        :aria-label="label" @click="handlePanelClick" @click.self="handleBackdropClick" @animationend.self="handleOverlayAnimationEnd"
+        @pointerdown="startSheetDrag" @pointermove="moveSheetDrag" @pointerup="finishSheetDrag"
+        @pointercancel="finishSheetDrag">
         <slot />
         <button
           v-if="closeLabel" class="selection-panel-close" type="button" :disabled="closeDisabled"
@@ -143,6 +198,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
   stroke: currentColor;
   stroke-width: 1.7
 }
+
+.selection-panel-sheet-handle { display: none }
 
 .selection-panel-enter-active,
 .selection-panel-leave-active {

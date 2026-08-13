@@ -68,6 +68,7 @@ const sortOptions = [
 <template>
   <form class="asset-filter-controls" :class="{ 'asset-filter-controls--expanded': expanded }" aria-label="Filter assets" @submit.prevent>
     <template v-if="expanded">
+      <button class="filter-sheet-handle" type="button" aria-label="Close filters"><span aria-hidden="true" /></button>
       <h2 v-if="heading" class="filter-overlay-title">{{ heading }}</h2>
       <section v-if="showSearch" class="filter-option-group filter-search-group">
         <h3>Search</h3>

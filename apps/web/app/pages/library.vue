@@ -199,7 +199,10 @@ const clearFilters = () => {
   customDateFrom.value = ''
   customDateTo.value = ''
 }
-const supportsFilterMorph = () => import.meta.client && 'startViewTransition' in document && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+const supportsFilterMorph = () => import.meta.client
+  && window.matchMedia('(min-width: 521px)').matches
+  && 'startViewTransition' in document
+  && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
 const morphFilters = async (update: () => void, direction: 'opening'|'closing', keepMorphMode = false) => {
   const viewTransitionDocument = document as Document & { startViewTransition: (callback: () => Promise<void>) => { finished: Promise<void> } }
   filtersMorphing.value = true
@@ -346,11 +349,11 @@ onBeforeUnmount(() => {
           </AssetFilterControls>
           <button class="filter-panel-toggle is-expanded" type="button" aria-label="Hide filters" aria-expanded="true" @click="closeFilters"><X :size="20" aria-hidden="true" /></button>
         </SelectionPanel>
-        <SelectionPanel :visible="compactFiltersVisible && !filtersExpanded" label="Asset filters" :wide="searchExpanded" :bare="!searchExpanded" raised :instant="filtersMorphing">
+        <SelectionPanel :visible="compactFiltersVisible && !filtersExpanded" label="Asset filters" :wide="searchExpanded" bare raised :instant="filtersMorphing">
           <Transition name="filter-controls"><form v-if="searchExpanded" class="mobile-search-form" role="search" @submit.prevent><label class="search-field"><span class="sr-only">Search assets</span><input v-model="search" type="search" name="filter-search" placeholder="Search" autofocus></label></form></Transition>
-          <button class="filter-panel-toggle" type="button" aria-label="Show filters" aria-expanded="false" @click="openFilters"><span>Filters</span><span v-if="activeFilterCount" class="filter-count">{{ activeFilterCount }}</span></button>
-          <button v-if="hasFilters && !searchExpanded" class="filter-clear-compact" type="button" aria-label="Clear filters" title="Clear filters" @click="clearFilters"><X :size="16" aria-hidden="true" /></button>
-          <button class="mobile-filter-search" :class="{ 'is-expanded': searchExpanded }" type="button" :aria-label="searchExpanded ? 'Hide search' : 'Search assets'" :aria-expanded="searchExpanded" @click="searchExpanded=!searchExpanded"><X v-if="searchExpanded" :size="20" aria-hidden="true" /><Search v-else :size="20" aria-hidden="true" /></button>
+          <div class="mobile-control-blur"><button class="filter-panel-toggle" type="button" aria-label="Show filters" aria-expanded="false" @click="openFilters"><span>Filters</span><span v-if="activeFilterCount" class="filter-count">{{ activeFilterCount }}</span></button></div>
+          <div v-if="hasFilters && !searchExpanded" class="mobile-control-blur"><button class="filter-clear-compact" type="button" aria-label="Clear filters" title="Clear filters" @click="clearFilters"><X :size="16" aria-hidden="true" /></button></div>
+          <div class="mobile-control-blur"><button class="mobile-filter-search" :class="{ 'is-expanded': searchExpanded }" type="button" :aria-label="searchExpanded ? 'Hide search' : 'Search assets'" :aria-expanded="searchExpanded" @click="searchExpanded=!searchExpanded"><X v-if="searchExpanded" :size="20" aria-hidden="true" /><Search v-else :size="20" aria-hidden="true" /></button></div>
         </SelectionPanel>
       </template>
       <SelectionPanel v-else label="Board settings" bare raised><button class="filter-panel-toggle" type="button" @click="router.push(`/boards/${selectedBoardId}`)">Board settings</button></SelectionPanel>
@@ -393,7 +396,7 @@ onBeforeUnmount(() => {
 
 .preview{position:relative}.preview-link{display:block;width:100%;height:100%}.preview-link:hover,.card-body a:hover{opacity:1}.card-body a{text-decoration:none}.figma-button{position:absolute;z-index:2;left:50%;bottom:12px;min-height:40px;display:inline-flex;align-items:center;justify-content:center;padding:0 18px;border-radius:999px;color:#fff;background:#000;text-decoration:none;white-space:nowrap;opacity:0;transform:translate(-50%,8px);pointer-events:none;transition-property:opacity,transform,scale;transition-duration:150ms;transition-timing-function:cubic-bezier(.2,0,0,1)}.asset-card:hover .figma-button,.asset-card:focus-within .figma-button{opacity:1;transform:translate(-50%,0);pointer-events:auto}.figma-button:hover{opacity:.8}.figma-button:active{scale:.96}.figma-button:focus-visible{outline:2px solid #06f90e;outline-offset:2px}
 .figma-button{bottom:10px;min-height:32px;padding:0 13px;color:#000;background:#fff;font-size:12px;box-shadow:0 1px 3px rgb(0 0 0/.12)}
-.filter-panel-toggle{display:flex;align-items:center;gap:8px;white-space:nowrap}.filter-panel-toggle:not(.is-expanded){min-height:44px;padding:0 20px;box-shadow:0 12px 36px rgb(0 0 0/.2)}.filter-panel-toggle.filter-panel-toggle.is-expanded{width:36px;padding:0;justify-content:center;box-shadow:none}.filter-panel-toggle svg{width:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round}.filter-count{min-width:20px;height:20px;display:grid;place-items:center;padding:0 5px;border-radius:999px;color:var(--color-fg);background:var(--color-bg);font-size:11px}.filter-controls-enter-active,.filter-controls-leave-active{transition:opacity 140ms ease,transform 180ms cubic-bezier(.2,0,0,1)}.filter-controls-enter-from,.filter-controls-leave-to{opacity:0;transform:translateX(8px)}
+.filter-panel-toggle{display:flex;align-items:center;gap:8px;white-space:nowrap}.filter-panel-toggle:not(.is-expanded){min-height:44px;padding:0 20px;box-shadow:none}.filter-panel-toggle.filter-panel-toggle.is-expanded{width:36px;padding:0;justify-content:center;box-shadow:none}.filter-panel-toggle svg{width:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round}.filter-count{min-width:20px;height:20px;display:grid;place-items:center;padding:0 5px;border-radius:999px;color:var(--color-fg);background:var(--color-bg);font-size:11px}.filter-controls-enter-active,.filter-controls-leave-active{transition:opacity 140ms ease,transform 180ms cubic-bezier(.2,0,0,1)}.filter-controls-enter-from,.filter-controls-leave-to{opacity:0;transform:translateX(8px)}
 .submitter-stack{min-width:max-content;height:36px;display:flex;align-items:center;padding-left:2px}.submitter-avatar,.submitter-more{width:36px;height:36px;min-width:36px;min-height:36px;display:grid;place-items:center;padding:0;border:2px solid var(--color-bg);border-radius:50%;overflow:hidden;background:var(--color-surface);font-size:11px}.submitter-avatar{position:relative}.submitter-avatar+.submitter-avatar,.submitter-more{margin-left:-8px}.submitter-avatar img{width:100%;height:100%;object-fit:cover}.submitter-avatar[aria-pressed=true]{z-index:2;box-shadow:0 0 0 2px currentColor}.submitter-avatar:hover{z-index:3;opacity:1;scale:1.08}.submitter-more{width:auto;min-width:36px;padding:0 7px;border-radius:999px;overflow:visible}
 .filter-create-board{height:36px;min-height:36px;padding:0 var(--space);font-size:13px;white-space:nowrap}
 .clear-filters-button{width:max-content;height:36px;min-width:0;min-height:36px;display:flex;align-items:center;justify-content:center;padding-inline:var(--space);color:var(--color-fg);background:var(--color-surface);white-space:nowrap}
@@ -405,17 +408,17 @@ onBeforeUnmount(() => {
   .index-toolbar nav{min-width:0;grid-column:2;grid-row:1;justify-content:flex-start;gap:calc(var(--space)/2);overflow-x:auto;overscroll-behavior-inline:contain;scrollbar-width:none}
   .index-toolbar nav::-webkit-scrollbar{display:none}
   .toolbar-search{display:none}
-  .mobile-filter-search.mobile-filter-search{width:44px;height:44px;min-height:44px;display:grid;place-items:center;padding:0;box-shadow:0 12px 36px rgb(0 0 0/.2)}
+  .mobile-filter-search.mobile-filter-search{width:44px;height:44px;min-height:44px;display:grid;place-items:center;padding:0;color:var(--filter-overlay-panel-color);background:transparent;box-shadow:none}
   .filter-panel-toggle:is(:hover,:active,:focus),.mobile-filter-search:is(:hover,:active,:focus){opacity:1}
   .mobile-filter-search svg{width:19px;fill:none;stroke:currentColor;stroke-width:2.1;stroke-linecap:round}
   .filter-panel-toggle.filter-panel-toggle.is-expanded{width:44px;height:44px;min-height:44px}
   .filter-panel-toggle svg{width:19px;stroke-width:2.1}
-  .mobile-search-form~.filter-panel-toggle,.asset-filter-controls~.mobile-filter-search{display:none}
+  .mobile-search-form~.mobile-control-blur:has(.filter-panel-toggle),.asset-filter-controls~.mobile-control-blur:has(.mobile-filter-search){display:none}
   .filter-create-board{height:44px;min-height:44px}
   .clear-filters-button{width:max-content;height:44px;min-width:0;min-height:44px}
   .mobile-search-form,.mobile-search-form label{width:100%;height:44px}
   .mobile-search-form label{flex:1 1 auto}
-  .mobile-search-form input{width:100%;max-width:none;height:44px;min-height:44px;font-size:16px}
+  .mobile-search-form input{width:100%;max-width:none;height:44px;min-height:44px;color:var(--filter-overlay-panel-color);background:var(--filter-overlay-panel-background);font-size:16px;backdrop-filter:blur(var(--filter-control-blur)) saturate(115%);-webkit-backdrop-filter:blur(var(--filter-control-blur)) saturate(115%)}
   .mobile-search-form input::placeholder{color:var(--color-muted);opacity:1}
   .mobile-search-form input:focus-visible{outline:0;box-shadow:none}
 }
