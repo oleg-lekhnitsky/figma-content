@@ -36,9 +36,9 @@ watch(() => props.assets.map(asset => asset.id).join(','), () => {
     </header>
     <article v-if="currentAsset">
       <div class="presentation-preview">
-        <img :src="currentAsset.previewUrl"
+        <AssetMedia :src="currentAsset.previewUrl"
           :srcset="currentAsset.preview2xUrl ? `${currentAsset.previewUrl} 1x, ${currentAsset.preview2xUrl} 2x` : undefined"
-          :width="currentAsset.width" :height="currentAsset.height" :alt="currentAsset.title">
+          :mime-type="currentAsset.mime_type" :width="currentAsset.width" :height="currentAsset.height" :alt="currentAsset.title" />
         <button v-if="assets.length > 1" type="button" class="slide-zone slide-zone-previous" aria-label="Previous item"
           @click="move(-1)" />
         <button v-if="assets.length > 1" type="button" class="slide-zone slide-zone-next" aria-label="Next item"
@@ -91,7 +91,7 @@ watch(() => props.assets.map(asset => asset.id).join(','), () => {
   background: var(--bg)
 }
 
-.presentation-preview img {
+.presentation-preview :is(img,video) {
   display: block;
   width: auto;
   height: auto;

@@ -10,9 +10,9 @@ interface ContactLink { label:string; url:string }
 interface Collection { id:string; slug:string; title:string; purpose:'showcase'|'review'|'portfolio'|'case'; review_month:string|null; submission_deadline:string|null; portfolio_kind:'main'|'client'|null; portfolio_client:string|null; introduction:string|null; contact_heading:string|null; contact_links:ContactLink[]|null; mode:'dynamic'|'static'; layout:BoardLayout; view_settings?:BoardViewSettings|null; expires_at:string|null; publication_enabled:boolean; content_strategy:'dynamic'|'snapshot'|'manual'; updated_at:string }
 interface Member { user_id:string; role:BoardRole; allowed_users:{email:string|null;figma_handle:string|null;avatar_url:string|null}|null }
 interface Filters { search:string; projectId:string|null; tagId:string|null; projectIds:string[]; tagIds:string[]; uploadedBy:string|null; dateFrom:string|null; dateTo:string|null }
-interface Asset { id:string; title:string; description:string|null; previewUrl:string; preview2xUrl?:string|null; width:number; height:number; status:'draft'|'approved'; uploaded_by:string; projects?:{name:string}|null; allowed_users?:{email:string|null;figma_handle:string|null;avatar_url:string|null}|null; submission?:{review_status:'ready'|'reviewed';created_at:string;reviewed_at:string|null}|null }
+interface Asset { id:string; title:string; description:string|null; previewUrl:string; preview2xUrl?:string|null; mime_type?:string|null; width:number; height:number; status:'draft'|'approved'; uploaded_by:string; projects?:{name:string}|null; allowed_users?:{email:string|null;figma_handle:string|null;avatar_url:string|null}|null; submission?:{review_status:'ready'|'reviewed';created_at:string;reviewed_at:string|null}|null }
 interface Option { id:string; name:string }
-interface PortfolioCase { id:string; title:string; itemCount:number; previewAssets:Array<{id:string;previewUrl:string}> }
+interface PortfolioCase { id:string; title:string; itemCount:number; previewAssets:Array<{id:string;previewUrl:string;mime_type?:string|null}> }
 
 const route = useRoute()
 const id = String(route.params.id)
@@ -34,7 +34,6 @@ const currentUserId = data.value!.data.currentUserId
 const workspaceRole = data.value!.data.workspaceRole
 const workspaceAdmin = data.value!.data.workspaceAdmin
 const canEdit = computed(() => workspaceAdmin || ['owner','editor'].includes(role))
-const canContribute = computed(() => canEdit.value || role === 'contributor')
 const canManageMembers = computed(() => workspaceAdmin || role === 'owner')
 const canApprove = computed(() => ['editor','admin'].includes(workspaceRole))
 const activeView = computed(() => {
@@ -58,7 +57,6 @@ const filtersExpanded = ref(false)
 const compactFiltersVisible = ref(true)
 const filtersMorphing = ref(false)
 const boardAssets = ref<Asset[]>([])
-const availableAssets = ref<Asset[]>([])
 const projects = ref<Option[]>([])
 const tags = ref<Option[]>([])
 const portfolioCases = ref<PortfolioCase[]>([])
@@ -92,16 +90,7 @@ const loadOptions = async () => {
   projects.value=projectResponse.data.projects
   tags.value=tagResponse.data.tags
 }
-const loadAvailableAssets = async () => {
-  if(collection.mode!=='static'||!canContribute.value||collection.purpose==='review')return
-  const response=await apiFetch<{data:{assets:Asset[]}}>('/api/assets',{query:{
-    status:'approved',
-    ...(role==='contributor'?{mine:'true'}:{}),
-    pageSize:60,sort:'newest'
-  }})
-  availableAssets.value=response.data.assets
-}
-await Promise.all([loadMembers(),loadContent(),loadOptions(),loadAvailableAssets()])
+await Promise.all([loadMembers(),loadContent(),loadOptions()])
 if (collection.purpose === 'portfolio') {
   const response=await apiFetch<{data:{cases:PortfolioCase[];selectedIds:string[]}}>(`/api/shares/${id}/cases`)
   portfolioCases.value=Array.isArray(response.data?.cases) ? response.data.cases : []
@@ -167,12 +156,6 @@ const movePortfolioCase = (index:number,direction:-1|1) => {
 }
 const selectedPortfolioCases = computed(() => selectedCaseIds.value.map(caseId => portfolioCases.value.find(item => item.id === caseId)).filter((item):item is PortfolioCase => Boolean(item)))
 const availablePortfolioCases = computed(() => portfolioCases.value.filter(item => !selectedCaseIds.value.includes(item.id)))
-const refreshSnapshot = async () => {
-  busy.value=true; feedback.text=''; feedback.error=false
-  try { const response=await apiFetch<{data:{itemCount:number}}>(`/api/shares/${id}`,{method:'PATCH',body:{action:'refresh'}}); collection.content_strategy='snapshot'; await loadContent(); feedback.text=`Snapshot updated with ${response.data.itemCount} items.` }
-  catch { feedback.text='Unable to update the snapshot.'; feedback.error=true }
-  finally { busy.value=false }
-}
 const isoDate = (value:string,end=false) => value ? new Date(`${value}T${end?'23:59:59.999':'00:00:00.000'}`).toISOString() : null
 const saveFilters = async () => {
   contentBusy.value=true; feedback.text=''; feedback.error=false
@@ -218,7 +201,6 @@ watch(() => [filters.search,filters.projectIds.join(','),filters.tagIds.join(','
   filterSaveTimer=setTimeout(() => { void saveFilters() },450)
 })
 onBeforeUnmount(() => { clearTimeout(filterSaveTimer) })
-const hasAsset = (assetId:string) => boardAssets.value.some(asset=>asset.id===assetId)
 const submitterName = (asset:Asset) => asset.allowed_users?.figma_handle || asset.allowed_users?.email || 'Workspace member'
 const canRemoveAsset = (asset:Asset) => canEdit.value || asset.uploaded_by === currentUserId
 const visibleReviewAssets = computed(() => reviewFilter.value === 'all'
@@ -279,17 +261,6 @@ const applyDecision = async (assets:Asset[],decision:'approve'|'pass'|'reopen') 
     const subject=eligibleAssets.length===1?eligibleAssets[0]!.title:`${eligibleAssets.length} submissions`
     feedback.text=decision==='approve'?`${subject} approved and reviewed.`:decision==='pass'?`${subject} passed without approval.`:`${subject} moved back to ready.`
   } catch { feedback.text='Unable to apply this review decision.'; feedback.error=true }
-  finally { contentBusy.value=false }
-}
-const addAsset = async (asset:Asset) => {
-  if (hasAsset(asset.id) || contentBusy.value) return
-  const previous=[...boardAssets.value]
-  boardAssets.value=[...previous,asset]
-  collection.content_strategy='manual'
-  feedback.text=`${asset.title} added.`; feedback.error=false
-  contentBusy.value=true
-  try { await apiFetch(`/api/shares/${id}/assets`,{method:'POST',body:{assetId:asset.id}}) }
-  catch { boardAssets.value=previous; feedback.text='Unable to add this item.'; feedback.error=true }
   finally { contentBusy.value=false }
 }
 const removeAsset = async (asset:Asset) => {
@@ -401,18 +372,14 @@ const deleteBoard = async () => {
           <div v-if="collection.purpose !== 'case'" class="actions"><NuxtLink v-if="collection.publication_enabled" class="button-secondary" :to="publicUrl" target="_blank">View public page</NuxtLink><button v-if="collection.publication_enabled" class="button-secondary" type="button" @click="copyLink">Copy public link</button><button v-if="canEdit" class="button-secondary" type="button" :disabled="busy" @click="setPublication(!collection.publication_enabled)">{{ collection.purpose === 'portfolio' ? (collection.publication_enabled ? 'Unpublish edition' : 'Publish edition') : (collection.publication_enabled?'Disable public link':'Enable public link') }}</button></div>
         </div>
       </section>
-      <section v-if="collection.purpose !== 'review'" class="content" aria-labelledby="content-title">
-        <div><p class="section-label">Content</p><h2 id="content-title">{{ collection.purpose === 'case' ? 'Arrange case work' : collection.mode==='dynamic' ? 'Choose what appears' : 'Manage snapshot' }}</h2></div>
+      <section v-if="collection.purpose !== 'review' && collection.mode === 'dynamic'" class="content" aria-labelledby="content-title">
+        <div><p class="section-label">Content</p><h2 id="content-title">Choose what appears</h2></div>
         <div class="content-settings">
-          <p class="muted content-explanation">{{ collection.mode==='dynamic' ? 'Approved items matching these filters appear automatically. Drag to arrange them; newly matching items appear first.' : collection.content_strategy==='manual' ? 'This board uses a manual selection. Rebuilding from filters will replace it.' : 'This frozen snapshot was generated from the saved filters. Adding or removing one item switches it to manual selection.' }}</p>
+          <p class="muted content-explanation">Approved items matching these filters appear automatically. Drag to arrange them; newly matching items appear first.</p>
           <template v-if="canEdit"><SelectionPanel :visible="filtersExpanded" label="Board asset filters" wide overlay :instant="filtersMorphing" @close="closeFilters" @after-leave="finishFiltersClose"><AssetFilterControls v-model:search="filters.search" v-model:project-ids="filters.projectIds" v-model:tag-ids="filters.tagIds" v-model:date-from="filters.dateFrom" v-model:date-to="filters.dateTo" :projects="projects" :tags="tags" :heading="collection.title" show-search expanded :actions-visible="Boolean(activeFilterCount)"><template #actions><button class="clear-filters-button" type="button" @click="clearFilters">Clear filters</button></template></AssetFilterControls><button class="filter-panel-toggle is-expanded" type="button" aria-label="Hide filters" aria-expanded="true" @click="closeFilters"><Xmark :size="20" :stroke-width="2" aria-hidden="true" /></button></SelectionPanel><SelectionPanel :visible="compactFiltersVisible && !filtersExpanded" label="Board controls" bare :instant="filtersMorphing"><button class="filter-panel-toggle" type="button" aria-label="Show filters" aria-expanded="false" @click="openFilters"><span>Filters</span><span v-if="activeFilterCount" class="filter-count">{{ activeFilterCount }}</span></button><button v-if="activeFilterCount" class="filter-clear-compact" type="button" aria-label="Clear filters" title="Clear filters" @click="clearFilters"><Xmark :size="20" :stroke-width="2" aria-hidden="true" /></button></SelectionPanel></template>
-          <div class="content-heading"><strong>{{ boardAssets.length }} {{ boardAssets.length===1 ? 'item' : 'items' }} on this board</strong><button v-if="collection.mode==='static'&&canEdit" class="button-secondary" type="button" :disabled="busy" @click="refreshSnapshot">Replace with filter snapshot</button></div>
-          <AssetMasonry v-if="boardAssets.length" :assets="boardAssets" label="Board content" heading-tag="h3" :reorderable="canEdit&&!contentBusy" @reorder="reorderBoardAssets"><template #details="{asset}"><p>{{ asset.projects?.name ?? 'No project' }}</p></template><template #previewActions="{asset}"><div v-if="canEdit" class="asset-order-actions" role="group" :aria-label="`Reorder ${asset.title}`"><button class="button-secondary order-button" type="button" :disabled="contentBusy||boardAssetIndex(asset.id)===0" :aria-label="`Move ${asset.title} up`" title="Move up" @click="moveBoardAsset(asset.id,-1)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 14 6-6 6 6" /></svg></button><button class="button-secondary order-button" type="button" :disabled="contentBusy||boardAssetIndex(asset.id)===boardAssets.length-1" :aria-label="`Move ${asset.title} down`" title="Move down" @click="moveBoardAsset(asset.id,1)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 10 6 6 6-6" /></svg></button></div></template><template #actions="{asset}"><button v-if="collection.mode==='static'&&canRemoveAsset(asset)" class="button-secondary" type="button" :disabled="contentBusy" @click="removeAsset(asset)">Remove</button></template></AssetMasonry>
+          <div class="content-heading"><strong>{{ boardAssets.length }} {{ boardAssets.length===1 ? 'item' : 'items' }} on this board</strong></div>
+          <AssetMasonry v-if="boardAssets.length" :assets="boardAssets" label="Board content" heading-tag="h3" :reorderable="canEdit&&!contentBusy" @reorder="reorderBoardAssets"><template #details="{asset}"><p>{{ asset.projects?.name ?? 'No project' }}</p></template><template #previewActions="{asset}"><div v-if="canEdit" class="asset-order-actions" role="group" :aria-label="`Reorder ${asset.title}`"><button class="button-secondary order-button" type="button" :disabled="contentBusy||boardAssetIndex(asset.id)===0" :aria-label="`Move ${asset.title} up`" title="Move up" @click="moveBoardAsset(asset.id,-1)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 14 6-6 6 6" /></svg></button><button class="button-secondary order-button" type="button" :disabled="contentBusy||boardAssetIndex(asset.id)===boardAssets.length-1" :aria-label="`Move ${asset.title} down`" title="Move down" @click="moveBoardAsset(asset.id,1)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 10 6 6 6-6" /></svg></button></div></template></AssetMasonry>
           <p v-else class="muted">No content matches this board yet.</p>
-          <template v-if="collection.mode==='static'&&canContribute">
-            <h3>Add approved content</h3>
-            <AssetMasonry :assets="availableAssets" label="Approved content available to add" heading-tag="h4"><template #details="{asset}"><p>{{ asset.projects?.name ?? 'No project' }}</p></template><template #actions="{asset}"><button class="button-secondary" type="button" :disabled="contentBusy||hasAsset(asset.id)" @click="addAsset(asset)">{{ hasAsset(asset.id)?'Added':'Add' }}</button></template></AssetMasonry>
-          </template>
         </div>
       </section>
       <section v-if="collection.purpose !== 'review' || activeView === 'members'" class="members" aria-labelledby="members-title">

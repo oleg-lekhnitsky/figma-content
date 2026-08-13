@@ -7,7 +7,7 @@ const emit = defineEmits<{ created: [] }>()
 
 interface Option { id: string; name: string }
 type BoardRole = 'owner' | 'editor' | 'contributor' | 'viewer' | 'admin'
-interface Collection { id: string; slug: string; title: string; purpose: 'showcase' | 'review' | 'portfolio' | 'case'; portfolio_kind?:'main'|'client'|null; portfolio_client?:string|null; introduction?:string|null; review_month: string | null; submission_deadline: string | null; mode: 'dynamic' | 'static'; layout: BoardLayout; role: BoardRole; expires_at: string | null; publication_enabled: boolean; content_strategy: 'dynamic' | 'snapshot' | 'manual'; created_at: string; updated_at: string; itemCount: number; previewAssets: Array<{ id: string; title: string; previewUrl: string; width: number; height: number }> }
+interface Collection { id: string; slug: string; title: string; purpose: 'showcase' | 'review' | 'portfolio' | 'case'; portfolio_kind?:'main'|'client'|null; portfolio_client?:string|null; introduction?:string|null; review_month: string | null; submission_deadline: string | null; mode: 'dynamic' | 'static'; layout: BoardLayout; role: BoardRole; expires_at: string | null; publication_enabled: boolean; content_strategy: 'dynamic' | 'snapshot' | 'manual'; created_at: string; updated_at: string; itemCount: number; previewAssets: Array<{ id: string; title: string; previewUrl: string; mime_type?: string|null; width: number; height: number }> }
 interface ListResponse { data: { collections: Collection[] } }
 interface OptionsResponse<T extends string> { data: Record<T, Option[]> }
 interface CreateResponse { data: { collection: Omit<Collection, 'previewAssets'> & { itemCount: number | null } } }
@@ -269,7 +269,7 @@ type="button"
           <p v-if="errorMessage" class="feedback error" role="alert">{{ errorMessage }}</p>
           <ul v-if="collections.length" class="board-grid">
             <li v-for="collection in collections" :key="collection.id" class="board-card">
-              <NuxtLink class="board-preview" :class="{ 'is-empty': !collection.previewAssets.length }" :to="`/boards/${collection.id}`" :aria-label="`${['owner', 'editor', 'admin'].includes(collection.role) ? 'Edit' : 'Open'} ${collection.title}`"><div class="preview-strip"><template v-if="collection.previewAssets.length"><img v-for="asset in collection.previewAssets" :key="asset.id" :src="asset.previewUrl" :width="asset.width" :height="asset.height" alt="" loading="lazy" decoding="async"></template><span v-else>No items yet</span></div></NuxtLink>
+              <NuxtLink class="board-preview" :class="{ 'is-empty': !collection.previewAssets.length }" :to="`/boards/${collection.id}`" :aria-label="`${['owner', 'editor', 'admin'].includes(collection.role) ? 'Edit' : 'Open'} ${collection.title}`"><div class="preview-strip"><template v-if="collection.previewAssets.length"><AssetMedia v-for="asset in collection.previewAssets" :key="asset.id" :src="asset.previewUrl" :mime-type="asset.mime_type" :width="asset.width" :height="asset.height" alt="" loading="lazy" /></template><span v-else>No items yet</span></div></NuxtLink>
               <div class="board-info"><div><label v-if="['owner', 'editor', 'admin'].includes(collection.role)" class="board-title"><span class="sr-only">Board name</span><textarea
 :value="collection.title" rows="1" maxlength="120" :aria-describedby="`board-feedback-${collection.id}`"
                     :aria-invalid="boardFeedback[collection.id]?.error || undefined" @change="renameBoard(collection, $event)" /><span
@@ -553,7 +553,7 @@ ul {
   gap: calc(var(--space) / 4);
 }
 
-.preview-strip img {
+.preview-strip :is(img,video) {
   display: block;
   width: 100%;
   height: auto;
@@ -793,7 +793,7 @@ ul {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .board-preview img {
+  .board-preview :is(img,video) {
     transition: none;
   }
 

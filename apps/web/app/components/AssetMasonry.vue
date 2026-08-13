@@ -58,6 +58,7 @@ const renderedAssets = shallowRef<T[]>([...props.assets])
 const draggedId = ref<string | null>(null)
 const draggedOriginalIndex = ref<number | null>(null)
 const dropIndex = ref<number | null>(null)
+const pointerDragging = ref(false)
 let resizeObserver: ResizeObserver | undefined
 let measureFrame = 0
 let revealFrame = 0
@@ -69,42 +70,30 @@ const openAsset = (event: MouseEvent, id: string) => {
   const transitionDocument = document as Document & { startViewTransition?: (update: () => Promise<void>) => { finished: Promise<void>; skipTransition?: () => void } }
   if (!transitionDocument.startViewTransition || !window.matchMedia('(max-width: 760px)').matches || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
   event.preventDefault()
-  const image = (event.currentTarget as HTMLElement).querySelector<HTMLImageElement>('img')
-  if (!image) return void router.push(assetLink(id))
-  image.style.viewTransitionName = 'asset-preview'
+  const media = (event.currentTarget as HTMLElement).querySelector<HTMLElement>('img,video')
+  if (!media) return void router.push(assetLink(id))
+  media.style.viewTransitionName = 'asset-preview'
   try {
     activeViewTransition?.skipTransition?.()
     const transition = transitionDocument.startViewTransition(async () => {
       await router.push(assetLink(id))
-      image.style.viewTransitionName = ''
+      media.style.viewTransitionName = ''
       await nextTick()
     })
     activeViewTransition = transition
     transition.finished.catch(() => undefined).finally(() => {
-      image.style.viewTransitionName = ''
+      media.style.viewTransitionName = ''
       if (activeViewTransition === transition) activeViewTransition = undefined
     })
   } catch {
-    image.style.viewTransitionName = ''
+    media.style.viewTransitionName = ''
     activeViewTransition = undefined
     void router.push(assetLink(id))
   }
 }
 const cardStagger = (index: number) => `${Math.min(index * 18, 144)}ms`
-const startDrag = (event: DragEvent, index: number) => {
-  if (!props.reorderable || !event.dataTransfer) return
-  const asset = renderedAssets.value[index]
-  if (!asset) return
-  draggedId.value = asset.id
-  draggedOriginalIndex.value = props.assets.findIndex(item => item.id === asset.id)
-  dropIndex.value = index
-  event.dataTransfer.effectAllowed = 'move'
-  event.dataTransfer.setData('text/plain', asset.id)
-}
-const dragOver = (event: DragEvent, index: number) => {
+const moveDraggedTo = (index: number) => {
   if (!draggedId.value) return
-  event.preventDefault()
-  if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
   const fromIndex = renderedAssets.value.findIndex(asset => asset.id === draggedId.value)
   if (fromIndex < 0 || fromIndex === index) return
   const next = [...renderedAssets.value]
@@ -117,6 +106,7 @@ const dragOver = (event: DragEvent, index: number) => {
 }
 const finishDrag = (restore = true) => {
   if (restore) renderedAssets.value = [...props.assets]
+  pointerDragging.value = false
   draggedId.value = null
   draggedOriginalIndex.value = null
   dropIndex.value = null
@@ -128,37 +118,50 @@ const commitReorder = () => {
   finishDrag(false)
   if (toIndex >= 0 && fromIndex !== toIndex) emit('reorder', fromIndex, toIndex)
 }
-const dropAsset = (event: DragEvent) => {
-  event.preventDefault()
-  commitReorder()
-}
-const startTouchDrag = (event: PointerEvent, index: number) => {
-  if (!props.reorderable || event.pointerType === 'mouse') return
+const startPointerDrag = (event: PointerEvent, index: number) => {
+  if (!props.reorderable || event.button !== 0) return
   event.preventDefault()
   touchPointerId = event.pointerId
   draggedId.value = renderedAssets.value[index]?.id ?? null
   if (!draggedId.value) return
+  pointerDragging.value = true
   draggedOriginalIndex.value = props.assets.findIndex(item => item.id === draggedId.value)
   dropIndex.value = index
   ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
 }
-const moveTouchDrag = (event: PointerEvent) => {
+const startMouseDrag = (event: PointerEvent, index: number) => {
+  if (event.pointerType !== 'mouse' || (event.target as HTMLElement).closest('button,a,input,select,textarea')) return
+  startPointerDrag(event, index)
+}
+const startTouchDrag = (event: PointerEvent, index: number) => {
+  if (event.pointerType === 'mouse') return
+  startPointerDrag(event, index)
+}
+const movePointerDrag = (event: PointerEvent) => {
   if (event.pointerId !== touchPointerId || !draggedId.value) return
   event.preventDefault()
   const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('.asset-card[data-asset-id]')
   if (!target || !masonry.value?.contains(target)) return
   const targetIndex = renderedAssets.value.findIndex(asset => asset.id === target.dataset.assetId)
-  if (targetIndex >= 0) dragOver(event as unknown as DragEvent, targetIndex)
+  if (targetIndex >= 0) moveDraggedTo(targetIndex)
 }
-const finishTouchDrag = (event: PointerEvent) => {
+const finishPointerDrag = (event: PointerEvent) => {
   if (event.pointerId !== touchPointerId) return
   touchPointerId = undefined
+  pointerDragging.value = false
   commitReorder()
 }
-const cancelTouchDrag = (event: PointerEvent) => {
+const cancelPointerDrag = (event: PointerEvent) => {
   if (event.pointerId !== touchPointerId) return
   touchPointerId = undefined
-  finishDrag()
+  pointerDragging.value = false
+  commitReorder()
+}
+const handlePointerCaptureLost = (event: PointerEvent) => {
+  if (event.pointerId !== touchPointerId) return
+  touchPointerId = undefined
+  pointerDragging.value = false
+  commitReorder()
 }
 const measureCards = () => {
   cancelAnimationFrame(measureFrame)
@@ -175,7 +178,7 @@ const measureCards = () => {
     const rowHeight = Number.parseFloat(styles.gridAutoRows) || 1
     const rowGap = Number.parseFloat(styles.rowGap) || 0
     for (const card of root.querySelectorAll<HTMLElement>('.asset-card')) {
-      const rows = String(Math.ceil((card.getBoundingClientRect().height + rowGap) / (rowHeight + rowGap)))
+      const rows = String(Math.ceil((card.offsetHeight + rowGap) / (rowHeight + rowGap)))
       if (card.style.getPropertyValue('--card-rows') !== rows) card.style.setProperty('--card-rows', rows)
     }
     root.classList.add('is-masonry')
@@ -186,9 +189,10 @@ const syncLoadedImages = () => {
   const root = masonry.value
   if (!root) return
   let changed = false
-  for (const image of root.querySelectorAll<HTMLImageElement>('.preview img[data-asset-id]')) {
-    const id = image.dataset.assetId
-    if (id && image.complete && image.naturalWidth > 0 && !loadedImages.has(id)) {
+  for (const media of root.querySelectorAll<HTMLImageElement | HTMLVideoElement>('.preview :is(img,video)[data-asset-id]')) {
+    const id = media.dataset.assetId
+    const ready = media instanceof HTMLVideoElement ? media.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA : media.complete && media.naturalWidth > 0
+    if (id && ready && !loadedImages.has(id)) {
       loadedImages.add(id)
       changed = true
     }
@@ -237,21 +241,26 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section ref="masonry" class="asset-masonry" :class="{ 'cards-hidden': hidden || !layoutReady, 'column-layout': layout === 'column', 'stable-columns': stableColumns, 'custom-view': effectiveViewSettings, 'hide-text': effectiveViewSettings && !effectiveViewSettings.showText }" :style="viewStyle" :aria-label="label">
+  <section ref="masonry" class="asset-masonry" :class="{ 'cards-hidden': hidden || !layoutReady, 'column-layout': layout === 'column', 'stable-columns': stableColumns, 'custom-view': effectiveViewSettings, 'hide-text': effectiveViewSettings && !effectiveViewSettings.showText, 'is-arranging': reorderable }" :style="viewStyle" :aria-label="label">
     <TransitionGroup name="card-list" :css="animateChanges">
-    <article v-for="(asset, index) in renderedAssets" :key="asset.id" class="asset-card" :class="{ 'is-priority': index < 7, 'is-selected': isSelected(asset.id), 'is-dragging': draggedId === asset.id, 'is-drop-target': dropIndex === index && draggedId !== asset.id }" :style="{ '--card-stagger': cardStagger(index) }" :data-asset-id="asset.id" :draggable="reorderable" @dragstart="startDrag($event, index)" @dragover="dragOver($event, index)" @drop="dropAsset" @dragend="finishDrag()">
+    <article
+      v-for="(asset, index) in renderedAssets" :key="asset.id" class="asset-card"
+      :class="{ 'is-priority': index < 7, 'is-selected': isSelected(asset.id), 'is-dragging': draggedId === asset.id, 'is-pointer-dragging': pointerDragging && draggedId === asset.id, 'is-drop-target': dropIndex === index && draggedId !== asset.id }"
+      :style="{ '--card-stagger': cardStagger(index) }" :data-asset-id="asset.id"
+      @pointerdown="startMouseDrag($event, index)" @pointermove="movePointerDrag" @pointerup="finishPointerDrag"
+      @pointercancel="cancelPointerDrag" @lostpointercapture="handlePointerCaptureLost">
       <div class="preview" :class="{ 'is-loading': !loadedImages.has(asset.id) }" :style="{ aspectRatio: `${asset.width} / ${asset.height}` }">
         <NuxtLink v-if="interactive" class="preview-link" :to="assetLink(asset.id)" :aria-label="`View ${asset.title}`" @click="openAsset($event, asset.id)">
-          <img :class="{ 'is-loaded': loadedImages.has(asset.id) }" :data-asset-id="asset.id" :src="asset.previewUrl" :srcset="asset.preview2xUrl ? `${asset.previewUrl} 1x, ${asset.preview2xUrl} 2x` : undefined" :width="asset.width" :height="asset.height" :alt="`Preview of ${asset.title}`" :loading="index < 7 ? 'eager' : 'lazy'" :fetchpriority="index < 7 ? 'high' : 'auto'" decoding="async" @load="markImageLoaded(asset.id)">
+          <AssetMedia :class="{ 'is-loaded': loadedImages.has(asset.id) }" :data-asset-id="asset.id" :src="asset.previewUrl" :srcset="asset.preview2xUrl ? `${asset.previewUrl} 1x, ${asset.preview2xUrl} 2x` : undefined" :mime-type="asset.mime_type" :width="asset.width" :height="asset.height" :alt="`Preview of ${asset.title}`" :loading="index < 7 ? 'eager' : 'lazy'" :fetchpriority="index < 7 ? 'high' : 'auto'" @load="markImageLoaded(asset.id)" />
         </NuxtLink>
-        <img v-else :class="{ 'is-loaded': loadedImages.has(asset.id) }" :data-asset-id="asset.id" :src="asset.previewUrl" :srcset="asset.preview2xUrl ? `${asset.previewUrl} 1x, ${asset.preview2xUrl} 2x` : undefined" :width="asset.width" :height="asset.height" :alt="asset.title" :loading="index < 7 ? 'eager' : 'lazy'" :fetchpriority="index < 7 ? 'high' : 'auto'" decoding="async" @load="markImageLoaded(asset.id)">
+        <AssetMedia v-else :class="{ 'is-loaded': loadedImages.has(asset.id) }" :data-asset-id="asset.id" :src="asset.previewUrl" :srcset="asset.preview2xUrl ? `${asset.previewUrl} 1x, ${asset.preview2xUrl} 2x` : undefined" :mime-type="asset.mime_type" :width="asset.width" :height="asset.height" :alt="asset.title" :loading="index < 7 ? 'eager' : 'lazy'" :fetchpriority="index < 7 ? 'high' : 'auto'" @load="markImageLoaded(asset.id)" />
         <div v-if="interactive && (asset.figma_url || canApprove)" class="card-quick-actions"><a v-if="asset.figma_url" class="figma-button" :href="asset.figma_url" target="_blank" rel="noopener noreferrer">Open in Figma</a><button v-if="canApprove" class="card-approval-toggle" type="button" :aria-pressed="asset.status === 'approved'" :aria-label="asset.status === 'approved' ? `Remove approval from ${asset.title}` : `Approve ${asset.title}`" :title="asset.status === 'approved' ? 'Remove approval' : 'Approve'" @click.stop="emit('toggleApproval', asset)"><Heart :size="16" :weight="asset.status === 'approved' ? 'Filled' : 'Outline'" aria-hidden="true" /></button></div>
         <div class="preview-actions"><slot name="previewActions" :asset="asset" /></div>
         <button v-if="selectable" class="selection-control" type="button" :class="{ active: isSelected(asset.id) }" :aria-label="`${isSelected(asset.id) ? 'Deselect' : 'Select'} ${asset.title}`" :aria-pressed="isSelected(asset.id)" @click="emit('toggleSelection', asset)" />
         <button
           v-if="reorderable" class="touch-reorder-handle" type="button" :aria-label="`Drag to reorder ${asset.title}`"
-          @pointerdown.stop="startTouchDrag($event, index)" @pointermove.stop="moveTouchDrag" @pointerup.stop="finishTouchDrag"
-          @pointercancel.stop="cancelTouchDrag" @click.prevent>
+          @pointerdown.stop="startTouchDrag($event, index)" @pointermove.stop="movePointerDrag" @pointerup.stop="finishPointerDrag"
+          @pointercancel.stop="cancelPointerDrag" @lostpointercapture="handlePointerCaptureLost" @click.prevent>
           <span aria-hidden="true">⠿</span>
         </button>
       </div>
@@ -270,21 +279,23 @@ onBeforeUnmount(() => {
 <style scoped>
 .asset-masonry{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));column-gap:var(--space);align-items:start}.asset-masonry.custom-view:not(.column-layout){grid-template-columns:repeat(min(var(--board-columns,7),7),minmax(0,1fr));column-gap:var(--board-gap,var(--space))}.asset-masonry.is-masonry{grid-auto-flow:dense;grid-auto-rows:1px;row-gap:0}
 .asset-masonry.stable-columns .asset-card:nth-child(7n + 1){grid-column:1}.asset-masonry.stable-columns .asset-card:nth-child(7n + 2){grid-column:2}.asset-masonry.stable-columns .asset-card:nth-child(7n + 3){grid-column:3}.asset-masonry.stable-columns .asset-card:nth-child(7n + 4){grid-column:4}.asset-masonry.stable-columns .asset-card:nth-child(7n + 5){grid-column:5}.asset-masonry.stable-columns .asset-card:nth-child(7n + 6){grid-column:6}.asset-masonry.stable-columns .asset-card:nth-child(7n){grid-column:7}
-.asset-masonry.column-layout{--column-viewport-margin:clamp(24px,6vh,64px);width:min(760px,100%);margin-inline:auto;grid-template-columns:minmax(0,1fr);row-gap:0}.asset-masonry.column-layout .asset-card{padding-bottom:var(--section-gap)}.asset-masonry.column-layout .preview{height:auto;aspect-ratio:auto!important;overflow:visible;clip-path:none;background:transparent}.asset-masonry.column-layout .preview img{width:auto;height:auto;max-width:100%;max-height:calc(100vh - var(--column-viewport-margin)*2);max-height:calc(100dvh - var(--column-viewport-margin)*2);margin-inline:auto;border-radius:var(--radius);object-fit:contain}.asset-masonry.column-layout .card-body{flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.asset-masonry.column-layout{--column-viewport-margin:clamp(24px,6vh,64px);width:min(760px,100%);margin-inline:auto;grid-template-columns:minmax(0,1fr);row-gap:0}.asset-masonry.column-layout .asset-card{padding-bottom:var(--section-gap)}.asset-masonry.column-layout .preview{height:auto;aspect-ratio:auto!important;overflow:visible;clip-path:none;background:transparent}.asset-masonry.column-layout .preview :is(img,video){width:auto;height:auto;max-width:100%;max-height:calc(100vh - var(--column-viewport-margin)*2);max-height:calc(100dvh - var(--column-viewport-margin)*2);margin-inline:auto;border-radius:var(--radius);object-fit:contain}.asset-masonry.column-layout .card-body{flex-direction:column;align-items:center;justify-content:center;text-align:center}
 .asset-card{position:relative;min-width:0;padding-bottom:calc(var(--space)*2);color:inherit;background:transparent;opacity:1;transform:translateY(0);transition-property:opacity,transform;transition-duration:.18s,.22s;transition-delay:var(--card-stagger,0ms);transition-timing-function:ease-out,cubic-bezier(.2,0,0,1)}.asset-masonry.is-masonry .asset-card{grid-row-end:span var(--card-rows)}
-.asset-card[draggable=true]{cursor:grab}.asset-card[draggable=true]:active{cursor:grabbing}.asset-card.is-dragging{opacity:.35}.asset-card.is-drop-target .preview{box-shadow:0 0 0 3px var(--color-accent)}
+.asset-masonry.is-arranging .asset-card{cursor:grab}.asset-masonry.is-arranging .asset-card:active{cursor:grabbing}.asset-card.is-dragging{opacity:.35}.asset-card.is-pointer-dragging{pointer-events:none}.asset-card.is-drop-target .preview{box-shadow:0 0 0 3px var(--color-accent)}
+.asset-masonry.is-arranging .preview :is(img,video){-webkit-user-drag:none;-webkit-user-select:none;user-select:none}
+.asset-masonry.is-arranging .asset-card .preview{animation:arrange-wiggle 170ms ease-in-out infinite alternate;transform-origin:50% 45%}.asset-masonry.is-arranging .asset-card:nth-child(2n) .preview{animation-duration:190ms;animation-delay:-85ms;animation-direction:alternate-reverse}.asset-masonry.is-arranging .asset-card:nth-child(3n) .preview{animation-duration:155ms;animation-delay:-130ms}.asset-masonry.is-arranging .asset-card.is-dragging .preview{animation:none;rotate:0deg}@keyframes arrange-wiggle{from{rotate:-.35deg}to{rotate:.35deg}}
 .preview{position:relative;overflow:hidden;border-radius:var(--board-radius,var(--radius));background:transparent;clip-path:inset(0 round var(--board-radius,var(--radius)))}.preview.is-loading{background:var(--color-surface)}
 .asset-masonry.custom-view .card-status{display:none}.asset-masonry.hide-text .card-body{display:none}.asset-masonry.custom-view .asset-card{padding-bottom:var(--board-gap,var(--space))}
 .preview-link{display:block;width:100%;height:100%}.preview-link:hover,.card-body a:hover{opacity:1}
-.preview img{display:block;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .12s ease-out}.preview img.is-loaded{opacity:1}
-.asset-card.is-priority .preview img{transition:none}
+.preview :is(img,video){display:block;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .12s ease-out}.preview :is(img,video).is-loaded{opacity:1}
+.asset-card.is-priority .preview :is(img,video){transition:none}
 .card-body{display:flex;justify-content:space-between;align-items:flex-start;gap:var(--space);padding-top:8px}.card-body .card-title,.card-body :deep(p){margin:0;font:inherit;letter-spacing:inherit}.card-body a{text-decoration:none}.card-body :deep(p),.card-meta{opacity:.3}.card-meta{white-space:nowrap}.card-status{text-transform:capitalize}
 .card-quick-actions{position:absolute;z-index:2;left:50%;bottom:10px;display:flex;align-items:center;gap:calc(var(--space)/4);visibility:hidden;transform:translate(-50%,8px) scale(.96);pointer-events:none;transition:transform 150ms cubic-bezier(.2,0,0,1);transition-behavior:allow-discrete}
 .figma-button,.card-approval-toggle{min-height:32px;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:999px;color:var(--material-tinted-fg);background:var(--material-tinted-bg);font-size:12px;text-decoration:none;white-space:nowrap;box-shadow:none;-webkit-backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));transition:scale 150ms,background-color 150ms cubic-bezier(.2,0,0,1)}
 .figma-button{padding:0 13px}.card-approval-toggle{width:32px;min-width:32px;padding:0}
 .preview-actions{position:absolute;z-index:3;right:10px;bottom:10px;left:10px;display:flex;justify-content:center;opacity:0;transform:translateY(8px);pointer-events:none;transition:opacity 150ms,transform 150ms cubic-bezier(.2,0,0,1)}
 .selection-control.selection-control{position:absolute;z-index:3;top:10px;right:10px;width:24px;height:24px;min-height:24px;padding:0;border:1px solid rgb(0 0 0/.35);border-radius:50%;background:rgb(255 255 255/.9);box-shadow:0 1px 4px rgb(0 0 0/.12);opacity:0;transition:opacity 120ms,scale 150ms,background-color 150ms,border-color 150ms}.selection-control.active{border-color:var(--color-fg);background:var(--color-fg);opacity:1}.selection-control:hover{border-color:var(--color-fg)}.selection-control:active{scale:.9}
-.touch-reorder-handle{position:absolute;z-index:4;top:10px;right:10px;width:36px;height:36px;min-height:36px;display:none;place-items:center;padding:0;border-radius:50%;color:var(--material-tinted-fg);background:var(--material-tinted-bg);font-size:23px;line-height:1;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation))}.touch-reorder-handle span{translate:0 -1px;pointer-events:none}
+.touch-reorder-handle{position:absolute;z-index:4;top:10px;left:10px;width:36px;height:36px;min-height:36px;display:none;place-items:center;padding:0;border-radius:50%;color:var(--material-tinted-fg);background:var(--material-tinted-bg);font-size:23px;line-height:1;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation))}.touch-reorder-handle span{translate:0 -1px;pointer-events:none}
 .figma-button:is(:hover,:focus-visible),.card-approval-toggle:is(:hover,:focus-visible){opacity:1;background:var(--material-tinted-hover-bg);-webkit-backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation))}.figma-button:active,.card-approval-toggle:active{scale:.96}.figma-button:focus-visible,.card-approval-toggle:focus-visible{outline:2px solid var(--color-accent);outline-offset:2px}
 @media(hover:hover) and (pointer:fine){.asset-card:hover .selection-control,.asset-card:focus-within .selection-control{opacity:1}.asset-card:hover .card-quick-actions,.asset-card:focus-within .card-quick-actions{visibility:visible;transform:translate(-50%,0) scale(1);pointer-events:auto}.asset-card:hover .preview-actions,.asset-card:focus-within .preview-actions{opacity:1;transform:translateY(0);pointer-events:auto}}
 .asset-masonry.cards-hidden .asset-card{opacity:0;transform:translateY(16px);transition-delay:var(--card-stagger,0ms)}
@@ -303,6 +314,6 @@ onBeforeUnmount(() => {
 @media(max-width:1280px){.asset-masonry.custom-view:not(.column-layout){grid-template-columns:repeat(clamp(1,calc(4 + var(--board-column-offset,0)),6),minmax(0,1fr))}}
 @media(max-width:900px){.asset-masonry.custom-view:not(.column-layout){grid-template-columns:repeat(clamp(1,calc(3 + var(--board-column-offset,0)),5),minmax(0,1fr))}}
 @media(max-width:520px){.asset-masonry.custom-view:not(.column-layout){grid-template-columns:repeat(clamp(1,calc(2 + var(--board-column-offset,0)),4),minmax(0,1fr))}}
-@media(hover:none),(pointer:coarse){.selection-control.selection-control{opacity:1}.card-quick-actions{display:none}.preview-actions{opacity:1;transform:none;pointer-events:auto}.touch-reorder-handle{display:grid}.preview-link,.preview-link:hover,.preview-link:active,.preview-link:focus{opacity:1}.preview img{filter:none}}
-@media(prefers-reduced-motion:reduce){.asset-card,.card-list-enter-active,.card-list-leave-active{transition:none;animation:none}.asset-masonry.cards-hidden .asset-card{opacity:1;transform:none}.preview img{transition:none}.figma-button{transition-duration:.01ms;transform:translate(-50%,0)}.preview-actions{transition:none}.figma-button:active{scale:1}}
+@media(hover:none),(pointer:coarse){.selection-control.selection-control{opacity:1}.card-quick-actions{display:none}.preview-actions{opacity:1;transform:none;pointer-events:auto}.touch-reorder-handle{display:grid}.preview-link,.preview-link:hover,.preview-link:active,.preview-link:focus{opacity:1}.preview :is(img,video){filter:none}}
+@media(prefers-reduced-motion:reduce){.asset-card,.asset-masonry.is-arranging .asset-card .preview,.card-list-enter-active,.card-list-leave-active{transition:none;animation:none}.asset-masonry.cards-hidden .asset-card{opacity:1;transform:none}.preview :is(img,video){transition:none}.figma-button{transition-duration:.01ms;transform:translate(-50%,0)}.preview-actions{transition:none}.figma-button:active{scale:1}}
 </style>

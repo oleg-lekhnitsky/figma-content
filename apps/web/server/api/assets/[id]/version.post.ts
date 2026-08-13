@@ -5,7 +5,7 @@ import { appError, databaseError } from '../../../utils/app-error'
 import { requireAsset } from '../../../utils/assets'
 import { writeAuditLog } from '../../../utils/audit'
 import { requireRole } from '../../../utils/session'
-import { expectedSharpFormat, isAllowedUploadMime } from '../../../utils/upload-validation'
+import { expectedSharpFormat, isAllowedUploadMime, isValidMp4, isVideoUploadMime } from '../../../utils/upload-validation'
 import { rateLimit, requireTrustedMutation } from '../../../utils/request-security'
 import { canManageAsset } from '../../../utils/authorization'
 import { r2AssetPath, removeAssetObjects, uploadAssetObject } from '../../../utils/storage'
@@ -21,38 +21,43 @@ export default defineEventHandler(async (event) => {
   const parts = await readMultipartFormData(event)
   const file = parts?.find(part => part.name === 'file' && part.filename)
   const metadataPart = parts?.find(part => part.name === 'metadata')
-  if (!file?.data || !metadataPart?.data || !file.type || !isAllowedUploadMime(file.type)) throw appError(400, 'INVALID_UPLOAD', 'Choose a PNG or JPG and provide metadata.')
+  if (!file?.data || !metadataPart?.data || !file.type || !isAllowedUploadMime(file.type)) throw appError(400, 'INVALID_UPLOAD', 'Choose a PNG, JPG, or MP4 and provide metadata.')
   if (file.data.byteLength > Number(useRuntimeConfig().maxUploadBytes)) throw appError(413, 'FILE_TOO_LARGE', 'The replacement exceeds the upload limit.')
   let raw: unknown
   try { raw = JSON.parse(metadataPart.data.toString('utf8')) } catch { throw appError(400, 'INVALID_METADATA', 'Check the asset metadata.') }
   const parsed = assetUploadFieldsSchema.safeParse(raw)
   if (!parsed.success) throw appError(400, 'INVALID_METADATA', 'Check the asset metadata.', parsed.error.flatten())
-  const image = sharp(file.data, { failOn: 'error' }); const info = await image.metadata().catch(() => null)
-  if (!info?.width || !info.height || info.format !== expectedSharpFormat(file.type)) throw appError(415, 'INVALID_IMAGE', 'The replacement is not a valid PNG or JPG.')
+  const mimeType = file.type
+  const video = isVideoUploadMime(mimeType)
+  const image = video ? null : sharp(file.data, { failOn: 'error' }); const info = image ? await image.metadata().catch(() => null) : null
+  if (video && (!isValidMp4(file.data) || !parsed.data.width || !parsed.data.height)) throw appError(415, 'INVALID_VIDEO', 'The replacement is not a valid MP4.')
+  if (mimeType !== 'video/mp4' && (!info?.width || !info.height || info.format !== expectedSharpFormat(mimeType))) throw appError(415, 'INVALID_IMAGE', 'The replacement is not a valid PNG or JPG.')
   const version = current.version + 1
-  const extension = file.type === 'image/png' ? 'png' : 'jpg'
+  const extension = video ? 'mp4' : file.type === 'image/png' ? 'png' : 'jpg'
+  const width = video ? parsed.data.width! : info!.width!
+  const height = video ? parsed.data.height! : info!.height!
   const basePath = `${session.user.organization_id}/${id}/versions/${version}`
-  const imagePath = r2AssetPath(`${basePath}/original.${extension}`); const thumbnailPath = r2AssetPath(`${basePath}/thumbnail.webp`); const thumbnail2xPath = r2AssetPath(`${basePath}/thumbnail@2x.webp`)
-  const [thumbnail, thumbnail2x] = await Promise.all([
+  const imagePath = r2AssetPath(`${basePath}/original.${extension}`); const thumbnailPath = video ? null : r2AssetPath(`${basePath}/thumbnail.webp`); const thumbnail2xPath = video ? null : r2AssetPath(`${basePath}/thumbnail@2x.webp`)
+  const [thumbnail, thumbnail2x] = image ? await Promise.all([
     image.clone().resize({ width: 640, withoutEnlargement: true }).webp({ quality: 100 }).toBuffer(),
     image.clone().resize({ width: 1280, withoutEnlargement: true }).webp({ quality: 100 }).toBuffer()
-  ])
+  ]) : [null, null]
   const uploadedPaths: string[] = []
   try {
-    await uploadAssetObject(imagePath, file.data, file.type); uploadedPaths.push(imagePath)
-    await uploadAssetObject(thumbnailPath, thumbnail, 'image/webp'); uploadedPaths.push(thumbnailPath)
-    await uploadAssetObject(thumbnail2xPath, thumbnail2x, 'image/webp'); uploadedPaths.push(thumbnail2xPath)
+    await uploadAssetObject(imagePath, file.data, mimeType); uploadedPaths.push(imagePath)
+    if (thumbnailPath && thumbnail) { await uploadAssetObject(thumbnailPath, thumbnail, 'image/webp'); uploadedPaths.push(thumbnailPath) }
+    if (thumbnail2xPath && thumbnail2x) { await uploadAssetObject(thumbnail2xPath, thumbnail2x, 'image/webp'); uploadedPaths.push(thumbnail2xPath) }
   } catch (error) {
     if (uploadedPaths.length) await removeAssetObjects(uploadedPaths)
     throw error
   }
   const metadata = parsed.data
-  const update = { image_path: imagePath, thumbnail_path: thumbnailPath, thumbnail_2x_path: thumbnail2xPath, mime_type: file.type, file_size: file.data.byteLength, width: info.width, height: info.height, image_format: extension, figma_file_key: metadata.figmaFileKey, figma_node_id: metadata.figmaNodeId, figma_node_name: metadata.figmaNodeName, figma_url: metadata.figmaUrl, version, status: 'draft' }
+  const update = { image_path: imagePath, thumbnail_path: thumbnailPath, thumbnail_2x_path: thumbnail2xPath, mime_type: file.type, file_size: file.data.byteLength, width, height, image_format: extension, figma_file_key: metadata.figmaFileKey, figma_node_id: metadata.figmaNodeId, figma_node_name: metadata.figmaNodeName, figma_url: metadata.figmaUrl, version, status: 'draft' }
   const db = useSupabaseAdmin()
-  const { error: versionError } = await db.from('asset_versions').insert({ organization_id: session.user.organization_id, asset_id: id, version, image_path: imagePath, thumbnail_path: thumbnailPath, thumbnail_2x_path: thumbnail2xPath, mime_type: file.type, file_size: file.data.byteLength, width: info.width, height: info.height, metadata, created_by: session.user.id })
-  if (versionError) { await removeAssetObjects([imagePath, thumbnailPath, thumbnail2xPath]); throw databaseError('create asset version', versionError) }
+  const { error: versionError } = await db.from('asset_versions').insert({ organization_id: session.user.organization_id, asset_id: id, version, image_path: imagePath, thumbnail_path: thumbnailPath, thumbnail_2x_path: thumbnail2xPath, mime_type: file.type, file_size: file.data.byteLength, width, height, metadata, created_by: session.user.id })
+  if (versionError) { await removeAssetObjects([imagePath, thumbnailPath, thumbnail2xPath].filter((path): path is string => Boolean(path))); throw databaseError('create asset version', versionError) }
   const { data: asset, error } = await db.from('assets').update(update).eq('id', id).eq('organization_id', session.user.organization_id).eq('version', current.version).select('*').single()
-  if (error) { await db.from('asset_versions').delete().eq('asset_id', id).eq('version', version); await removeAssetObjects([imagePath, thumbnailPath, thumbnail2xPath]); throw databaseError('activate asset version', error) }
+  if (error) { await db.from('asset_versions').delete().eq('asset_id', id).eq('version', version); await removeAssetObjects([imagePath, thumbnailPath, thumbnail2xPath].filter((path): path is string => Boolean(path))); throw databaseError('activate asset version', error) }
   await writeAuditLog(session.user.organization_id, session.user.id, 'upload', 'asset', id, { version, replacement: true })
   return { data: { asset } }
 })

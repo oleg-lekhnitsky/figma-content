@@ -24,7 +24,7 @@ export default defineEventHandler(async (event) => {
     taggedAssetIds = taggedAssets.map((item: { asset_id: string }) => item.asset_id)
   }
   let query = useSupabaseAdmin().from('assets')
-    .select('id,title,description,thumbnail_path,thumbnail_2x_path,image_path,width,height,status,figma_url,created_at,updated_at,language,content_type,projects(name),asset_tags(tags(id,name,slug)),allowed_users!assets_uploaded_by_fkey(figma_handle,avatar_url)', { count: 'exact' })
+    .select('id,title,description,thumbnail_path,thumbnail_2x_path,image_path,mime_type,width,height,status,figma_url,created_at,updated_at,language,content_type,projects(name),asset_tags(tags(id,name,slug)),allowed_users!assets_uploaded_by_fkey(figma_handle,avatar_url)', { count: 'exact' })
     .eq('organization_id', session.user.organization_id).neq('status', 'archived')
   if (session.user.role === 'viewer') query = query.eq('status', 'approved')
   if (q.mine) query = query.eq('uploaded_by', session.user.id)

@@ -4,6 +4,7 @@ export interface AssetMasonryItem {
   description?: string | null
   previewUrl: string
   preview2xUrl?: string | null
+  mime_type?: string | null
   width: number
   height: number
   status?: string

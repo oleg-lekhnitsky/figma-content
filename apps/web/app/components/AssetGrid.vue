@@ -36,11 +36,12 @@ const viewStyle = computed(() => props.viewSettings ? {
   <section class="asset-grid-view" :class="{ 'custom-view':viewSettings, 'hide-text':viewSettings && !viewSettings.showText }" :style="viewStyle" :aria-label="label">
     <article v-for="(asset, index) in assets" :key="asset.id" class="grid-card">
       <div class="grid-preview" :class="{ 'is-loading': !loadedImages.has(asset.id) }">
-        <img
+        <AssetMedia
           :class="{ 'is-loaded': loadedImages.has(asset.id) }"
           :src="asset.previewUrl" :srcset="asset.preview2xUrl ? `${asset.previewUrl} 1x, ${asset.preview2xUrl} 2x` : undefined"
+          :mime-type="asset.mime_type"
           :width="asset.width" :height="asset.height" :alt="asset.title" :loading="index < 10 ? 'eager' : 'lazy'"
-          :fetchpriority="index < 2 ? 'high' : 'auto'" decoding="async" @load="loadedImages.add(asset.id)">
+          :fetchpriority="index < 2 ? 'high' : 'auto'" @load="loadedImages.add(asset.id)" />
         <div class="preview-actions"><slot name="previewActions" :asset="asset" /></div>
         <button
           v-if="selectable" class="selection-control" type="button" :class="{ active: selectedIdSet.has(asset.id) }"
@@ -83,7 +84,7 @@ const viewStyle = computed(() => props.viewSettings ? {
   background: var(--color-surface);
 }
 
-.grid-preview img {
+.grid-preview :is(img,video) {
   position: absolute;
   inset: 0;
   width: auto;
@@ -97,7 +98,7 @@ const viewStyle = computed(() => props.viewSettings ? {
   transition: opacity 150ms ease-out;
 }
 
-.grid-preview img.is-loaded {
+.grid-preview :is(img,video).is-loaded {
   opacity: 1;
 }
 
@@ -222,7 +223,7 @@ const viewStyle = computed(() => props.viewSettings ? {
 @media(max-width:600px){.asset-grid-view.custom-view{grid-template-columns:repeat(clamp(1,calc(2 + var(--board-column-offset,0)),4),minmax(0,1fr))}}
 @media (prefers-reduced-motion: reduce) {
   .preview-actions,
-  .grid-preview img {
+  .grid-preview :is(img,video) {
     transition: none;
   }
 }

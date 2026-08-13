@@ -1,10 +1,22 @@
-import type { ControllerMessage, SelectedFrame, UiMessage } from './messages'
+import type { ControllerMessage, ExportSettings as PluginExportSettings, SelectedFrame, UiMessage } from './messages'
 
 figma.showUI(__html__, { width: 420, height: 680, themeColors: true })
 
 type ExportableNode = FrameNode | ComponentNode | InstanceNode
 
-const exportWithoutFrameMask = async (node: ExportableNode, settings: ExportSettings) => {
+const findVideoHash = (node: ExportableNode) => {
+  const candidates: SceneNode[] = [node, ...node.findAll()]
+  for (const candidate of candidates) {
+    if (!('fills' in candidate) || !Array.isArray(candidate.fills)) continue
+    for (const paint of candidate.fills) {
+      if (paint.type === 'VIDEO' && paint.videoHash) return paint.videoHash
+    }
+  }
+  return null
+}
+
+const exportWithoutFrameMask = async (node: ExportableNode, settings: PluginExportSettings) => {
+  if (settings.format === 'MP4') throw new Error('Embedded videos are downloaded through the library server.')
   const clone = node.clone()
   try {
     // Export the selected frame as a flat canvas: its children may overflow and
@@ -14,7 +26,7 @@ const exportWithoutFrameMask = async (node: ExportableNode, settings: ExportSett
     clone.cornerRadius = 0
     clone.x = -100000 - clone.width
     clone.y = -100000 - clone.height
-    return await clone.exportAsync(settings)
+    return await clone.exportAsync({ format: 'PNG', constraint: { type: 'SCALE', value: settings.scale } })
   } finally {
     clone.remove()
   }
@@ -39,9 +51,19 @@ const pageName = (node: BaseNode) => {
 }
 const describe = async (node: ExportableNode): Promise<SelectedFrame> => {
   const previewScale = Math.min(.5, 360 / Math.max(node.width, node.height))
-  const preview = await exportWithoutFrameMask(node, { format: 'PNG', constraint: { type: 'SCALE', value: Math.max(.05, previewScale) } })
+  const clone = node.clone()
+  let preview: Uint8Array
+  try {
+    clone.clipsContent = false
+    clone.cornerRadius = 0
+    clone.x = -100000 - clone.width
+    clone.y = -100000 - clone.height
+    preview = await clone.exportAsync({ format: 'PNG', constraint: { type: 'SCALE', value: Math.max(.05, previewScale) } })
+  } finally {
+    clone.remove()
+  }
   const fileKey = figma.fileKey ?? null
-  return { id: node.id, name: node.name, width: Math.round(node.width), height: Math.round(node.height), pageName: pageName(node), fileKey, figmaUrl: fileKey ? `https://www.figma.com/design/${fileKey}/_?node-id=${encodeURIComponent(node.id)}` : null, assetId: node.getPluginData('contentLibraryAssetId') || null, preview }
+  return { id: node.id, name: node.name, width: Math.round(node.width), height: Math.round(node.height), pageName: pageName(node), fileKey, figmaUrl: fileKey ? `https://www.figma.com/design/${fileKey}/_?node-id=${encodeURIComponent(node.id)}` : null, assetId: node.getPluginData('contentLibraryAssetId') || null, videoHash: findVideoHash(node), preview }
 }
 const postSelection = async () => {
   const frames = await Promise.all(selectedNodes().map(describe))
@@ -75,10 +97,11 @@ figma.ui.onmessage = async (message: UiMessage) => {
     const node = await figma.getNodeByIdAsync(message.nodeId)
     if (!node || (node.type !== 'FRAME' && node.type !== 'COMPONENT' && node.type !== 'INSTANCE')) return figma.ui.postMessage({ type: 'export-result', requestId: message.requestId, nodeId: message.nodeId, error: 'This layer is no longer available.' } satisfies ControllerMessage)
     try {
-      const bytes = await exportWithoutFrameMask(node, { format: 'PNG', constraint: { type: 'SCALE', value: message.settings.scale } })
+      const bytes = await exportWithoutFrameMask(node, message.settings)
       figma.ui.postMessage({ type: 'export-result', requestId: message.requestId, nodeId: message.nodeId, bytes } satisfies ControllerMessage)
-    } catch {
-      figma.ui.postMessage({ type: 'export-result', requestId: message.requestId, nodeId: message.nodeId, error: 'Unable to export this frame.' } satisfies ControllerMessage)
+    } catch (error) {
+      const detail = typeof error === 'object' && error && 'message' in error ? String(error.message) : String(error)
+      figma.ui.postMessage({ type: 'export-result', requestId: message.requestId, nodeId: message.nodeId, error: detail && detail !== '[object Object]' ? detail : 'Unable to export this frame.' } satisfies ControllerMessage)
     }
   }
 }

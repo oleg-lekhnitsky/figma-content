@@ -10,7 +10,7 @@ interface Edition {
   portfolio_client: string | null
   publication_enabled: boolean
   itemCount: number
-  previewAssets: Array<{ id: string; previewUrl: string }>
+  previewAssets: Array<{ id: string; previewUrl: string; mime_type?: string | null }>
 }
 
 const { data, status, error, refresh } = await useFetch<{ data: { collections: Edition[] } }>('/api/shares')
@@ -97,7 +97,7 @@ onActivated(() => refresh())
       <section v-else-if="editions.length" class="editions" aria-label="Portfolio editions">
         <article v-for="edition in editions" :key="edition.id">
           <NuxtLink class="cover" :to="`/boards/${edition.id}`">
-            <img v-if="edition.previewAssets[0]" :src="edition.previewAssets[0].previewUrl" alt="">
+            <AssetMedia v-if="edition.previewAssets[0]" :src="edition.previewAssets[0].previewUrl" :mime-type="edition.previewAssets[0].mime_type" alt="" />
             <span v-else>No work yet</span>
           </NuxtLink>
           <h2>
@@ -265,7 +265,7 @@ article {
   background: var(--color-surface);
 }
 
-.cover img {
+.cover :is(img,video) {
   width: 100%;
   height: 100%;
   object-fit: cover;

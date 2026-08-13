@@ -24,7 +24,7 @@ const columnOptions: Array<{ value: BoardViewSettings['columns']; label: string 
 
 <template>
   <div class="asset-filter-controls asset-filter-controls--expanded board-view-controls">
-    <button class="filter-sheet-handle" type="button" tabindex="-1" aria-hidden="true"><span /></button>
+    <button class="filter-sheet-handle" type="button" aria-label="Close view settings"><span aria-hidden="true" /></button>
     <h2 class="filter-overlay-title">Board view</h2>
     <fieldset class="filter-option-group">
       <legend>Card text</legend>
@@ -68,4 +68,5 @@ const columnOptions: Array<{ value: BoardViewSettings['columns']; label: string 
   font-size: var(--filter-option-font-size);
   font-weight: 700;
 }
+
 </style>

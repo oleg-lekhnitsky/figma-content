@@ -398,7 +398,9 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
   display: grid;
   align-items: start;
   padding: 0 !important;
-  overflow-y: auto !important;
+  overflow: hidden !important;
+  overflow-anchor: none;
+  overscroll-behavior-y: contain;
   scrollbar-width: none;
   -ms-overflow-style: none;
   border: 0;
@@ -443,20 +445,28 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
 
 .selection-panel--filter-overlay .asset-filter-controls {
   --filter-row-height: var(--filter-overlay-row-height);
+  box-sizing: border-box;
   width: min(100%, var(--filter-overlay-width));
   min-height: 0;
+  max-height: calc(100dvh - var(--filter-overlay-margin) - var(--filter-overlay-margin));
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 0;
   margin: var(--filter-overlay-margin) auto;
   padding: var(--filter-overlay-padding);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-width: none;
   border-radius: var(--filter-overlay-radius);
   color: var(--filter-overlay-panel-color);
   background: var(--filter-overlay-panel-background);
   max-width: 520px;
   animation: filter-panel-fade-in var(--filter-overlay-enter-duration) var(--filter-overlay-enter-easing) var(--filter-panel-enter-delay) both;
 }
+
+.selection-panel--filter-overlay .asset-filter-controls::-webkit-scrollbar { display: none; }
 
 @keyframes filter-panel-fade-in {
   from { opacity: 0; }

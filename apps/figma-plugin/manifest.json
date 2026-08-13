@@ -10,6 +10,6 @@
   "networkAccess": {
     "allowedDomains": ["https://figma-content-web.vercel.app"],
     "devAllowedDomains": ["http://localhost:3000"],
-    "reasoning": "Authenticate approved users and upload selected frames to the private content library."
+    "reasoning": "Authenticate approved users, resolve embedded Figma video files, and upload selected media to the private content library."
   }
 }

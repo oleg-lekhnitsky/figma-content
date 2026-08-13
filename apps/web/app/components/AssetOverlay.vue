@@ -5,7 +5,7 @@ const props = withDefaults(defineProps<{ assetId: string; assetIds?: string[]; p
 const emit = defineEmits<{ close: []; deleted: [id: string]; navigate: [id: string] }>()
 interface AssetDetail { id: string; uploaded_by: string; title: string; description: string | null; width: number; height: number; file_size: number; mime_type: string; status: string; version: number; created_at: string; updated_at: string; figma_url: string; language: string | null; content_type: string | null; project_id: string | null; campaign_id: string | null; projects: { name: string } | null; campaigns: { name: string } | null; asset_tags: Array<{ tags: { id: string; name: string } | null }>; allowed_users: { figma_handle: string | null } | null; versions: Array<{ id: string; version: number; width: number; height: number; file_size: number; created_at: string }> }
 interface SessionResponse { data: { authenticated: boolean; user?: { id: string; role: string } } }
-interface Board { id: string; title: string; mode: 'dynamic' | 'static'; role: 'owner' | 'editor' | 'contributor' | 'viewer'; itemCount: number; previewAssets: Array<{ id: string; previewUrl: string; width: number; height: number }> }
+interface Board { id: string; title: string; mode: 'dynamic' | 'static'; role: 'owner' | 'editor' | 'contributor' | 'viewer'; itemCount: number; previewAssets: Array<{ id: string; previewUrl: string; mime_type?: string | null; width: number; height: number }> }
 interface Option { id: string; name: string }
 const dialog = ref<HTMLDialogElement>()
 const overlayContent = ref<HTMLElement>()
@@ -26,6 +26,10 @@ watch(() => [props.assetId, props.previewUrl], () => { displayedPreviewUrl.value
 watch(() => previewData.value?.data, async (preview) => {
   if (!preview || preview.id !== props.assetId || !import.meta.client) return
   const requestedAssetId = props.assetId
+  if (asset.value?.mime_type.startsWith('video/')) {
+    displayedPreviewUrl.value = preview.url
+    return
+  }
   const image = new Image()
   const loaded = new Promise<void>((resolve, reject) => {
     image.onload = () => resolve()
@@ -285,8 +289,8 @@ watch(() => props.assetId, id => {
         </button></div>
       <main v-if="status === 'pending' && !asset" class="overlay-content overlay-loading" role="status"
         aria-label="Loading asset details">
-        <section class="asset-visual" :class="{ 'skeleton-visual': !resolvedPreviewUrl }" aria-hidden="true"><img
-            v-if="resolvedPreviewUrl" class="current-preview" :src="resolvedPreviewUrl" alt=""></section>
+        <section class="asset-visual" :class="{ 'skeleton-visual': !resolvedPreviewUrl }" aria-hidden="true"><AssetMedia
+            v-if="resolvedPreviewUrl" class="current-preview" :src="resolvedPreviewUrl" alt="" /></section>
         <aside class="skeleton-panel" aria-hidden="true">
           <span class="skeleton-line skeleton-status" />
           <span class="skeleton-line skeleton-title" />
@@ -308,8 +312,8 @@ watch(() => props.assetId, id => {
             class="sr-only">Swipe left or right to browse assets. Pull down to close.</span><button class="pull-handle"
             type="button" aria-label="Close asset details" @pointerdown.stop @click="close" /><img
             v-if="isMobile && previousPreviewUrl" class="swipe-preview previous-preview" :src="previousPreviewUrl" alt=""
-            draggable="false"><img v-if="resolvedPreviewUrl" class="current-preview" :src="resolvedPreviewUrl"
-            :alt="`Preview of ${asset.title}`" draggable="false"><img v-if="isMobile && nextPreviewUrl"
+            draggable="false"><AssetMedia v-if="resolvedPreviewUrl" class="current-preview" :src="resolvedPreviewUrl" :mime-type="asset.mime_type"
+            :alt="`Preview of ${asset.title}`" draggable="false" /><img v-if="isMobile && nextPreviewUrl"
             class="swipe-preview next-preview" :src="nextPreviewUrl" alt="" draggable="false"><button
             class="details-hint" type="button" aria-label="Show asset details" @pointerdown.stop
             @click="revealDetails"><svg viewBox="0 0 24 24" aria-hidden="true">
@@ -433,9 +437,8 @@ watch(() => props.assetId, id => {
           <button v-for="board in filteredEligibleBoards" :key="board.id" class="board-picker-option" type="button"
             :disabled="Boolean(addingBoardId)" :aria-label="`Add asset to ${board.title}`"
             @click="addToBoard(board.id)">
-            <span class="board-picker-preview" :class="{ 'is-empty': !board.previewAssets.length }"><img
-                v-if="board.previewAssets[0]" :src="board.previewAssets[0].previewUrl" alt="" loading="lazy"
-                decoding="async"><span v-else aria-hidden="true" /></span>
+            <span class="board-picker-preview" :class="{ 'is-empty': !board.previewAssets.length }"><AssetMedia
+                v-if="board.previewAssets[0]" :src="board.previewAssets[0].previewUrl" :mime-type="board.previewAssets[0].mime_type" alt="" loading="lazy" /><span v-else aria-hidden="true" /></span>
             <span class="board-picker-info"><strong>{{ board.title }}</strong><span>{{ addingBoardId === board.id ?
               'Adding…' :
               `${board.itemCount} ${board.itemCount===1 ? 'item' : 'items'}` }}</span></span>
@@ -577,7 +580,7 @@ watch(() => props.assetId, id => {
   white-space: nowrap
 }
 
-.asset-visual img {
+.asset-visual :is(img,video) {
   position: absolute;
   inset: 0;
   display: block;
@@ -928,7 +931,7 @@ h1 {
   background: var(--color-surface)
 }
 
-.board-picker-preview img {
+.board-picker-preview :is(img,video) {
   display: block;
   width: 100%;
   height: 100%;
@@ -1118,7 +1121,7 @@ li span {
     user-select: none
   }
 
-  .asset-visual img {
+  .asset-visual :is(img,video) {
     padding: max(calc(var(--space)*3), env(safe-area-inset-top)) var(--space) max(calc(var(--space)*3), env(safe-area-inset-bottom));
     object-fit: contain;
     object-position: 50% calc(50% - 2dvh);

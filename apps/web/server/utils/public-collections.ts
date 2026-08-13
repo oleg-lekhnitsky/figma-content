@@ -78,16 +78,17 @@ export const boardPreviewForCollection = async (collection: {
 
   const previewIds = ids.slice(0, 4)
   let query = useSupabaseAdmin().from('assets')
-    .select('id,title,thumbnail_path,image_path,width,height', { count: 'exact' })
+    .select('id,title,thumbnail_path,image_path,mime_type,width,height', { count: 'exact' })
     .eq('organization_id', collection.organization_id).in('id', previewIds)
   query = collection.purpose === 'review' ? query.neq('status', 'archived') : query.eq('status', 'approved')
   const { data, count, error } = await query.order('created_at', { ascending: false }).limit(4)
   if (error) throw databaseError('load board preview assets', error)
-  const previewAssets = await Promise.all(data.map(async (asset: { id: string; title: string; thumbnail_path: string | null; image_path: string; width: number; height: number }) => ({
+  const previewAssets = await Promise.all(data.map(async (asset: { id: string; title: string; thumbnail_path: string | null; image_path: string; mime_type: string; width: number; height: number }) => ({
     id: asset.id,
     title: asset.title,
     width: asset.width,
     height: asset.height,
+    mime_type: asset.mime_type,
     previewUrl: await signedAssetUrl(asset.thumbnail_path ?? asset.image_path, 3600)
   })))
   const position = new Map(previewIds.map((assetId, index) => [assetId, index]))
@@ -110,8 +111,8 @@ export const publicAssetsForCollection = async (
   }
   if (!ids.length) return []
   const selection = options.includeUnapproved
-    ? 'id,title,description,thumbnail_path,thumbnail_2x_path,image_path,width,height,status,figma_url,uploaded_by,created_at,projects(name),asset_tags(tags(name)),allowed_users!assets_uploaded_by_fkey(email,figma_handle,avatar_url)'
-    : 'id,title,description,thumbnail_path,thumbnail_2x_path,image_path,width,height,status,figma_url,created_at,projects(name),asset_tags(tags(name))'
+    ? 'id,title,description,thumbnail_path,thumbnail_2x_path,image_path,mime_type,width,height,status,figma_url,uploaded_by,created_at,projects(name),asset_tags(tags(name)),allowed_users!assets_uploaded_by_fkey(email,figma_handle,avatar_url)'
+    : 'id,title,description,thumbnail_path,thumbnail_2x_path,image_path,mime_type,width,height,status,figma_url,created_at,projects(name),asset_tags(tags(name))'
   let query = useSupabaseAdmin().from('assets')
     .select(selection)
     .eq('organization_id', collection.organization_id).in('id', ids)

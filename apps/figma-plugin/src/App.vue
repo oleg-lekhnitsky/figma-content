@@ -32,7 +32,7 @@ const busy = ref(false)
 const announcement = ref('')
 const globalError = ref('')
 const previewUrls = new Map<string, string>()
-const pending = new Map<string, (value: Uint8Array) => void>()
+const pending = new Map<string, { resolve: (value: Uint8Array) => void; reject: (error: Error) => void }>()
 let requestSequence = 0
 const previewUrl = (frame: SelectedFrame) => previewUrls.get(frame.id) ?? ''
 const eligible = computed(() => frames.value.filter(frame => frame.existingAction !== 'cancel'))
@@ -161,20 +161,37 @@ const reencodeJpg = async (bytes: Uint8Array, quality: number) => {
   canvas.getContext('2d')!.drawImage(bitmap, 0, 0); bitmap.close()
   return await new Promise<Blob>((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error()), 'image/jpeg', quality / 100))
 }
-const exportFrame = (frame: Item) => new Promise<Uint8Array>((resolve) => {
-  const requestId = createRequestId(); pending.set(requestId, resolve); post({ type: 'export', requestId, nodeId: frame.id, settings: { ...settings } })
+const exportFrame = (frame: Item) => new Promise<Uint8Array>((resolve, reject) => {
+  const requestId = createRequestId(); pending.set(requestId, { resolve, reject }); post({ type: 'export', requestId, nodeId: frame.id, settings: { ...settings } })
 })
+const downloadFrameVideo = async (frame: Item) => {
+  if (!frame.fileKey || !frame.videoHash) throw new Error('No embedded video was found in this frame.')
+  const response = await fetch(`${appUrl}/api/plugin/figma-video`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token.value}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fileKey: frame.fileKey, videoHash: frame.videoHash })
+  })
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { data?: { error?: { message?: string } }; error?: { message?: string } } | null
+    throw new Error(payload?.data?.error?.message || payload?.error?.message || 'Unable to download the embedded video from Figma.')
+  }
+  return response.blob()
+}
 const upload = async () => {
   busy.value = true; globalError.value = ''; let completed = 0
   for (const frame of eligible.value) {
     try {
       if (!frame.fileKey || !frame.figmaUrl) throw new Error('Unable to identify this Figma file. Reload the private plugin, then try again.')
-      frame.progress = 'exporting'; announcement.value = `Exporting ${frame.title}.`
-      const bytes = await exportFrame(frame)
-      const blob = settings.format === 'JPG' ? await reencodeJpg(bytes, settings.jpgQuality) : new Blob([new Uint8Array(bytes)], { type: 'image/png' })
+      frame.progress = 'exporting'; announcement.value = `${settings.format === 'MP4' ? 'Downloading' : 'Exporting'} ${frame.title}.`
+      const blob = settings.format === 'MP4'
+        ? await downloadFrameVideo(frame)
+        : await exportFrame(frame).then(bytes => settings.format === 'JPG'
+            ? reencodeJpg(bytes, settings.jpgQuality)
+            : new Blob([new Uint8Array(bytes)], { type: 'image/png' }))
       frame.progress = 'uploading'; announcement.value = `Uploading ${frame.title}.`
-      const metadata = { title: frame.title, description: shared.description, tags: shared.tags.split(',').map(v => v.trim()).filter(Boolean), projectId: shared.projectId || null, campaignId: shared.campaignId || null, language: shared.language || null, contentType: shared.contentType || null, status: shared.status, figmaFileKey: frame.fileKey, figmaNodeId: frame.id, figmaNodeName: frame.name, figmaUrl: frame.figmaUrl }
-      const form = new FormData(); form.append('file', blob, `${frame.name}.${settings.format === 'JPG' ? 'jpg' : 'png'}`); form.append('metadata', JSON.stringify(metadata))
+      const metadata = { title: frame.title, description: shared.description, tags: shared.tags.split(',').map(v => v.trim()).filter(Boolean), projectId: shared.projectId || null, campaignId: shared.campaignId || null, language: shared.language || null, contentType: shared.contentType || null, status: shared.status, figmaFileKey: frame.fileKey, figmaNodeId: frame.id, figmaNodeName: frame.name, figmaUrl: frame.figmaUrl, width: frame.width, height: frame.height }
+      const extension = settings.format === 'JPG' ? 'jpg' : settings.format.toLowerCase()
+      const form = new FormData(); form.append('file', blob, `${frame.name}.${extension}`); form.append('metadata', JSON.stringify(metadata))
       const endpoint = frame.assetId && frame.existingAction === 'version' ? `/api/assets/${frame.assetId}/version` : '/api/assets'
       const response = await fetch(`${appUrl}${endpoint}`, { method: 'POST', headers: { Authorization: `Bearer ${token.value}` }, body: form })
       if (!response.ok) { const body = await response.json().catch(() => null) as { data?: { error?: { message?: string } } } | null; throw new Error(body?.data?.error?.message || 'Upload failed.') }
@@ -205,7 +222,7 @@ window.onmessage = (event: MessageEvent<{ pluginMessage?: ControllerMessage }>) 
     for (const url of previewUrls.values()) URL.revokeObjectURL(url); previewUrls.clear()
     frames.value = message.frames.map(frame => { if (frame.preview) previewUrls.set(frame.id, URL.createObjectURL(new Blob([new Uint8Array(frame.preview)], { type: 'image/png' }))); return { ...frame, title: frame.name, progress: 'idle', existingAction: frame.assetId ? 'version' : 'separate' } })
   }
-  if (message.type === 'export-result') { const resolve = pending.get(message.requestId); if (resolve && message.bytes) resolve(message.bytes); pending.delete(message.requestId) }
+  if (message.type === 'export-result') { const request = pending.get(message.requestId); if (request && message.bytes) request.resolve(message.bytes); else if (request) request.reject(new Error(message.error || 'Unable to export this frame.')); pending.delete(message.requestId) }
   if (message.type === 'stored-state' && message.value && typeof message.value === 'object') {
     const value = message.value as { settings?: Partial<ExportSettings>; shared?: Partial<typeof shared> }; Object.assign(settings, value.settings); Object.assign(shared, value.shared)
   }
@@ -227,9 +244,9 @@ onMounted(() => { post({ type: 'load-state' }); post({ type: 'refresh-selection'
       <p v-if="selectedReviewBoard" class="destination-note">Frames will be uploaded to the library and submitted to this review.<template v-if="selectedReviewBoard.submission_deadline"> Deadline {{ new Date(selectedReviewBoard.submission_deadline).toLocaleDateString() }}.</template></p>
       <section v-if="!frames.length" class="center"><strong>Select one or more frames to upload.</strong><p>Frames, components, and instances are supported.</p><button @click="post({ type: 'refresh-selection' })">Check selection</button></section>
       <form v-else @submit.prevent="upload">
-        <section aria-labelledby="selected-title"><div class="section-title"><h2 id="selected-title">Selected frames</h2><span>{{ frames.length }}</span></div><ul class="frames"><li v-for="frame in frames" :key="frame.id"><img :src="previewUrl(frame)" alt=""><div class="frame-fields"><label :for="`title-${frame.id}`">Title</label><input :id="`title-${frame.id}`" v-model="frame.title" required maxlength="200"><p>{{ frame.width }} × {{ frame.height }} · {{ frame.pageName }}</p><p v-if="!frame.fileKey" class="error">Reload this private plugin to enable a direct link to the file.</p><p v-if="frame.assetId" class="existing">This frame already exists in the library.</p><label v-if="frame.assetId" :for="`action-${frame.id}`">Upload choice</label><select v-if="frame.assetId" :id="`action-${frame.id}`" v-model="frame.existingAction"><option value="version">Upload new version</option><option value="separate">Create separate asset</option><option value="cancel">Skip this frame</option></select><p v-if="frame.progress !== 'idle'" class="progress" :data-state="frame.progress">{{ frame.progress === 'done' ? 'Uploaded' : frame.progress === 'error' ? frame.error : frame.progress === 'exporting' ? 'Exporting…' : 'Uploading…' }}</p></div></li></ul></section>
+        <section aria-labelledby="selected-title"><div class="section-title"><h2 id="selected-title">Selected frames</h2><span>{{ frames.length }}</span></div><ul class="frames"><li v-for="frame in frames" :key="frame.id"><img :src="previewUrl(frame)" alt=""><div class="frame-fields"><label :for="`title-${frame.id}`">Title</label><input :id="`title-${frame.id}`" v-model="frame.title" required maxlength="200"><p>{{ frame.width }} × {{ frame.height }} · {{ frame.pageName }}</p><p v-if="settings.format === 'MP4' && !frame.videoHash" class="error">No embedded video found in this frame.</p><p v-if="!frame.fileKey" class="error">Reload this private plugin to enable a direct link to the file.</p><p v-if="frame.assetId" class="existing">This frame already exists in the library.</p><label v-if="frame.assetId" :for="`action-${frame.id}`">Upload choice</label><select v-if="frame.assetId" :id="`action-${frame.id}`" v-model="frame.existingAction"><option value="version">Upload new version</option><option value="separate">Create separate asset</option><option value="cancel">Skip this frame</option></select><p v-if="frame.progress !== 'idle'" class="progress" :data-state="frame.progress">{{ frame.progress === 'done' ? 'Uploaded' : frame.progress === 'error' ? frame.error : frame.progress === 'exporting' ? settings.format === 'MP4' ? 'Downloading…' : 'Exporting…' : 'Uploading…' }}</p></div></li></ul></section>
         <section aria-labelledby="metadata-title"><h2 id="metadata-title">Shared metadata</h2><div class="tag-field"><span class="field-label">Tags</span><div v-if="selectedTags.length" class="selected-tags" aria-label="Selected tags"><button v-for="tag in selectedTags" :key="tag" class="tag-chip selected" type="button" :aria-label="`Remove ${tag}`" @click="removeTag(tag)"><span>{{ tag }}</span><span aria-hidden="true">×</span></button></div><div class="tag-entry"><input v-model="tagDraft" maxlength="80" aria-label="Add a tag" placeholder="Add a tag" @keydown="handleTagKeydown"><button type="button" :disabled="tagBusy || !tagDraft.trim()" @click="createTag">{{ tagBusy ? 'Adding…' : 'Add' }}</button></div><div v-if="suggestedTags.length" class="tag-suggestions"><span>Available</span><div><button v-for="tag in suggestedTags" :key="tag.id" class="tag-chip" type="button" @click="selectTag(tag.name)">{{ tag.name }}</button></div></div></div><div class="project-field"><label for="plugin-project">Project</label><select id="plugin-project" v-model="shared.projectId"><option value="">No project</option><option v-for="project in projects" :key="project.id" :value="project.id">{{ project.name }}</option></select><div v-if="canCreateProjects" class="project-entry"><input v-model="projectDraft" maxlength="120" aria-label="New project name" placeholder="New project" @keydown.enter.prevent="createProject"><button type="button" :disabled="projectBusy||!projectDraft.trim()" @click="createProject">{{ projectBusy?'Creating…':'Create' }}</button></div><p v-else class="field-note">Editors and admins can create projects.</p></div><div class="grid"><label>Language <input v-model="shared.language" placeholder="en-US"></label><label>Content type <input v-model="shared.contentType" placeholder="Social post"></label></div><label>Description <textarea v-model="shared.description" rows="3" placeholder="Describe how this asset should be used"></textarea></label></section>
-        <section aria-labelledby="export-title"><h2 id="export-title">Export</h2><div class="settings"><label>Format <select v-model="settings.format"><option>PNG</option><option>JPG</option></select></label><label>Scale <select v-model.number="settings.scale"><option :value="1">1×</option><option :value="2">2×</option><option :value="3">3×</option></select></label><label v-if="settings.format === 'JPG'">JPG quality <input v-model.number="settings.jpgQuality" type="number" min="10" max="100" step="5"></label></div></section>
+        <section aria-labelledby="export-title"><h2 id="export-title">Media</h2><div class="settings"><label>Format <select v-model="settings.format"><option>PNG</option><option>JPG</option><option>MP4</option></select></label><label v-if="settings.format !== 'MP4'">Scale <select v-model.number="settings.scale"><option :value="1">1×</option><option :value="2">2×</option><option :value="3">3×</option></select></label><label v-if="settings.format === 'JPG'">JPG quality <input v-model.number="settings.jpgQuality" type="number" min="10" max="100" step="5"></label></div><p v-if="settings.format === 'MP4'" class="field-note">The original MP4 from the selected frame's video fill will be uploaded directly.</p></section>
         <p v-if="globalError" class="error" role="alert">{{ globalError }}</p><footer><span>{{ eligible.length }} ready</span><button class="primary" type="submit" :disabled="busy || !eligible.length">{{ busy ? reviewBoardId ? 'Submitting…' : 'Uploading…' : `${reviewBoardId ? 'Submit' : 'Upload'} ${eligible.length} ${eligible.length === 1 ? 'frame' : 'frames'}` }}</button></footer>
       </form>
     </template>

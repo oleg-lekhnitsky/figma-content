@@ -2,7 +2,7 @@
 import type { BoardLayout, BoardViewSettings } from '@content-library/shared'
 
 const route = useRoute()
-interface PublicAsset { id: string; title: string; description: string|null; previewUrl: string; preview2xUrl?: string|null; width: number; height: number; projects: { name: string } | null; asset_tags: Array<{ tags: { name: string } | null }> }
+interface PublicAsset { id: string; title: string; description: string|null; previewUrl: string; preview2xUrl?: string|null; mime_type?: string|null; width: number; height: number; projects: { name: string } | null; asset_tags: Array<{ tags: { name: string } | null }> }
 interface PortfolioCase { id:string; title:string; layout:BoardLayout; viewSettings:BoardViewSettings; assets:PublicAsset[] }
 interface PublicResponse { data: { collection: { title: string; purpose: 'showcase' | 'review' | 'portfolio'; portfolioKind:string|null; portfolioClient:string|null; introduction:string|null; contactHeading:string|null; contactLinks:Array<{label:string;url:string}>; mode: 'dynamic' | 'static'; layout: BoardLayout; viewSettings:BoardViewSettings; expiresAt: string | null; updatedAt: string; organization: { name: string } | null }; assets: PublicAsset[]; cases:PortfolioCase[] } }
 const { data, status, error } = await useFetch<PublicResponse>(() => `/api/public/collections/${String(route.params.slug)}`)

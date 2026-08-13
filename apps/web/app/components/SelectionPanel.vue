@@ -34,6 +34,18 @@ let previousBodyOverflow = ''
 let previousRootOverflow = ''
 let pageScrollLocked = false
 
+const resetOverlayScroll = async () => {
+  await nextTick()
+  const reset = () => {
+    if (!panelRoot.value) return
+    panelRoot.value.scrollTop = 0
+    const sheet = panelRoot.value.querySelector<HTMLElement>('.asset-filter-controls')
+    if (sheet) sheet.scrollTop = 0
+  }
+  reset()
+  requestAnimationFrame(reset)
+}
+
 const lockPageScroll = () => {
   if (!window.matchMedia('(max-width: 520px)').matches || pageScrollLocked) return
   previousBodyOverflow = document.body.style.overflow
@@ -65,6 +77,7 @@ watch(() => [props.visible, props.overlay] as const, async ([visible, overlay]) 
     lockPageScroll()
     renderedOverlay.value = true
     overlayClosing.value = false
+    void resetOverlayScroll()
     return
   }
   if (!renderedOverlay.value) return
@@ -96,8 +109,8 @@ const handlePanelClick = (event: MouseEvent) => {
 
 const startSheetDrag = (event: PointerEvent) => {
   if (event.pointerType !== 'touch' || !props.overlay || props.closeDisabled) return
-  const sheet = (event.target as HTMLElement).closest<HTMLElement>('.asset-filter-controls')
-  if (!sheet || sheet.scrollTop > 0) return
+  const handle = (event.target as HTMLElement).closest<HTMLElement>('.filter-sheet-handle')
+  if (!handle) return
   sheetPointerId = event.pointerId
   sheetStartY = event.clientY
   sheetStartTime = performance.now()
@@ -133,7 +146,10 @@ watch(() => props.visible, visible => {
 
 onMounted(() => {
   window.addEventListener('keydown', handleKeydown)
-  if (props.visible && props.overlay) lockPageScroll()
+  if (props.visible && props.overlay) {
+    lockPageScroll()
+    void resetOverlayScroll()
+  }
 })
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeydown)

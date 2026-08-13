@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 export const assetStatusSchema = z.enum(['draft', 'approved', 'archived'])
-export const imageFormatSchema = z.enum(['png', 'jpg'])
+export const imageFormatSchema = z.enum(['png', 'jpg', 'mp4'])
 export const isoDateSchema = z.iso.datetime({ offset: true })
 
 export const assetMetadataSchema = z.object({
@@ -21,7 +21,7 @@ export const assetSchema = assetMetadataSchema.extend({
   uploadedBy: z.uuid(),
   imagePath: z.string().min(1),
   thumbnailPath: z.string().min(1).nullable(),
-  mimeType: z.enum(['image/png', 'image/jpeg']),
+  mimeType: z.enum(['image/png', 'image/jpeg', 'video/mp4']),
   fileSize: z.number().int().positive(),
   width: z.number().int().positive(),
   height: z.number().int().positive(),
@@ -71,7 +71,9 @@ export const assetUploadFieldsSchema = z.object({
   figmaFileKey: z.string().trim().min(1).max(200),
   figmaNodeId: z.string().trim().min(1).max(200),
   figmaNodeName: z.string().trim().min(1).max(500),
-  figmaUrl: z.url()
+  figmaUrl: z.url(),
+  width: z.number().int().positive().optional(),
+  height: z.number().int().positive().optional()
 })
 
 export const assetUpdateSchema = assetMetadataSchema.partial()
