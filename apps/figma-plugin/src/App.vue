@@ -45,6 +45,26 @@ const reviewBoardLabel = (board: ReviewBoard) => board.review_month
   ? `${board.title} · ${new Intl.DateTimeFormat(undefined, { month: 'short', year: 'numeric' }).format(new Date(`${board.review_month}T12:00:00`))}`
   : board.title
 const post = (message: UiMessage) => parent.postMessage({ pluginMessage: message }, '*')
+let resolveSequence = 0
+const resolveExistingFrames = async () => {
+  if (!token.value || !frames.value.length) return
+  const sequence = ++resolveSequence
+  const refs = frames.value.flatMap(frame => frame.fileKey ? [{ fileKey: frame.fileKey, nodeId: frame.id }] : [])
+  if (!refs.length) return
+  const response = await fetch(`${appUrl}/api/plugin/assets/resolve`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token.value}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refs })
+  }).catch(() => null)
+  if (!response?.ok || sequence !== resolveSequence) return
+  const payload = await response.json() as { data: { assets: Record<string, string> } }
+  for (const frame of frames.value) {
+    if (!frame.fileKey) continue
+    const assetId = payload.data.assets[`${frame.fileKey}:${frame.id}`] ?? null
+    frame.assetId = assetId
+    frame.existingAction = assetId ? 'version' : 'separate'
+  }
+}
 const createRequestId = () => {
   requestSequence += 1
   const bytes = new Uint32Array(2)
@@ -130,7 +150,7 @@ const switchWorkspace = async () => {
 
 const checkSession = async () => {
   if (!token.value) return authState.value = 'signed-out'
-  try { await fetch(`${appUrl}/api/plugin/session`, { headers: { Authorization: `Bearer ${token.value}` } }).then(response => { if (!response.ok) throw new Error() }); authState.value = 'signed-in'; await loadWorkspace() }
+  try { await fetch(`${appUrl}/api/plugin/session`, { headers: { Authorization: `Bearer ${token.value}` } }).then(response => { if (!response.ok) throw new Error() }); authState.value = 'signed-in'; await Promise.all([loadWorkspace(), resolveExistingFrames()]) }
   catch { post({ type: 'save-session', token: null }); token.value = ''; authState.value = 'signed-out' }
 }
 const openLogin = () => post({ type: 'open-external', url: `${appUrl}/oauth/figma/start?flow=plugin` })
@@ -164,37 +184,33 @@ const reencodeJpg = async (bytes: Uint8Array, quality: number) => {
 const exportFrame = (frame: Item) => new Promise<Uint8Array>((resolve, reject) => {
   const requestId = createRequestId(); pending.set(requestId, { resolve, reject }); post({ type: 'export', requestId, nodeId: frame.id, settings: { ...settings } })
 })
-const downloadFrameVideo = async (frame: Item) => {
-  if (!frame.fileKey || !frame.videoHash) throw new Error('No embedded video was found in this frame.')
-  const response = await fetch(`${appUrl}/api/plugin/figma-video`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token.value}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fileKey: frame.fileKey, videoHash: frame.videoHash })
-  })
-  if (!response.ok) {
-    const payload = await response.json().catch(() => null) as { data?: { error?: { message?: string } }; error?: { message?: string } } | null
-    throw new Error(payload?.data?.error?.message || payload?.error?.message || 'Unable to download the embedded video from Figma.')
-  }
-  return response.blob()
-}
 const upload = async () => {
   busy.value = true; globalError.value = ''; let completed = 0
   for (const frame of eligible.value) {
     try {
       if (!frame.fileKey || !frame.figmaUrl) throw new Error('Unable to identify this Figma file. Reload the private plugin, then try again.')
-      frame.progress = 'exporting'; announcement.value = `${settings.format === 'MP4' ? 'Downloading' : 'Exporting'} ${frame.title}.`
-      const blob = settings.format === 'MP4'
-        ? await downloadFrameVideo(frame)
-        : await exportFrame(frame).then(bytes => settings.format === 'JPG'
-            ? reencodeJpg(bytes, settings.jpgQuality)
-            : new Blob([new Uint8Array(bytes)], { type: 'image/png' }))
-      frame.progress = 'uploading'; announcement.value = `Uploading ${frame.title}.`
       const metadata = { title: frame.title, description: shared.description, tags: shared.tags.split(',').map(v => v.trim()).filter(Boolean), projectId: shared.projectId || null, campaignId: shared.campaignId || null, language: shared.language || null, contentType: shared.contentType || null, status: shared.status, figmaFileKey: frame.fileKey, figmaNodeId: frame.id, figmaNodeName: frame.name, figmaUrl: frame.figmaUrl, width: frame.width, height: frame.height }
-      const extension = settings.format === 'JPG' ? 'jpg' : settings.format.toLowerCase()
-      const form = new FormData(); form.append('file', blob, `${frame.name}.${extension}`); form.append('metadata', JSON.stringify(metadata))
-      const endpoint = frame.assetId && frame.existingAction === 'version' ? `/api/assets/${frame.assetId}/version` : '/api/assets'
-      const response = await fetch(`${appUrl}${endpoint}`, { method: 'POST', headers: { Authorization: `Bearer ${token.value}` }, body: form })
-      if (!response.ok) { const body = await response.json().catch(() => null) as { data?: { error?: { message?: string } } } | null; throw new Error(body?.data?.error?.message || 'Upload failed.') }
+      let response: Response
+      if (settings.format === 'MP4') {
+        if (!frame.videoHash) throw new Error('No embedded video was found in this frame.')
+        frame.progress = 'uploading'; announcement.value = `Importing ${frame.title}.`
+        response = await fetch(`${appUrl}/api/plugin/figma-video`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token.value}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileKey: frame.fileKey, videoHash: frame.videoHash, metadata, assetId: frame.assetId && frame.existingAction === 'version' ? frame.assetId : null })
+        })
+      } else {
+        frame.progress = 'exporting'; announcement.value = `Exporting ${frame.title}.`
+        const blob = await exportFrame(frame).then(bytes => settings.format === 'JPG'
+          ? reencodeJpg(bytes, settings.jpgQuality)
+          : new Blob([new Uint8Array(bytes)], { type: 'image/png' }))
+        frame.progress = 'uploading'; announcement.value = `Uploading ${frame.title}.`
+        const extension = settings.format === 'JPG' ? 'jpg' : 'png'
+        const form = new FormData(); form.append('file', blob, `${frame.name}.${extension}`); form.append('metadata', JSON.stringify(metadata))
+        const endpoint = frame.assetId && frame.existingAction === 'version' ? `/api/assets/${frame.assetId}/version` : '/api/assets'
+        response = await fetch(`${appUrl}${endpoint}`, { method: 'POST', headers: { Authorization: `Bearer ${token.value}` }, body: form })
+      }
+      if (!response.ok) { const body = await response.json().catch(() => null) as { data?: { error?: { message?: string } }; error?: { message?: string } } | null; throw new Error(body?.data?.error?.message || body?.error?.message || 'Upload failed.') }
       const payload = await response.json() as { data: { asset: { id: string } } }
       frame.assetId = payload.data.asset.id
       frame.existingAction = 'version'
@@ -221,6 +237,7 @@ window.onmessage = (event: MessageEvent<{ pluginMessage?: ControllerMessage }>) 
   if (message.type === 'selection') {
     for (const url of previewUrls.values()) URL.revokeObjectURL(url); previewUrls.clear()
     frames.value = message.frames.map(frame => { if (frame.preview) previewUrls.set(frame.id, URL.createObjectURL(new Blob([new Uint8Array(frame.preview)], { type: 'image/png' }))); return { ...frame, title: frame.name, progress: 'idle', existingAction: frame.assetId ? 'version' : 'separate' } })
+    if (authState.value === 'signed-in') void resolveExistingFrames()
   }
   if (message.type === 'export-result') { const request = pending.get(message.requestId); if (request && message.bytes) request.resolve(message.bytes); else if (request) request.reject(new Error(message.error || 'Unable to export this frame.')); pending.delete(message.requestId) }
   if (message.type === 'stored-state' && message.value && typeof message.value === 'object') {
