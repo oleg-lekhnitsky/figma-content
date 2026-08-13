@@ -61,6 +61,7 @@ const dropIndex = ref<number | null>(null)
 let resizeObserver: ResizeObserver | undefined
 let measureFrame = 0
 let revealFrame = 0
+let touchPointerId: number | undefined
 let activeViewTransition: { finished: Promise<void>; skipTransition?: () => void } | undefined
 const assetLink = (id: string): RouteLocationRaw => ({ path: '/library', query: { ...route.query, asset: id } })
 const openAsset = (event: MouseEvent, id: string) => {
@@ -120,13 +121,44 @@ const finishDrag = (restore = true) => {
   draggedOriginalIndex.value = null
   dropIndex.value = null
 }
-const dropAsset = (event: DragEvent) => {
+const commitReorder = () => {
   if (!draggedId.value || draggedOriginalIndex.value === null) return
-  event.preventDefault()
   const fromIndex = draggedOriginalIndex.value
   const toIndex = renderedAssets.value.findIndex(asset => asset.id === draggedId.value)
   finishDrag(false)
   if (toIndex >= 0 && fromIndex !== toIndex) emit('reorder', fromIndex, toIndex)
+}
+const dropAsset = (event: DragEvent) => {
+  event.preventDefault()
+  commitReorder()
+}
+const startTouchDrag = (event: PointerEvent, index: number) => {
+  if (!props.reorderable || event.pointerType === 'mouse') return
+  event.preventDefault()
+  touchPointerId = event.pointerId
+  draggedId.value = renderedAssets.value[index]?.id ?? null
+  if (!draggedId.value) return
+  draggedOriginalIndex.value = props.assets.findIndex(item => item.id === draggedId.value)
+  dropIndex.value = index
+  ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
+}
+const moveTouchDrag = (event: PointerEvent) => {
+  if (event.pointerId !== touchPointerId || !draggedId.value) return
+  event.preventDefault()
+  const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('.asset-card[data-asset-id]')
+  if (!target || !masonry.value?.contains(target)) return
+  const targetIndex = renderedAssets.value.findIndex(asset => asset.id === target.dataset.assetId)
+  if (targetIndex >= 0) dragOver(event as unknown as DragEvent, targetIndex)
+}
+const finishTouchDrag = (event: PointerEvent) => {
+  if (event.pointerId !== touchPointerId) return
+  touchPointerId = undefined
+  commitReorder()
+}
+const cancelTouchDrag = (event: PointerEvent) => {
+  if (event.pointerId !== touchPointerId) return
+  touchPointerId = undefined
+  finishDrag()
 }
 const measureCards = () => {
   cancelAnimationFrame(measureFrame)
@@ -207,7 +239,7 @@ onBeforeUnmount(() => {
 <template>
   <section ref="masonry" class="asset-masonry" :class="{ 'cards-hidden': hidden || !layoutReady, 'column-layout': layout === 'column', 'stable-columns': stableColumns, 'custom-view': effectiveViewSettings, 'hide-text': effectiveViewSettings && !effectiveViewSettings.showText }" :style="viewStyle" :aria-label="label">
     <TransitionGroup name="card-list" :css="animateChanges">
-    <article v-for="(asset, index) in renderedAssets" :key="asset.id" class="asset-card" :class="{ 'is-priority': index < 7, 'is-selected': isSelected(asset.id), 'is-dragging': draggedId === asset.id, 'is-drop-target': dropIndex === index && draggedId !== asset.id }" :style="{ '--card-stagger': cardStagger(index) }" :draggable="reorderable" @dragstart="startDrag($event, index)" @dragover="dragOver($event, index)" @drop="dropAsset" @dragend="finishDrag()">
+    <article v-for="(asset, index) in renderedAssets" :key="asset.id" class="asset-card" :class="{ 'is-priority': index < 7, 'is-selected': isSelected(asset.id), 'is-dragging': draggedId === asset.id, 'is-drop-target': dropIndex === index && draggedId !== asset.id }" :style="{ '--card-stagger': cardStagger(index) }" :data-asset-id="asset.id" :draggable="reorderable" @dragstart="startDrag($event, index)" @dragover="dragOver($event, index)" @drop="dropAsset" @dragend="finishDrag()">
       <div class="preview" :class="{ 'is-loading': !loadedImages.has(asset.id) }" :style="{ aspectRatio: `${asset.width} / ${asset.height}` }">
         <NuxtLink v-if="interactive" class="preview-link" :to="assetLink(asset.id)" :aria-label="`View ${asset.title}`" @click="openAsset($event, asset.id)">
           <img :class="{ 'is-loaded': loadedImages.has(asset.id) }" :data-asset-id="asset.id" :src="asset.previewUrl" :srcset="asset.preview2xUrl ? `${asset.previewUrl} 1x, ${asset.preview2xUrl} 2x` : undefined" :width="asset.width" :height="asset.height" :alt="`Preview of ${asset.title}`" :loading="index < 7 ? 'eager' : 'lazy'" :fetchpriority="index < 7 ? 'high' : 'auto'" decoding="async" @load="markImageLoaded(asset.id)">
@@ -216,6 +248,12 @@ onBeforeUnmount(() => {
         <div v-if="interactive && (asset.figma_url || canApprove)" class="card-quick-actions"><a v-if="asset.figma_url" class="figma-button" :href="asset.figma_url" target="_blank" rel="noopener noreferrer">Open in Figma</a><button v-if="canApprove" class="card-approval-toggle" type="button" :aria-pressed="asset.status === 'approved'" :aria-label="asset.status === 'approved' ? `Remove approval from ${asset.title}` : `Approve ${asset.title}`" :title="asset.status === 'approved' ? 'Remove approval' : 'Approve'" @click.stop="emit('toggleApproval', asset)"><Heart :size="16" :weight="asset.status === 'approved' ? 'Filled' : 'Outline'" aria-hidden="true" /></button></div>
         <div class="preview-actions"><slot name="previewActions" :asset="asset" /></div>
         <button v-if="selectable" class="selection-control" type="button" :class="{ active: isSelected(asset.id) }" :aria-label="`${isSelected(asset.id) ? 'Deselect' : 'Select'} ${asset.title}`" :aria-pressed="isSelected(asset.id)" @click="emit('toggleSelection', asset)" />
+        <button
+          v-if="reorderable" class="touch-reorder-handle" type="button" :aria-label="`Drag to reorder ${asset.title}`"
+          @pointerdown.stop="startTouchDrag($event, index)" @pointermove.stop="moveTouchDrag" @pointerup.stop="finishTouchDrag"
+          @pointercancel.stop="cancelTouchDrag" @click.prevent>
+          <span aria-hidden="true">⠿</span>
+        </button>
       </div>
       <div class="card-body">
         <div>
@@ -233,7 +271,7 @@ onBeforeUnmount(() => {
 .asset-masonry{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));column-gap:var(--space);align-items:start}.asset-masonry.custom-view:not(.column-layout){grid-template-columns:repeat(min(var(--board-columns,7),7),minmax(0,1fr));column-gap:var(--board-gap,var(--space))}.asset-masonry.is-masonry{grid-auto-flow:dense;grid-auto-rows:1px;row-gap:0}
 .asset-masonry.stable-columns .asset-card:nth-child(7n + 1){grid-column:1}.asset-masonry.stable-columns .asset-card:nth-child(7n + 2){grid-column:2}.asset-masonry.stable-columns .asset-card:nth-child(7n + 3){grid-column:3}.asset-masonry.stable-columns .asset-card:nth-child(7n + 4){grid-column:4}.asset-masonry.stable-columns .asset-card:nth-child(7n + 5){grid-column:5}.asset-masonry.stable-columns .asset-card:nth-child(7n + 6){grid-column:6}.asset-masonry.stable-columns .asset-card:nth-child(7n){grid-column:7}
 .asset-masonry.column-layout{--column-viewport-margin:clamp(24px,6vh,64px);width:min(760px,100%);margin-inline:auto;grid-template-columns:minmax(0,1fr);row-gap:0}.asset-masonry.column-layout .asset-card{padding-bottom:var(--section-gap)}.asset-masonry.column-layout .preview{height:auto;aspect-ratio:auto!important;overflow:visible;clip-path:none;background:transparent}.asset-masonry.column-layout .preview img{width:auto;height:auto;max-width:100%;max-height:calc(100vh - var(--column-viewport-margin)*2);max-height:calc(100dvh - var(--column-viewport-margin)*2);margin-inline:auto;border-radius:var(--radius);object-fit:contain}.asset-masonry.column-layout .card-body{flex-direction:column;align-items:center;justify-content:center;text-align:center}
-.asset-card{min-width:0;padding-bottom:calc(var(--space)*2);color:inherit;background:transparent;opacity:1;transform:translateY(0);transition-property:opacity,transform;transition-duration:.18s,.22s;transition-delay:var(--card-stagger,0ms);transition-timing-function:ease-out,cubic-bezier(.2,0,0,1)}.asset-masonry.is-masonry .asset-card{grid-row-end:span var(--card-rows)}
+.asset-card{position:relative;min-width:0;padding-bottom:calc(var(--space)*2);color:inherit;background:transparent;opacity:1;transform:translateY(0);transition-property:opacity,transform;transition-duration:.18s,.22s;transition-delay:var(--card-stagger,0ms);transition-timing-function:ease-out,cubic-bezier(.2,0,0,1)}.asset-masonry.is-masonry .asset-card{grid-row-end:span var(--card-rows)}
 .asset-card[draggable=true]{cursor:grab}.asset-card[draggable=true]:active{cursor:grabbing}.asset-card.is-dragging{opacity:.35}.asset-card.is-drop-target .preview{box-shadow:0 0 0 3px var(--color-accent)}
 .preview{position:relative;overflow:hidden;border-radius:var(--board-radius,var(--radius));background:transparent;clip-path:inset(0 round var(--board-radius,var(--radius)))}.preview.is-loading{background:var(--color-surface)}
 .asset-masonry.custom-view .card-status{display:none}.asset-masonry.hide-text .card-body{display:none}.asset-masonry.custom-view .asset-card{padding-bottom:var(--board-gap,var(--space))}
@@ -246,6 +284,7 @@ onBeforeUnmount(() => {
 .figma-button{padding:0 13px}.card-approval-toggle{width:32px;min-width:32px;padding:0}
 .preview-actions{position:absolute;z-index:3;right:10px;bottom:10px;left:10px;display:flex;justify-content:center;opacity:0;transform:translateY(8px);pointer-events:none;transition:opacity 150ms,transform 150ms cubic-bezier(.2,0,0,1)}
 .selection-control.selection-control{position:absolute;z-index:3;top:10px;right:10px;width:24px;height:24px;min-height:24px;padding:0;border:1px solid rgb(0 0 0/.35);border-radius:50%;background:rgb(255 255 255/.9);box-shadow:0 1px 4px rgb(0 0 0/.12);opacity:0;transition:opacity 120ms,scale 150ms,background-color 150ms,border-color 150ms}.selection-control.active{border-color:var(--color-fg);background:var(--color-fg);opacity:1}.selection-control:hover{border-color:var(--color-fg)}.selection-control:active{scale:.9}
+.touch-reorder-handle{position:absolute;z-index:4;top:10px;right:10px;width:36px;height:36px;min-height:36px;display:none;place-items:center;padding:0;border-radius:50%;color:var(--material-tinted-fg);background:var(--material-tinted-bg);font-size:23px;line-height:1;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation))}.touch-reorder-handle span{translate:0 -1px;pointer-events:none}
 .figma-button:is(:hover,:focus-visible),.card-approval-toggle:is(:hover,:focus-visible){opacity:1;background:var(--material-tinted-hover-bg);-webkit-backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation))}.figma-button:active,.card-approval-toggle:active{scale:.96}.figma-button:focus-visible,.card-approval-toggle:focus-visible{outline:2px solid var(--color-accent);outline-offset:2px}
 @media(hover:hover) and (pointer:fine){.asset-card:hover .selection-control,.asset-card:focus-within .selection-control{opacity:1}.asset-card:hover .card-quick-actions,.asset-card:focus-within .card-quick-actions{visibility:visible;transform:translate(-50%,0) scale(1);pointer-events:auto}.asset-card:hover .preview-actions,.asset-card:focus-within .preview-actions{opacity:1;transform:translateY(0);pointer-events:auto}}
 .asset-masonry.cards-hidden .asset-card{opacity:0;transform:translateY(16px);transition-delay:var(--card-stagger,0ms)}
@@ -264,6 +303,6 @@ onBeforeUnmount(() => {
 @media(max-width:1280px){.asset-masonry.custom-view:not(.column-layout){grid-template-columns:repeat(clamp(1,calc(4 + var(--board-column-offset,0)),6),minmax(0,1fr))}}
 @media(max-width:900px){.asset-masonry.custom-view:not(.column-layout){grid-template-columns:repeat(clamp(1,calc(3 + var(--board-column-offset,0)),5),minmax(0,1fr))}}
 @media(max-width:520px){.asset-masonry.custom-view:not(.column-layout){grid-template-columns:repeat(clamp(1,calc(2 + var(--board-column-offset,0)),4),minmax(0,1fr))}}
-@media(hover:none),(pointer:coarse){.selection-control.selection-control{opacity:1}.card-quick-actions{display:none}.preview-actions{opacity:1;transform:none;pointer-events:auto}.preview-link,.preview-link:hover,.preview-link:active,.preview-link:focus{opacity:1}.preview img{filter:none}}
+@media(hover:none),(pointer:coarse){.selection-control.selection-control{opacity:1}.card-quick-actions{display:none}.preview-actions{opacity:1;transform:none;pointer-events:auto}.touch-reorder-handle{display:grid}.preview-link,.preview-link:hover,.preview-link:active,.preview-link:focus{opacity:1}.preview img{filter:none}}
 @media(prefers-reduced-motion:reduce){.asset-card,.card-list-enter-active,.card-list-leave-active{transition:none;animation:none}.asset-masonry.cards-hidden .asset-card{opacity:1;transform:none}.preview img{transition:none}.figma-button{transition-duration:.01ms;transform:translate(-50%,0)}.preview-actions{transition:none}.figma-button:active{scale:1}}
 </style>
