@@ -60,8 +60,8 @@ const handleOverlayAnimationEnd = (event: AnimationEvent) => {
   if (event.animationName === 'filter-overlay-fade-out') finishOverlayClose()
 }
 
-watch(() => props.overlay, async (overlay) => {
-  if (overlay) {
+watch(() => [props.visible, props.overlay] as const, async ([visible, overlay]) => {
+  if (visible && overlay) {
     lockPageScroll()
     renderedOverlay.value = true
     overlayClosing.value = false
@@ -133,11 +133,11 @@ watch(() => props.visible, visible => {
 
 onMounted(() => {
   window.addEventListener('keydown', handleKeydown)
-  if (props.overlay) lockPageScroll()
+  if (props.visible && props.overlay) lockPageScroll()
 })
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeydown)
-  if (props.overlay || renderedOverlay.value) unlockPageScroll()
+  unlockPageScroll()
 })
 </script>
 
