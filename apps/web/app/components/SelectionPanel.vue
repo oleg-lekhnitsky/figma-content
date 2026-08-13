@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Xmark } from 'reicon-vue'
 const props = withDefaults(defineProps<{
   visible?: boolean
   label: string
@@ -29,6 +30,25 @@ const sheetDragging = ref(false)
 let sheetPointerId: number | undefined
 let sheetStartY = 0
 let sheetStartTime = 0
+let previousBodyOverflow = ''
+let previousRootOverflow = ''
+let pageScrollLocked = false
+
+const lockPageScroll = () => {
+  if (!window.matchMedia('(max-width: 520px)').matches || pageScrollLocked) return
+  previousBodyOverflow = document.body.style.overflow
+  previousRootOverflow = document.documentElement.style.overflow
+  document.body.style.overflow = 'hidden'
+  document.documentElement.style.overflow = 'hidden'
+  pageScrollLocked = true
+}
+
+const unlockPageScroll = () => {
+  if (!pageScrollLocked) return
+  document.body.style.overflow = previousBodyOverflow
+  document.documentElement.style.overflow = previousRootOverflow
+  pageScrollLocked = false
+}
 
 const finishOverlayClose = () => {
   if (!overlayClosing.value) return
@@ -42,11 +62,13 @@ const handleOverlayAnimationEnd = (event: AnimationEvent) => {
 
 watch(() => props.overlay, async (overlay) => {
   if (overlay) {
+    lockPageScroll()
     renderedOverlay.value = true
     overlayClosing.value = false
     return
   }
   if (!renderedOverlay.value) return
+  unlockPageScroll()
   if (document.documentElement.dataset.filterTransition === 'closing') {
     renderedOverlay.value = false
     overlayClosing.value = false
@@ -109,8 +131,14 @@ watch(() => props.visible, visible => {
   }
 })
 
-onMounted(() => window.addEventListener('keydown', handleKeydown))
-onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
+onMounted(() => {
+  window.addEventListener('keydown', handleKeydown)
+  if (props.overlay) lockPageScroll()
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleKeydown)
+  if (props.overlay || renderedOverlay.value) unlockPageScroll()
+})
 </script>
 
 <template>
@@ -126,9 +154,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
         <button
           v-if="closeLabel" class="selection-panel-close" type="button" :disabled="closeDisabled"
           :aria-label="closeLabel" @click="$emit('close')">
-          <svg aria-hidden="true" viewBox="0 0 24 24">
-            <path d="m6 6 12 12M18 6 6 18" />
-          </svg>
+          <Xmark :size="20" :stroke-width="2" aria-hidden="true" />
         </button>
       </div>
     </Transition>

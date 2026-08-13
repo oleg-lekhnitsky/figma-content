@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import type { BoardLayout } from '@content-library/shared'
+import type { BoardLayout, BoardViewSettings } from '@content-library/shared'
 
 const route = useRoute()
 interface PublicAsset { id: string; title: string; description: string|null; previewUrl: string; preview2xUrl?: string|null; width: number; height: number; projects: { name: string } | null; asset_tags: Array<{ tags: { name: string } | null }> }
-interface PortfolioCase { id:string; title:string; layout:BoardLayout; assets:PublicAsset[] }
-interface PublicResponse { data: { collection: { title: string; purpose: 'showcase' | 'review' | 'portfolio'; portfolioKind:string|null; portfolioClient:string|null; introduction:string|null; contactHeading:string|null; contactLinks:Array<{label:string;url:string}>; mode: 'dynamic' | 'static'; layout: BoardLayout; expiresAt: string | null; updatedAt: string; organization: { name: string } | null }; assets: PublicAsset[]; cases:PortfolioCase[] } }
+interface PortfolioCase { id:string; title:string; layout:BoardLayout; viewSettings:BoardViewSettings; assets:PublicAsset[] }
+interface PublicResponse { data: { collection: { title: string; purpose: 'showcase' | 'review' | 'portfolio'; portfolioKind:string|null; portfolioClient:string|null; introduction:string|null; contactHeading:string|null; contactLinks:Array<{label:string;url:string}>; mode: 'dynamic' | 'static'; layout: BoardLayout; viewSettings:BoardViewSettings; expiresAt: string | null; updatedAt: string; organization: { name: string } | null }; assets: PublicAsset[]; cases:PortfolioCase[] } }
 const { data, status, error } = await useFetch<PublicResponse>(() => `/api/public/collections/${String(route.params.slug)}`)
 const collection = computed(() => data.value?.data.collection)
 const assets = computed(() => data.value?.data.assets ?? [])
@@ -25,9 +25,9 @@ useHead(() => ({ title: collection.value?.title ?? 'Shared collection' }))
     <div v-if="status === 'pending'" class="state" role="status">Loading collection…</div>
     <div v-else-if="error" class="state" role="alert"><strong>Collection unavailable</strong><span>The link may have expired or been disabled.</span></div>
     <div v-else-if="collection?.purpose === 'portfolio' && cases.length === 0" class="state"><strong>No cases published yet</strong><span>This portfolio edition is still being prepared.</span></div>
-    <section v-else-if="collection?.purpose === 'portfolio'" class="portfolio-cases" aria-label="Portfolio cases"><article v-for="portfolioCase in cases" :key="portfolioCase.id"><h2>{{ portfolioCase.title }}</h2><BoardLayoutRenderer :assets="portfolioCase.assets" :layout="portfolioCase.layout" :label="`${portfolioCase.title} case study`"><template #details="{asset}"><p v-if="asset.description">{{ asset.description }}</p></template></BoardLayoutRenderer></article></section>
+    <section v-else-if="collection?.purpose === 'portfolio'" class="portfolio-cases" aria-label="Portfolio cases"><article v-for="portfolioCase in cases" :key="portfolioCase.id"><h2>{{ portfolioCase.title }}</h2><BoardLayoutRenderer :assets="portfolioCase.assets" :layout="portfolioCase.layout" :view-settings="portfolioCase.viewSettings" :label="`${portfolioCase.title} case study`"><template #details="{asset}"><p v-if="asset.description">{{ asset.description }}</p></template></BoardLayoutRenderer></article></section>
     <div v-else-if="assets.length === 0" class="state"><strong>No approved items yet</strong><span>This collection will show items when they are available.</span></div>
-    <BoardLayoutRenderer v-else-if="collection" :assets="assets" :layout="collection.layout" label="Shared assets"><template #details="{asset}"><p v-if="asset.description">{{ asset.description }}</p></template></BoardLayoutRenderer>
+    <BoardLayoutRenderer v-else-if="collection" :assets="assets" :layout="collection.layout" :view-settings="collection.viewSettings" label="Shared assets"><template #details="{asset}"><p v-if="asset.description">{{ asset.description }}</p></template></BoardLayoutRenderer>
     <footer v-if="collection?.purpose === 'portfolio' && (collection.contactHeading || collection.contactLinks?.length)" class="portfolio-contact">
       <p>Contact</p>
       <h2>{{ collection.contactHeading || 'Get in touch' }}</h2>

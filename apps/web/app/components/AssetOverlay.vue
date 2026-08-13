@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { MoreH, Search, X } from 'reicon-vue'
+import { Heart, MoreH, Search, X } from 'reicon-vue'
 
 const props = withDefaults(defineProps<{ assetId: string; assetIds?: string[]; previewUrl?: string; previewUrls?: Record<string, string> }>(), { assetIds: () => [], previewUrl: '', previewUrls: () => ({}) })
 const emit = defineEmits<{ close: []; deleted: [id: string]; navigate: [id: string] }>()
@@ -53,7 +53,7 @@ const nextPreviewUrl = computed(() => nextAssetId.value ? props.previewUrls[next
 const boardId = ref('')
 const boardPickerOpen = ref(false)
 const addingBoardId = ref('')
-const editing = ref(false); const title = ref(''); const description = ref(''); const projectId = ref(''); const campaignId = ref(''); const tagsText = ref(''); const language = ref(''); const contentType = ref(''); const actionError = ref(''); const actionMessage = ref(''); const downloading = ref(false); const saving = ref(false)
+const editing = ref(false); const title = ref(''); const description = ref(''); const projectId = ref(''); const campaignId = ref(''); const tagsText = ref(''); const language = ref(''); const contentType = ref(''); const actionError = ref(''); const actionMessage = ref(''); const downloading = ref(false); const saving = ref(false); const approvalBusy = ref(false)
 const isClosing = ref(false)
 const isMobile = ref(false)
 const gestureX = ref(0)
@@ -123,6 +123,15 @@ const close = () => {
   closeTimer = setTimeout(finishClose, 180)
 }
 const patchAsset = async (body: Record<string, unknown>) => { actionError.value = ''; try { await $fetch(`/api/assets/${props.assetId}`, { method: 'PATCH', body }); await refresh(); editing.value = false; return true } catch { actionError.value = 'Unable to update this asset.'; return false } }
+const toggleApproval = async () => {
+  if (!asset.value || !canApprove.value || approvalBusy.value) return
+  approvalBusy.value = true
+  actionMessage.value = ''
+  const approving = asset.value.status !== 'approved'
+  const saved = await patchAsset({ status: approving ? 'approved' : 'draft' })
+  if (saved) actionMessage.value = approving ? 'Asset approved.' : 'Approval removed.'
+  approvalBusy.value = false
+}
 const startEditing = () => { resetEditor(); actionError.value = ''; actionMessage.value = ''; editing.value = true }
 const cancelEditing = () => { resetEditor(); actionError.value = ''; editing.value = false }
 const saveDetails = async () => {
@@ -349,7 +358,12 @@ watch(() => props.assetId, id => {
               class="button board-picker-trigger" type="button" @click="openBoardPicker">Add</button><a
               class="button-secondary action-button" :href="asset.figma_url" target="_blank"
               rel="noopener noreferrer">Open in
-              Figma</a>
+              Figma</a><button v-if="canApprove" class="button-secondary approval-toggle" type="button"
+              :aria-pressed="asset.status === 'approved'"
+              :aria-label="asset.status === 'approved' ? 'Remove approval' : 'Approve asset'"
+              :title="asset.status === 'approved' ? 'Remove approval' : 'Approve asset'" :disabled="approvalBusy"
+              @click="toggleApproval"><Heart :size="20" :weight="asset.status === 'approved' ? 'Filled' : 'Outline'"
+                aria-hidden="true" /></button>
             <details class="asset-more">
               <summary class="button-secondary" aria-label="More asset actions">
                 <MoreH :size="20" aria-hidden="true" />
@@ -357,8 +371,6 @@ watch(() => props.assetId, id => {
               <div class="asset-more-menu"><button class="button-secondary" type="button" :disabled="downloading"
                   @click="download">{{ downloading ? 'Preparing…' : 'Download' }}</button><button v-if="canEdit"
                   class="button-secondary" type="button" @click="startEditing">Edit details</button><button
-                  v-if="canApprove && asset.status !== 'approved'" class="button-secondary" type="button"
-                  @click="patchAsset({ status: 'approved' })">Approve</button><button
                   v-if="canEdit && asset.status !== 'archived'" class="button-secondary" type="button"
                   @click="patchAsset({ status: 'archived' })">Archive</button><button v-if="role === 'admin'"
                   class="button-secondary danger-button" type="button" @click="remove">Delete asset</button></div>
@@ -502,7 +514,7 @@ watch(() => props.assetId, id => {
   gap: var(--space);
   min-height: calc(44px + var(--space)*2);
   padding: var(--space);
-  background: rgb(255 255 255/.94);
+  background: var(--color-bg);
   backdrop-filter: blur(12px)
 }
 
@@ -729,6 +741,7 @@ h1 {
 
 .primary-actions>.button,
 .primary-actions>.action-button.action-button,
+.primary-actions>.approval-toggle,
 .primary-actions>.asset-more,
 .primary-actions>.asset-more>summary {
   box-sizing: border-box;
@@ -739,6 +752,12 @@ h1 {
 .primary-actions>.action-button.action-button {
   margin-left: 0;
   padding-inline: 1.25rem
+}
+
+.approval-toggle {
+  width: var(--control-height);
+  min-width: var(--control-height);
+  padding: 0;
 }
 
 .button {

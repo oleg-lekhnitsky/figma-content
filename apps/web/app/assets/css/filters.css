@@ -19,17 +19,17 @@
   --filter-focus-width: .125rem;
   --filter-chevron-size: .4375rem;
   --filter-overlay-blur: 5rem;
-  --filter-control-blur: 1.5rem;
+  --filter-control-blur: var(--material-tinted-blur);
   --filter-overlay-enter-duration: 420ms;
   --filter-overlay-enter-easing: cubic-bezier(.2, 0, 0, 1);
   --filter-overlay-exit-easing: cubic-bezier(.4, 0, .2, 1);
   --filter-backdrop-exit-duration: 650ms;
   --filter-backdrop-exit-easing: cubic-bezier(.22, .61, .36, 1);
   --filter-panel-enter-delay: 60ms;
-  --filter-overlay-panel-background: rgb(0 0 0 / .3);
-  --filter-overlay-panel-background-mobile: rgb(0 0 0 / .36);
-  --filter-overlay-panel-color: #fff;
-  --filter-overlay-control-hover-background: rgb(0 0 0 / .4);
+  --filter-overlay-panel-background: var(--material-tinted-bg);
+  --filter-overlay-panel-background-mobile: var(--material-tinted-bg-mobile);
+  --filter-overlay-panel-color: var(--material-tinted-fg);
+  --filter-overlay-control-hover-background: var(--material-tinted-hover-bg);
   --filter-overlay-primary-background: rgb(255 255 255 / .9);
   --filter-overlay-primary-color: #595959;
   --filter-overlay-width: 30rem;
@@ -60,7 +60,9 @@ html { scrollbar-gutter: stable; }
 
 @supports (view-transition-name: none) {
   .selection-panel--filter-overlay .asset-filter-controls,
-  .selection-panel:not(.selection-panel--filter-overlay) > :is(.filter-panel-toggle, .mobile-control-blur:has(> .filter-panel-toggle)) { view-transition-name: filters-panel; }
+  .selection-panel:not(.selection-panel--filter-overlay) > .is-morph-source,
+  .selection-panel:not(.selection-panel--filter-overlay) > .mobile-control-blur.is-morph-source { view-transition-name: filters-panel; }
+
 
   html[data-filter-transition]::view-transition { background: #fff; }
 
@@ -97,7 +99,6 @@ html { scrollbar-gutter: stable; }
 
   html[data-filter-transition='closing']::view-transition-group(filters-panel) {
     animation-timing-function: var(--filter-overlay-exit-easing);
-    box-shadow: 0 12px 36px rgb(0 0 0 / .2);
   }
 
   ::view-transition-group(filters-panel) {
@@ -267,25 +268,47 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
   flex: 0 0 auto;
   display: flex;
   width: max-content;
+  max-width: 20rem;
   height: var(--filter-control-height-mobile);
   box-sizing: border-box;
   overflow: hidden;
   border-radius: var(--filter-pill-radius);
   background: rgb(0 0 0 / .22);
-  box-shadow: 0 12px 36px rgb(0 0 0 / .2);
-  backdrop-filter: blur(var(--filter-control-blur)) saturate(115%);
-  -webkit-backdrop-filter: blur(var(--filter-control-blur)) saturate(115%);
+  box-shadow: none;
+  backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
+  -webkit-backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
 }
+
+@media (hover: hover) and (pointer: fine) {
+  .selection-panel.selection-panel--bare:not(.selection-panel--filter-overlay) > .mobile-control-blur:has(> :is(.filter-panel-toggle:not(.is-expanded), .mobile-filter-search, .filter-clear-compact)):hover {
+    background: var(--filter-overlay-control-hover-background);
+  }
+}
+
+.selection-panel.selection-panel--bare:not(.selection-panel--filter-overlay) > .mobile-control-blur:has(.mobile-filter-search),
+.selection-panel.selection-panel--bare:not(.selection-panel--filter-overlay) > .mobile-control-blur:has(.filter-clear-compact) {
+  width: var(--filter-control-height-mobile);
+  min-width: var(--filter-control-height-mobile);
+  flex-basis: var(--filter-control-height-mobile);
+}
+
 
 .selection-panel.selection-panel--bare:not(.selection-panel--filter-overlay) > .mobile-control-blur > button {
   box-sizing: border-box;
+  width: 100%;
   height: 100%;
   min-height: 100%;
+  border-radius: inherit;
   color: var(--filter-overlay-panel-color);
   background: transparent !important;
   box-shadow: none !important;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+}
+
+.selection-panel.selection-panel--bare:not(.selection-panel--filter-overlay) > .mobile-control-blur > :is(.filter-panel-toggle, .mobile-filter-search, .filter-clear-compact):is(:hover, :active, :focus, :focus-visible) {
+  opacity: 1 !important;
+  background: transparent !important;
 }
 
 @media (max-width: 520px) {
@@ -312,17 +335,15 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
 }
 
 .selection-panel:not(.selection-panel--filter-overlay) > .filter-panel-toggle:not(.is-expanded),
-.selection-panel:not(.selection-panel--filter-overlay) > .mobile-control-blur > .filter-panel-toggle:not(.is-expanded),
 .selection-panel:not(.selection-panel--filter-overlay) > .filter-clear-compact {
   color: var(--filter-overlay-panel-color);
   background: var(--filter-overlay-panel-background);
   box-shadow: none;
-  backdrop-filter: blur(var(--filter-control-blur)) saturate(115%);
-  -webkit-backdrop-filter: blur(var(--filter-control-blur)) saturate(115%);
+  backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
+  -webkit-backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
 }
 
 .selection-panel:not(.selection-panel--filter-overlay) > .filter-panel-toggle:not(.is-expanded):is(:hover, :focus-visible),
-.selection-panel:not(.selection-panel--filter-overlay) > .mobile-control-blur > .filter-panel-toggle:not(.is-expanded):is(:hover, :focus-visible),
 .selection-panel:not(.selection-panel--filter-overlay) > .filter-clear-compact:is(:hover, :focus-visible) {
   opacity: 1;
   background: var(--filter-overlay-control-hover-background);
@@ -357,14 +378,16 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
   background: var(--filter-clear-divider-color);
 }
 
-.selection-panel:not(.selection-panel--filter-overlay) > .filter-clear-compact svg {
+.selection-panel:not(.selection-panel--filter-overlay) > .filter-clear-compact svg,
+.selection-panel.selection-panel--bare:not(.selection-panel--filter-overlay) > .mobile-control-blur > .filter-clear-compact svg {
   display: block;
-  width: 1rem;
-  height: 1rem;
+  width: 1.1875rem;
+  height: 1.1875rem;
   fill: none;
   stroke: currentColor;
+  stroke-width: 2.1;
   stroke-linecap: round;
-  transform: translateX(var(--filter-clear-icon-offset));
+  transform: none;
 }
 
 .selection-panel.selection-panel--filter-overlay {
@@ -485,12 +508,23 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
   font-size: var(--filter-option-font-size);
   font-weight: 500;
   line-height: 1;
+  opacity: 1;
+}
+
+.selection-panel--filter-overlay .filter-option-list > button:is(:hover, :active, :focus) {
+  opacity: 1;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .selection-panel--filter-overlay .filter-option-list > button:is(:hover, :active, :focus) {
+    scale: 1;
+  }
 }
 
 .selection-panel--filter-overlay .filter-option-list > button[aria-pressed='true'] {
-  border-color: #fff;
+  border-color: var(--filter-overlay-primary-background);
   color: #595959;
-  background: #fff;
+  background: var(--filter-overlay-primary-background);
 }
 
 .selection-panel--filter-overlay .filter-visible-search { height: var(--filter-field-height); }
@@ -651,8 +685,6 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
 }
 
 @media (max-width: 520px) {
-  body:has(.selection-panel--filter-overlay) { overflow: visible; }
-
   .selection-panel.selection-panel--filter-overlay {
     height: 100dvh;
     display: flex;
@@ -677,8 +709,8 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
     overscroll-behavior-y: contain;
     border-radius: calc(var(--radius-mobile) * 2) calc(var(--radius-mobile) * 2) 0 0;
     background: var(--filter-overlay-panel-background-mobile);
-    backdrop-filter: blur(var(--filter-control-blur)) saturate(115%);
-    -webkit-backdrop-filter: blur(var(--filter-control-blur)) saturate(115%);
+    backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
+    -webkit-backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
     -webkit-overflow-scrolling: touch;
     transform: translate3d(0, var(--sheet-drag-y, 0px), 0);
     transition: transform 180ms var(--filter-overlay-enter-easing);
@@ -721,6 +753,19 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
 
   .selection-panel--filter-overlay > .filter-panel-toggle.is-expanded {
     display: none;
+  }
+
+  .selection-panel--filter-overlay .filter-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .selection-panel--filter-overlay .filter-actions.is-visible {
+    max-height: calc(var(--filter-action-height) * 2 + var(--filter-action-gap));
+  }
+
+  .selection-panel--filter-overlay .filter-actions > button {
+    max-width: 100%;
   }
 
   .selection-panel--filter-overlay .asset-filter-controls > label > input,

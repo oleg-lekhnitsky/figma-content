@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { Plus, Search, X } from 'reicon-vue'
+import { Plus, Search, Xmark } from 'reicon-vue'
+import type { BoardViewSettings } from '@content-library/shared'
 
 definePageMeta({ middleware: 'auth' })
 const route = useRoute()
@@ -23,6 +24,10 @@ interface BoardSummary {
   itemCount: number
   assetIds: string[]
   previewAssets: AssetCard[]
+  role: string
+  mode: 'dynamic' | 'static'
+  filters: { search:string; projectId:string|null; tagId:string|null; projectIds:string[]; tagIds:string[]; uploadedBy:string|null; dateFrom:string|null; dateTo:string|null }
+  view_settings?: BoardViewSettings | null
 }
 interface BoardList { data: { collections: BoardSummary[] } }
 interface BoardContent { data: { assets: AssetCard[] } }
@@ -59,9 +64,13 @@ const customDateFrom = ref(initialFilters.dateFrom)
 const customDateTo = ref(initialFilters.dateTo)
 const sort = ref(initialFilters.sort)
 const filtersExpanded = ref(false)
+const viewExpanded = ref(false)
+const arrangeExpanded = ref(false)
 const compactFiltersVisible = ref(true)
 const filtersMorphing = ref(false)
+const morphSource = ref<'filters'|'view'|null>(null)
 const searchExpanded = ref(false)
+const searchClosing = ref(false)
 const page = ref(1)
 const replaceLibraryQuery = (changes: Record<string, string | undefined>) => {
   const nextQuery = { ...route.query }
@@ -104,17 +113,43 @@ const tags = computed(() => tagData.value?.data.tags ?? [])
 const boards = computed(() => boardData.value?.data.collections.filter(board => board.purpose !== 'case') ?? [])
 const selectedBoardId = computed(() => typeof route.query.board === 'string' ? route.query.board : '')
 const selectedBoard = computed(() => boards.value.find(board => board.id === selectedBoardId.value))
-const { data: selectedBoardData, status: selectedBoardStatus, error: selectedBoardError } = await useAsyncData('library-selected-board', async () => {
+const selectedDynamicBoard = computed(() => selectedBoard.value?.mode === 'dynamic' ? selectedBoard.value : null)
+const selectedStaticBoard = computed(() => selectedBoard.value?.mode === 'static' ? selectedBoard.value : null)
+const canArrangeSelectedBoard = computed(() => Boolean(selectedStaticBoard.value && ['owner', 'editor', 'admin'].includes(selectedStaticBoard.value.role)))
+const dynamicBoardFilters = reactive({ search: '', projectIds: [] as string[], tagIds: [] as string[], dateFrom: '', dateTo: '' })
+const hydrateDynamicBoardFilters = (board: BoardSummary | null | undefined) => {
+  const filters = board?.mode === 'dynamic' ? board.filters : null
+  dynamicBoardFilters.search = filters?.search ?? ''
+  dynamicBoardFilters.projectIds = [...(filters?.projectIds?.length ? filters.projectIds : filters?.projectId ? [filters.projectId] : [])]
+  dynamicBoardFilters.tagIds = [...(filters?.tagIds?.length ? filters.tagIds : filters?.tagId ? [filters.tagId] : [])]
+  dynamicBoardFilters.dateFrom = filters?.dateFrom?.slice(0, 10) ?? ''
+  dynamicBoardFilters.dateTo = filters?.dateTo?.slice(0, 10) ?? ''
+}
+const defaultBoardView: BoardViewSettings = { showText: true, radius: 'default', gap: 'default', columns: 'auto' }
+const libraryViewStorageKey = 'content-library:view-settings'
+const libraryView = ref<BoardViewSettings>({ ...defaultBoardView })
+const setLibraryView = (next: BoardViewSettings) => {
+  libraryView.value = { ...next }
+  if (import.meta.client) localStorage.setItem(libraryViewStorageKey, JSON.stringify(next))
+}
+const { data: selectedBoardData, status: selectedBoardStatus, error: selectedBoardError, refresh: refreshSelectedBoard } = await useAsyncData('library-selected-board', async () => {
   const boardId = selectedBoardId.value
   if (!boardId) return { boardId: '', assets: [] as AssetCard[] }
   const board = boardData.value?.data.collections.find(collection => collection.id === boardId)
   const availableAssets = data.value?.data.assets ?? []
   const availableById = new Map(availableAssets.map(asset => [asset.id, asset]))
   const localAssets = (board?.assetIds ?? []).map(id => availableById.get(id)).filter((asset): asset is AssetCard => Boolean(asset))
-  if (board && localAssets.length === board.assetIds.length) return { boardId, assets: localAssets }
+  if (board?.mode !== 'dynamic' && localAssets.length === board?.assetIds.length) return { boardId, assets: localAssets }
   const response = await $fetch<BoardContent>(`/api/shares/${boardId}/content`)
   return { boardId, assets: response.data.assets }
 }, { watch: [selectedBoardId] })
+let hydratingDynamicBoard = false
+watch(selectedBoard, async board => {
+  hydratingDynamicBoard = true
+  hydrateDynamicBoardFilters(board)
+  await nextTick()
+  hydratingDynamicBoard = false
+}, { immediate: true })
 const locallyKnownBoardAssets = computed(() => {
   const board = selectedBoard.value
   if (!board) return []
@@ -133,7 +168,7 @@ const boardAssets = computed(() => {
 const displayedAssets = computed(() => {
   const source = selectedBoardId.value ? boardAssets.value : assets.value
   const term = search.value.trim().toLocaleLowerCase()
-  return selectedBoardId.value && term
+  return !selectedBoardId.value && term
     ? source.filter(asset => `${asset.title} ${asset.description ?? ''}`.toLocaleLowerCase().includes(term))
     : source
 })
@@ -142,6 +177,12 @@ let boardTransition = 0
 const selectBoard = async (boardId: string) => {
   if (boardId === selectedBoardId.value) return
   const transition = ++boardTransition
+  viewExpanded.value = false
+  arrangeExpanded.value = false
+  filtersExpanded.value = false
+  compactFiltersVisible.value = true
+  searchExpanded.value = false
+  searchClosing.value = false
   cardsHidden.value = true
   await new Promise(resolve => setTimeout(resolve, 300))
   if (transition !== boardTransition) return
@@ -151,6 +192,27 @@ const selectBoard = async (boardId: string) => {
   requestAnimationFrame(() => {
     if (transition === boardTransition) cardsHidden.value = false
   })
+}
+
+let arrangeSaveTimer: ReturnType<typeof setTimeout> | undefined
+const reorderSelectedBoardAssets = (fromIndex: number, toIndex: number) => {
+  const board = selectedStaticBoard.value
+  if (!board || !canArrangeSelectedBoard.value || fromIndex === toIndex) return
+  const nextAssets = [...boardAssets.value]
+  const [moved] = nextAssets.splice(fromIndex, 1)
+  if (!moved || toIndex < 0 || toIndex > nextAssets.length) return
+  nextAssets.splice(toIndex, 0, moved)
+  const nextIds = nextAssets.map(asset => asset.id)
+  board.assetIds = nextIds
+  if (selectedBoardData.value?.boardId === board.id) selectedBoardData.value.assets = nextAssets
+
+  clearTimeout(arrangeSaveTimer)
+  arrangeSaveTimer = setTimeout(() => {
+    void $fetch(`/api/shares/${board.id}/order`, { method: 'PATCH', body: { assetIds: nextIds } }).catch(async () => {
+      if (selectedStaticBoard.value?.id !== board.id) return
+      await Promise.all([refreshSelectedBoard(), refreshBoards()])
+    })
+  }, 180)
 }
 let boardSwipeStartX = 0
 let boardSwipeStartY = 0
@@ -163,7 +225,7 @@ const startBoardSwipe = (event: TouchEvent) => {
 }
 const finishBoardSwipe = (event: TouchEvent) => {
   const touch = event.changedTouches[0]
-  if (!touch || cardsHidden.value) return
+  if (!touch || cardsHidden.value || arrangeExpanded.value) return
   const deltaX = touch.clientX - boardSwipeStartX
   const deltaY = touch.clientY - boardSwipeStartY
   if (Math.abs(deltaX) < 56 || Math.abs(deltaX) <= Math.abs(deltaY) * 1.25) return
@@ -189,6 +251,7 @@ const currentBoardFilters = computed(() => ({
 }))
 const hasFilters = computed(() => Boolean(search.value || status.value || projectIds.value.length || tagIds.value.length || uploadedBy.value || dateRange.value !== 'all'))
 const activeFilterCount = computed(() => [status.value, projectIds.value.length, tagIds.value.length, uploadedBy.value, dateRange.value !== 'all'].filter(Boolean).length)
+const dynamicBoardFilterCount = computed(() => [dynamicBoardFilters.search, dynamicBoardFilters.projectIds.length, dynamicBoardFilters.tagIds.length, dynamicBoardFilters.dateFrom || dynamicBoardFilters.dateTo].filter(Boolean).length)
 const clearFilters = () => {
   search.value = ''
   status.value = ''
@@ -203,27 +266,78 @@ const supportsFilterMorph = () => import.meta.client
   && window.matchMedia('(min-width: 521px)').matches
   && 'startViewTransition' in document
   && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
-const morphFilters = async (update: () => void, direction: 'opening'|'closing', keepMorphMode = false) => {
+const morphPanel = async (panel: 'filters'|'view', update: () => void, direction: 'opening'|'closing', keepMorphMode = false) => {
   const viewTransitionDocument = document as Document & { startViewTransition: (callback: () => Promise<void>) => { finished: Promise<void> } }
   filtersMorphing.value = true
+  morphSource.value = panel
+  await nextTick()
   document.documentElement.dataset.filterTransition = direction
   const transition = viewTransitionDocument.startViewTransition(async () => { update(); await nextTick() })
   try { await transition.finished } finally {
     delete document.documentElement.dataset.filterTransition
+    morphSource.value = null
     if (!keepMorphMode) filtersMorphing.value = false
   }
 }
 const openFilters = () => {
   const update = () => { compactFiltersVisible.value = false; searchExpanded.value = false; filtersExpanded.value = true }
-  if (supportsFilterMorph()) void morphFilters(update, 'opening', true)
+  if (supportsFilterMorph()) void morphPanel('filters', update, 'opening', true)
   else update()
 }
 const closeFilters = () => {
-  if (supportsFilterMorph()) void morphFilters(() => { filtersExpanded.value = false; compactFiltersVisible.value = true }, 'closing')
+  if (supportsFilterMorph()) void morphPanel('filters', () => { filtersExpanded.value = false; compactFiltersVisible.value = true }, 'closing')
   else filtersExpanded.value = false
+}
+const openView = () => {
+  const update = () => { compactFiltersVisible.value = false; searchExpanded.value = false; viewExpanded.value = true }
+  if (supportsFilterMorph()) void morphPanel('view', update, 'opening', true)
+  else update()
+}
+const closeView = () => {
+  const update = () => { viewExpanded.value = false; compactFiltersVisible.value = true }
+  if (supportsFilterMorph()) void morphPanel('view', update, 'closing')
+  else update()
 }
 const finishFiltersClose = () => {
   if (!filtersExpanded.value) compactFiltersVisible.value = true
+}
+const toggleSearch = () => {
+  if (searchExpanded.value) {
+    searchClosing.value = true
+    searchExpanded.value = false
+    return
+  }
+  searchClosing.value = false
+  searchExpanded.value = true
+}
+const finishSearchClose = () => { searchClosing.value = false }
+const isoBoardDate = (value: string, end = false) => value ? new Date(`${value}T${end ? '23:59:59.999' : '00:00:00.000'}`).toISOString() : null
+let dynamicBoardSaveTimer: ReturnType<typeof setTimeout> | undefined
+watch(() => [dynamicBoardFilters.search, dynamicBoardFilters.projectIds.join(','), dynamicBoardFilters.tagIds.join(','), dynamicBoardFilters.dateFrom, dynamicBoardFilters.dateTo], () => {
+  if (!selectedDynamicBoard.value || hydratingDynamicBoard) return
+  clearTimeout(dynamicBoardSaveTimer)
+  dynamicBoardSaveTimer = setTimeout(async () => {
+    const board = selectedDynamicBoard.value
+    if (!board) return
+    const filters = {
+      search: dynamicBoardFilters.search, projectId: null, tagId: null,
+      projectIds: dynamicBoardFilters.projectIds, tagIds: dynamicBoardFilters.tagIds,
+      uploadedBy: board.filters.uploadedBy,
+      dateFrom: isoBoardDate(dynamicBoardFilters.dateFrom), dateTo: isoBoardDate(dynamicBoardFilters.dateTo, true)
+    }
+    board.filters = filters
+    try {
+      await $fetch(`/api/shares/${board.id}`, { method: 'PATCH', body: { action: 'settings', filters } })
+      await refreshSelectedBoard()
+    } catch { hydrateDynamicBoardFilters(board) }
+  }, 350)
+})
+const clearDynamicBoardFilters = () => {
+  dynamicBoardFilters.search = ''
+  dynamicBoardFilters.projectIds = []
+  dynamicBoardFilters.tagIds = []
+  dynamicBoardFilters.dateFrom = ''
+  dynamicBoardFilters.dateTo = ''
 }
 const assets = ref<AssetCard[]>([])
 let liveRefreshTimer: ReturnType<typeof setTimeout> | undefined
@@ -250,7 +364,14 @@ const accountName = computed(() => session.value?.data.user?.figmaHandle || sess
 const accountInitial = computed(() => accountName.value.trim().charAt(0).toUpperCase() || '?')
 const isAdmin = computed(() => session.value?.data?.user?.role === 'admin')
 const canManageProjects = computed(() => ['editor', 'admin'].includes(session.value?.data?.user?.role ?? ''))
+const canApprove = computed(() => ['editor', 'admin'].includes(session.value?.data?.user?.role ?? ''))
 const canShare = computed(() => ['contributor', 'editor', 'admin'].includes(session.value?.data?.user?.role ?? ''))
+const toggleAssetApproval = async (asset: AssetCard) => {
+  const previousStatus = asset.status
+  asset.status = asset.status === 'approved' ? 'draft' : 'approved'
+  try { await $fetch(`/api/assets/${asset.id}`, { method: 'PATCH', body: { status: asset.status } }) }
+  catch { asset.status = previousStatus }
+}
 const selectedAssetId = computed(() => typeof route.query.asset === 'string' ? route.query.asset : '')
 const selectedAssetPreviewUrl = computed(() => {
   const selected = displayedAssets.value.find(asset => asset.id === selectedAssetId.value)
@@ -301,6 +422,10 @@ watch(() => route.query, () => {
   sort.value = next.sort
 }, { deep: true })
 onMounted(() => {
+  try {
+    const savedView = JSON.parse(localStorage.getItem(libraryViewStorageKey) ?? 'null') as Partial<BoardViewSettings> | null
+    if (savedView) libraryView.value = { ...defaultBoardView, ...savedView }
+  } catch { localStorage.removeItem(libraryViewStorageKey) }
   lastScrollY = window.scrollY
   window.addEventListener('scroll', updateToolbar, { passive: true })
   assetEvents = new EventSource('/api/live/assets')
@@ -315,6 +440,8 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   clearTimeout(liveRefreshTimer)
+  clearTimeout(dynamicBoardSaveTimer)
+  clearTimeout(arrangeSaveTimer)
   clearInterval(assetPollTimer)
   assetEvents?.close()
   cancelAnimationFrame(scrollFrame)
@@ -329,7 +456,6 @@ onBeforeUnmount(() => {
     <main id="main-content">
       <header class="index-toolbar" :class="{ 'toolbar-hidden': !toolbarVisible }">
         <div class="header-identity"><NuxtLink class="account-link" to="/account" :aria-label="`Open account for ${accountName}`" :title="accountName"><img v-if="session?.data.user?.avatarUrl" :src="session.data.user.avatarUrl" alt=""><span v-else aria-hidden="true">{{ accountInitial }}</span></NuxtLink><WorkspaceSwitcher class="brand" /></div>
-        <form class="toolbar-search" role="search" @submit.prevent><label><span class="sr-only">Search assets</span><input v-model="search" type="search" name="search" placeholder="Search"></label></form>
         <p class="count sr-only" role="status" aria-live="polite">{{ resultMessage }}</p>
         <nav aria-label="Library controls"><NuxtLink class="button-secondary" to="/portfolio">Portfolio</NuxtLink><button v-if="canShare" class="button-secondary button-icon board-create-button" type="button" aria-label="Create board" title="Create board" @click="boardCreator?.openCreate()"><Plus :size="20" aria-hidden="true" /></button><ShareCollection ref="boardCreator" hide-trigger :current-filters="currentBoardFilters" @created="refreshBoards" /><NuxtLink v-if="isAdmin" class="button-secondary" to="/admin/users">Admin</NuxtLink><NuxtLink v-else-if="canManageProjects" class="button-secondary" to="/admin/projects">Projects</NuxtLink></nav>
       </header>
@@ -341,22 +467,41 @@ onBeforeUnmount(() => {
         </nav>
       </div>
 
+      <SelectionPanel :visible="viewExpanded" label="Library view" wide overlay raised :instant="filtersMorphing" @close="closeView">
+        <BoardViewControls :model-value="libraryView" @update:model-value="setLibraryView" />
+        <button class="filter-panel-toggle is-expanded" type="button" aria-label="Hide view settings" aria-expanded="true" @click="closeView"><Xmark :size="20" :stroke-width="2" aria-hidden="true" /></button>
+      </SelectionPanel>
+
       <template v-if="!selectedBoardId">
         <SelectionPanel :visible="filtersExpanded" label="Asset filters" wide overlay raised :instant="filtersMorphing" @close="closeFilters" @after-leave="finishFiltersClose">
           <AssetFilterControls v-model:status="status" v-model:project-ids="projectIds" v-model:tag-ids="tagIds" v-model:date-range="dateRange" v-model:date-from="customDateFrom" v-model:date-to="customDateTo" v-model:sort="sort" :projects="projects" :tags="tags" heading="All assets" show-status use-date-presets show-sort expanded :actions-visible="hasFilters">
             <template #actions><button class="clear-filters-button" type="button" @click="clearFilters">Clear filters</button><button v-if="canShare" class="filter-create-board" type="button" @click="boardCreator?.openCreateFromCurrentView()">Create board</button></template>
             <div v-if="submitters.length" class="submitter-stack" role="group" aria-label="Filter by submitter"><button v-for="submitter in visibleSubmitters" :key="submitter.id" class="submitter-avatar" type="button" :aria-label="`Filter by ${submitterName(submitter)}`" :aria-pressed="uploadedBy === submitter.id" :title="submitterName(submitter)" @click="toggleSubmitter(submitter.id)"><img v-if="submitter.avatar_url" :src="submitter.avatar_url" alt=""><span v-else aria-hidden="true">{{ submitterInitial(submitter) }}</span></button><span v-if="submitters.length > visibleSubmitters.length" class="submitter-more" :title="`${submitters.length-visibleSubmitters.length} more submitters`">+{{ submitters.length-visibleSubmitters.length }}</span></div>
           </AssetFilterControls>
-          <button class="filter-panel-toggle is-expanded" type="button" aria-label="Hide filters" aria-expanded="true" @click="closeFilters"><X :size="20" aria-hidden="true" /></button>
+          <button class="filter-panel-toggle is-expanded" type="button" aria-label="Hide filters" aria-expanded="true" @click="closeFilters"><Xmark :size="20" :stroke-width="2" aria-hidden="true" /></button>
         </SelectionPanel>
-        <SelectionPanel :visible="compactFiltersVisible && !filtersExpanded" label="Asset filters" :wide="searchExpanded" bare raised :instant="filtersMorphing">
-          <Transition name="filter-controls"><form v-if="searchExpanded" class="mobile-search-form" role="search" @submit.prevent><label class="search-field"><span class="sr-only">Search assets</span><input v-model="search" type="search" name="filter-search" placeholder="Search" autofocus></label></form></Transition>
-          <div class="mobile-control-blur"><button class="filter-panel-toggle" type="button" aria-label="Show filters" aria-expanded="false" @click="openFilters"><span>Filters</span><span v-if="activeFilterCount" class="filter-count">{{ activeFilterCount }}</span></button></div>
-          <div v-if="hasFilters && !searchExpanded" class="mobile-control-blur"><button class="filter-clear-compact" type="button" aria-label="Clear filters" title="Clear filters" @click="clearFilters"><X :size="16" aria-hidden="true" /></button></div>
-          <div class="mobile-control-blur"><button class="mobile-filter-search" :class="{ 'is-expanded': searchExpanded }" type="button" :aria-label="searchExpanded ? 'Hide search' : 'Search assets'" :aria-expanded="searchExpanded" @click="searchExpanded=!searchExpanded"><X v-if="searchExpanded" :size="20" aria-hidden="true" /><Search v-else :size="20" aria-hidden="true" /></button></div>
+        <SelectionPanel :visible="compactFiltersVisible && !filtersExpanded && !viewExpanded" label="Asset filters" :wide="searchExpanded || searchClosing" bare raised :instant="filtersMorphing">
+          <Transition name="compact-control"><div v-if="!searchExpanded && !searchClosing" class="mobile-control-blur" :class="{ 'is-morph-source': morphSource === 'filters' }"><button class="filter-panel-toggle" type="button" aria-label="Show filters" aria-expanded="false" @click="openFilters"><span>Filters</span><span v-if="activeFilterCount" class="filter-count">{{ activeFilterCount }}</span></button></div></Transition>
+          <Transition name="compact-control"><div v-if="!searchExpanded && !searchClosing" class="mobile-control-blur" :class="{ 'is-morph-source': morphSource === 'view' }"><button class="filter-panel-toggle" type="button" aria-label="Change library view" :aria-expanded="viewExpanded" @click="openView">View</button></div></Transition>
+          <Transition name="compact-control"><div v-if="hasFilters && !searchExpanded && !searchClosing" class="mobile-control-blur"><button class="mobile-filter-search is-expanded filter-clear-compact" type="button" aria-label="Clear filters" title="Clear filters" @click="clearFilters"><span class="search-control-icon search-control-icon--close" aria-hidden="true"><Xmark :size="20" :stroke-width="2" /></span></button></div></Transition>
+          <Transition name="filter-controls" @after-leave="finishSearchClose"><form v-if="searchExpanded" class="mobile-search-form" role="search" @submit.prevent><label class="search-field"><span class="sr-only">Search assets</span><input v-model="search" type="search" name="filter-search" placeholder="Search" autofocus></label></form></Transition>
+          <div class="mobile-control-blur"><button class="mobile-filter-search" :class="{ 'is-expanded': searchExpanded || searchClosing }" type="button" :aria-label="searchExpanded ? 'Hide search' : 'Search assets'" :aria-expanded="searchExpanded" @click="toggleSearch"><span class="search-control-icon search-control-icon--search" aria-hidden="true"><Search :size="20" /></span><span class="search-control-icon search-control-icon--close" aria-hidden="true"><Xmark :size="20" :stroke-width="2" /></span></button></div>
         </SelectionPanel>
       </template>
-      <SelectionPanel v-else label="Board settings" bare raised><button class="filter-panel-toggle" type="button" @click="router.push(`/boards/${selectedBoardId}`)">Board settings</button></SelectionPanel>
+      <template v-else>
+        <SelectionPanel v-if="selectedDynamicBoard" :visible="filtersExpanded" label="Board asset filters" wide overlay raised :instant="filtersMorphing" @close="closeFilters" @after-leave="finishFiltersClose">
+          <AssetFilterControls v-model:search="dynamicBoardFilters.search" v-model:project-ids="dynamicBoardFilters.projectIds" v-model:tag-ids="dynamicBoardFilters.tagIds" v-model:date-from="dynamicBoardFilters.dateFrom" v-model:date-to="dynamicBoardFilters.dateTo" :projects="projects" :tags="tags" :heading="selectedDynamicBoard.title" show-search expanded :actions-visible="Boolean(dynamicBoardFilterCount)">
+            <template #actions><button class="clear-filters-button" type="button" @click="clearDynamicBoardFilters">Clear filters</button></template>
+          </AssetFilterControls>
+          <button class="filter-panel-toggle is-expanded" type="button" aria-label="Hide filters" aria-expanded="true" @click="closeFilters"><Xmark :size="20" :stroke-width="2" aria-hidden="true" /></button>
+        </SelectionPanel>
+        <SelectionPanel :visible="compactFiltersVisible && !filtersExpanded && !viewExpanded" label="Board controls" bare raised :instant="filtersMorphing">
+          <div v-if="selectedDynamicBoard" class="mobile-control-blur" :class="{ 'is-morph-source': morphSource === 'filters' }"><button class="filter-panel-toggle" type="button" aria-label="Show board filters" aria-expanded="false" @click="openFilters"><span>Filters</span><span v-if="dynamicBoardFilterCount" class="filter-count">{{ dynamicBoardFilterCount }}</span></button></div>
+          <button class="filter-panel-toggle" :class="{ 'is-morph-source': morphSource === 'view' }" type="button" aria-label="Change library view" aria-expanded="false" @click="openView">View</button>
+          <button v-if="canArrangeSelectedBoard" class="filter-panel-toggle" type="button" :aria-pressed="arrangeExpanded" @click="arrangeExpanded = !arrangeExpanded">{{ arrangeExpanded ? 'Done' : 'Arrange' }}</button>
+          <button class="filter-panel-toggle" type="button" @click="router.push(`/boards/${selectedBoardId}`)">Board settings</button>
+        </SelectionPanel>
+      </template>
 
       <div class="board-swipe-region" @touchstart.passive="startBoardSwipe" @touchend.passive="finishBoardSwipe">
         <span v-if="selectedBoardId && selectedBoardStatus === 'pending' && displayedAssets.length" class="sr-only" role="status">Loading the rest of {{ selectedBoard?.title ?? 'this board' }}</span>
@@ -365,7 +510,7 @@ onBeforeUnmount(() => {
         <AssetMasonrySkeleton v-else-if="!selectedBoardId && loadStatus === 'pending' && assets.length === 0" />
         <div v-else-if="!selectedBoardId && error" class="state error" role="alert"><strong>Unable to load assets.</strong><span>Check your connection and try again.</span><button type="button" @click="refresh()">Try again</button></div>
         <div v-else-if="displayedAssets.length === 0" class="state"><strong>{{ selectedBoardId ? 'No matching assets on this board' : hasFilters ? 'No matching assets' : 'No assets yet' }}</strong><span>{{ selectedBoardId ? 'Try another board or change your search.' : hasFilters ? 'Change your search or clear the filters.' : 'Upload frames from the Figma plugin to build this library.' }}</span><button v-if="!selectedBoardId && hasFilters" type="button" @click="clearFilters">Clear filters</button></div>
-        <AssetMasonry v-else :assets="displayedAssets" :hidden="cardsHidden" :stable-columns="Boolean(selectedBoardId)" :animate-changes="!cardsHidden" interactive />
+        <AssetMasonry v-else :key="selectedBoardId || 'all'" :assets="displayedAssets" :hidden="cardsHidden" :stable-columns="false" :animate-changes="!cardsHidden" :can-approve="canApprove && !arrangeExpanded" :view-settings="libraryView" :interactive="!arrangeExpanded" :reorderable="arrangeExpanded" @reorder="reorderSelectedBoardAssets" @toggle-approval="toggleAssetApproval" />
         <nav v-if="!selectedBoardId && totalPages > 1" class="pagination" aria-label="Pagination"><button :disabled="page === 1" @click="page--">Previous</button><span>Page {{ page }} of {{ totalPages }}</span><button :disabled="page === totalPages" @click="page++">Next</button></nav>
       </div>
     </main>
@@ -383,47 +528,45 @@ onBeforeUnmount(() => {
 @media(max-width:520px){.library-shell :deep(.asset-masonry .card-body p),.library-shell :deep(.asset-masonry .card-meta){display:none}}
 .index-toolbar.toolbar-hidden{pointer-events:none;opacity:0;transform:translateY(calc(-100% - var(--space)))}
 .index-toolbar{min-height:0}
-.brand,.index-toolbar nav,.toolbar-search{min-height:44px;align-items:center}.brand{display:flex}
+.brand,.index-toolbar nav{min-height:44px;align-items:center}.brand{display:flex}
 .index-toolbar nav{position:static;display:flex;justify-content:flex-end;gap:calc(var(--space)/2)}
 .index-toolbar nav>.button-secondary{margin-left:0}
 .header-identity{min-width:0;min-height:var(--control-height);display:flex;align-items:center;gap:calc(var(--space)/2)}
 .board-create-button{width:calc(var(--control-height) - var(--space)/2);height:calc(var(--control-height) - var(--space)/2);min-width:calc(var(--control-height) - var(--space)/2);min-height:calc(var(--control-height) - var(--space)/2);padding:0;display:grid;place-items:center;border-radius:50%;color:var(--color-fg);background:var(--color-surface)}.board-create-button svg{fill:none;stroke:currentColor;stroke-width:1.8}
 .account-link{width:calc(var(--control-height) - var(--space)/2);height:calc(var(--control-height) - var(--space)/2);flex:0 0 auto;display:grid;place-items:center;overflow:hidden;border-radius:50%;background:var(--color-surface)}.account-link img{display:block;width:100%;height:100%;object-fit:cover}.account-link:hover{opacity:1}
-.mobile-filter-search{display:none}
-.toolbar-search{grid-column:2/4;display:flex}.toolbar-search label{width:100%}.toolbar-search input{width:100%;height:44px;padding:0 8px}.toolbar-search input::-webkit-search-cancel-button{appearance:none}
+.mobile-filter-search.mobile-filter-search{width:44px;height:44px;min-height:44px;display:grid;place-items:center;padding:0;color:var(--filter-overlay-panel-color);background:transparent;box-shadow:none}
+.search-control-icon{grid-area:1/1;display:grid;place-items:center;opacity:1;scale:1;filter:blur(0);transition-property:opacity,scale,filter;transition-duration:180ms;transition-timing-function:cubic-bezier(.2,0,0,1);pointer-events:none}.search-control-icon--close,.mobile-filter-search.is-expanded .search-control-icon--search{opacity:0;scale:.25;filter:blur(4px)}.mobile-filter-search.is-expanded .search-control-icon--close{opacity:1;scale:1;filter:blur(0)}.mobile-filter-search svg{width:19px;fill:none;stroke:currentColor;stroke-width:2.1;stroke-linecap:round}
 .count{position:absolute}
-.mobile-search-form{width:max-content;min-height:36px;display:flex;align-items:center}.mobile-search-form label{width:max-content;height:36px}.mobile-search-form input{box-sizing:border-box;width:auto;max-width:11rem;height:36px;min-height:36px;padding:0 14px;border:0;border-radius:999px;background:var(--color-surface);font-size:13px}.mobile-search-form input::-webkit-search-cancel-button{appearance:none}
+.mobile-search-form{width:18rem;min-height:44px;display:flex;align-items:center}.mobile-search-form label{width:100%;height:44px}.mobile-search-form input{box-sizing:border-box;width:100%;max-width:none;height:44px;min-height:44px;padding:0 18px;border:0;border-radius:999px;color:var(--material-tinted-fg);background:var(--material-tinted-bg);font-size:16px;backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));-webkit-backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation))}.mobile-search-form input::placeholder{color:rgb(255 255 255/.58);opacity:1}.mobile-search-form input:focus-visible{outline:0;box-shadow:none}.mobile-search-form input::-webkit-search-cancel-button{appearance:none}
+.mobile-search-form.filter-controls-enter-active,.mobile-search-form.filter-controls-leave-active{overflow:hidden;transition-property:width,clip-path;transition-duration:240ms;transition-timing-function:cubic-bezier(.2,0,0,1)}.mobile-search-form.filter-controls-enter-from,.mobile-search-form.filter-controls-leave-to{width:0;clip-path:inset(0 100% 0 0 round 999px);transform:none}.mobile-search-form.filter-controls-leave-active label{min-width:18rem}
+.compact-control-leave-active{position:absolute;right:calc(var(--filter-control-height-mobile) + var(--filter-panel-control-gap));overflow:hidden;transform-origin:right center;transition-property:clip-path,transform;transition-duration:240ms;transition-timing-function:cubic-bezier(.2,0,0,1)}.compact-control-leave-active:has(.filter-clear-compact){right:calc(var(--filter-control-height-mobile)*2 + var(--filter-panel-control-gap)*2)}.compact-control-leave-to{clip-path:inset(0 0 0 100% round var(--filter-pill-radius));transform:translateX(4px) scaleX(.01)}.compact-control-enter-active{transition-property:clip-path,transform;transition-duration:240ms;transition-timing-function:cubic-bezier(.2,0,0,1)}.compact-control-enter-from{clip-path:inset(0 100% 0 0 round var(--filter-pill-radius));transform:translateX(4px) scaleX(.01)}
 
 .preview{position:relative}.preview-link{display:block;width:100%;height:100%}.preview-link:hover,.card-body a:hover{opacity:1}.card-body a{text-decoration:none}.figma-button{position:absolute;z-index:2;left:50%;bottom:12px;min-height:40px;display:inline-flex;align-items:center;justify-content:center;padding:0 18px;border-radius:999px;color:#fff;background:#000;text-decoration:none;white-space:nowrap;opacity:0;transform:translate(-50%,8px);pointer-events:none;transition-property:opacity,transform,scale;transition-duration:150ms;transition-timing-function:cubic-bezier(.2,0,0,1)}.asset-card:hover .figma-button,.asset-card:focus-within .figma-button{opacity:1;transform:translate(-50%,0);pointer-events:auto}.figma-button:hover{opacity:.8}.figma-button:active{scale:.96}.figma-button:focus-visible{outline:2px solid #06f90e;outline-offset:2px}
-.figma-button{bottom:10px;min-height:32px;padding:0 13px;color:#000;background:#fff;font-size:12px;box-shadow:0 1px 3px rgb(0 0 0/.12)}
-.filter-panel-toggle{display:flex;align-items:center;gap:8px;white-space:nowrap}.filter-panel-toggle:not(.is-expanded){min-height:44px;padding:0 20px;box-shadow:none}.filter-panel-toggle.filter-panel-toggle.is-expanded{width:36px;padding:0;justify-content:center;box-shadow:none}.filter-panel-toggle svg{width:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round}.filter-count{min-width:20px;height:20px;display:grid;place-items:center;padding:0 5px;border-radius:999px;color:var(--color-fg);background:var(--color-bg);font-size:11px}.filter-controls-enter-active,.filter-controls-leave-active{transition:opacity 140ms ease,transform 180ms cubic-bezier(.2,0,0,1)}.filter-controls-enter-from,.filter-controls-leave-to{opacity:0;transform:translateX(8px)}
+.figma-button{bottom:10px;min-height:32px;padding:0 13px;color:var(--material-tinted-fg);background:var(--material-tinted-bg);font-size:12px;box-shadow:none;-webkit-backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation))}
+.filter-panel-toggle{display:flex;align-items:center;gap:8px;white-space:nowrap}.filter-panel-toggle:not(.is-expanded){min-height:44px;padding:0 20px;box-shadow:none}.filter-panel-toggle.filter-panel-toggle.is-expanded{width:36px;padding:0;justify-content:center;box-shadow:none}.filter-panel-toggle svg{width:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round}.filter-count{min-width:20px;height:20px;display:grid;place-items:center;padding:0 5px;border-radius:999px;color:var(--color-fg);background:var(--color-bg);font-size:11px}.filter-controls-enter-active,.filter-controls-leave-active{transition-property:opacity,transform;transition-duration:180ms,220ms;transition-timing-function:cubic-bezier(.2,0,0,1)}.filter-controls-enter-from,.filter-controls-leave-to{opacity:0;transform:translateX(4px)}
 .submitter-stack{min-width:max-content;height:36px;display:flex;align-items:center;padding-left:2px}.submitter-avatar,.submitter-more{width:36px;height:36px;min-width:36px;min-height:36px;display:grid;place-items:center;padding:0;border:2px solid var(--color-bg);border-radius:50%;overflow:hidden;background:var(--color-surface);font-size:11px}.submitter-avatar{position:relative}.submitter-avatar+.submitter-avatar,.submitter-more{margin-left:-8px}.submitter-avatar img{width:100%;height:100%;object-fit:cover}.submitter-avatar[aria-pressed=true]{z-index:2;box-shadow:0 0 0 2px currentColor}.submitter-avatar:hover{z-index:3;opacity:1;scale:1.08}.submitter-more{width:auto;min-width:36px;padding:0 7px;border-radius:999px;overflow:visible}
 .filter-create-board{height:36px;min-height:36px;padding:0 var(--space);font-size:13px;white-space:nowrap}
 .clear-filters-button{width:max-content;height:36px;min-width:0;min-height:36px;display:flex;align-items:center;justify-content:center;padding-inline:var(--space);color:var(--color-fg);background:var(--color-surface);white-space:nowrap}
-@media(max-width:900px){.toolbar-search{grid-column:2}.index-toolbar nav{grid-column:3}}
+@media(max-width:900px){.index-toolbar nav{grid-column:3}}
 @media(max-width:520px){
   .library-shell{--header-height:calc(44px + max(var(--space),env(safe-area-inset-top)) + var(--space))}
   .index-toolbar{grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:calc(var(--space)/2);margin:calc(var(--space)*-1) calc(var(--space)*-1) 0;padding:max(var(--space),env(safe-area-inset-top)) var(--space) var(--space)}
   .brand{min-width:0;overflow:hidden}
   .index-toolbar nav{min-width:0;grid-column:2;grid-row:1;justify-content:flex-start;gap:calc(var(--space)/2);overflow-x:auto;overscroll-behavior-inline:contain;scrollbar-width:none}
   .index-toolbar nav::-webkit-scrollbar{display:none}
-  .toolbar-search{display:none}
-  .mobile-filter-search.mobile-filter-search{width:44px;height:44px;min-height:44px;display:grid;place-items:center;padding:0;color:var(--filter-overlay-panel-color);background:transparent;box-shadow:none}
+  .mobile-filter-search.mobile-filter-search{width:44px;height:44px;min-height:44px}
   .filter-panel-toggle:is(:hover,:active,:focus),.mobile-filter-search:is(:hover,:active,:focus){opacity:1}
-  .mobile-filter-search svg{width:19px;fill:none;stroke:currentColor;stroke-width:2.1;stroke-linecap:round}
   .filter-panel-toggle.filter-panel-toggle.is-expanded{width:44px;height:44px;min-height:44px}
-  .filter-panel-toggle svg{width:19px;stroke-width:2.1}
-  .mobile-search-form~.mobile-control-blur:has(.filter-panel-toggle),.asset-filter-controls~.mobile-control-blur:has(.mobile-filter-search){display:none}
+  .filter-panel-toggle svg{width:20px;height:20px}
+  .asset-filter-controls~.mobile-control-blur:has(.mobile-filter-search){display:none}
   .filter-create-board{height:44px;min-height:44px}
   .clear-filters-button{width:max-content;height:44px;min-width:0;min-height:44px}
   .mobile-search-form,.mobile-search-form label{width:100%;height:44px}
   .mobile-search-form label{flex:1 1 auto}
-  .mobile-search-form input{width:100%;max-width:none;height:44px;min-height:44px;color:var(--filter-overlay-panel-color);background:var(--filter-overlay-panel-background);font-size:16px;backdrop-filter:blur(var(--filter-control-blur)) saturate(115%);-webkit-backdrop-filter:blur(var(--filter-control-blur)) saturate(115%)}
-  .mobile-search-form input::placeholder{color:var(--color-muted);opacity:1}
-  .mobile-search-form input:focus-visible{outline:0;box-shadow:none}
+  .mobile-search-form input{width:100%;max-width:none}
 }
 .preview{background:transparent}.preview.is-loading{background:var(--color-surface)}.preview img{opacity:0;transition:opacity .22s ease-out}.preview img.is-loaded{opacity:1}
 .asset-card{opacity:1;transform:translateY(0);transition-property:opacity,transform;transition-duration:.18s,.22s;transition-delay:var(--card-stagger,0ms);transition-timing-function:ease-out,cubic-bezier(.2,0,0,1);animation:card-fade-in .42s cubic-bezier(.2,0,0,1) backwards;animation-delay:var(--card-stagger,0ms)}.masonry.cards-hidden .asset-card{opacity:0;transform:translateY(16px);transition-delay:0ms}@keyframes card-fade-in{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
 .result-swap-enter-active,.result-swap-leave-active{transition-property:opacity,transform;transition-duration:180ms;transition-timing-function:cubic-bezier(.2,0,0,1)}.result-swap-enter-from{opacity:0;transform:translateY(8px)}.result-swap-leave-to{opacity:0;transform:translateY(-4px)}
-@media(prefers-reduced-motion:reduce){.index-toolbar,.board-tabs-shell,.filter-controls-enter-active,.filter-controls-leave-active,.result-swap-enter-active,.result-swap-leave-active{transition-duration:.01ms}.asset-card{transition:none;animation:none}.masonry.cards-hidden .asset-card{opacity:1;transform:none}.preview img{transition:none}.figma-button{transition-duration:.01ms;transform:translate(-50%,0)}.figma-button:active{scale:1}}
+@media(prefers-reduced-motion:reduce){.index-toolbar,.board-tabs-shell,.filter-controls-enter-active,.filter-controls-leave-active,.result-swap-enter-active,.result-swap-leave-active,.search-control-icon{transition-duration:.01ms}.asset-card{transition:none;animation:none}.masonry.cards-hidden .asset-card{opacity:1;transform:none}.preview img{transition:none}.figma-button{transition-duration:.01ms;transform:translate(-50%,0)}.figma-button:active{scale:1}}
 </style>

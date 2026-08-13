@@ -48,6 +48,12 @@ export default defineEventHandler(async (event) => {
     if (layoutError) throw databaseError('update board layout', layoutError)
     return { data: { collection: data } }
   }
+  if (parsed.data.action === 'view-settings') {
+    const { data, error: viewError } = await db.from('public_collections').update({ view_settings: parsed.data.viewSettings })
+      .eq('id', id).eq('organization_id', session.user.organization_id).select('id,view_settings,updated_at').single()
+    if (viewError) throw databaseError('update board view settings', viewError)
+    return { data: { collection: data } }
+  }
   if (parsed.data.action === 'revoke') {
     const { error: revokeError } = await db.from('public_collections').update({ publication_enabled: false, revoked_at: new Date().toISOString() }).eq('id', id)
     if (revokeError) throw databaseError('disable public collection', revokeError)

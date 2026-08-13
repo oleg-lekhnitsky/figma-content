@@ -110,8 +110,8 @@ export const publicAssetsForCollection = async (
   }
   if (!ids.length) return []
   const selection = options.includeUnapproved
-    ? 'id,title,description,thumbnail_path,thumbnail_2x_path,image_path,width,height,status,uploaded_by,created_at,projects(name),asset_tags(tags(name)),allowed_users!assets_uploaded_by_fkey(email,figma_handle,avatar_url)'
-    : 'id,title,description,thumbnail_path,thumbnail_2x_path,image_path,width,height,created_at,projects(name),asset_tags(tags(name))'
+    ? 'id,title,description,thumbnail_path,thumbnail_2x_path,image_path,width,height,status,figma_url,uploaded_by,created_at,projects(name),asset_tags(tags(name)),allowed_users!assets_uploaded_by_fkey(email,figma_handle,avatar_url)'
+    : 'id,title,description,thumbnail_path,thumbnail_2x_path,image_path,width,height,status,figma_url,created_at,projects(name),asset_tags(tags(name))'
   let query = useSupabaseAdmin().from('assets')
     .select(selection)
     .eq('organization_id', collection.organization_id).in('id', ids)

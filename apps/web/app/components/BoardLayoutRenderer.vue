@@ -1,5 +1,5 @@
 <script setup lang="ts" generic="T extends AssetMasonryItem">
-import type { BoardLayout } from '@content-library/shared'
+import type { BoardLayout, BoardViewSettings } from '@content-library/shared'
 import type { AssetMasonryItem } from '../types/asset-masonry'
 import AssetGrid from './AssetGrid.vue'
 import AssetMasonry from './AssetMasonry.vue'
@@ -19,6 +19,7 @@ withDefaults(defineProps<{
   selectable?: boolean
   selectedIds?: string[]
   rowFlow?: boolean
+  viewSettings?: BoardViewSettings
 }>(), {
   label: 'Board assets',
   headingTag: 'h3',
@@ -38,7 +39,7 @@ defineEmits<{ toggleSelection: [asset: T] }>()
     <template #previewActions="{ asset }"><slot name="previewActions" :asset="asset" /></template>
   </AssetPresentation>
   <AssetGrid
-    v-else-if="layout === 'grid'" :assets="assets" :label="label" :heading-tag="headingTag" :selectable="selectable"
+    v-else-if="layout === 'grid'" :assets="assets" :label="label" :heading-tag="headingTag" :selectable="selectable" :view-settings="viewSettings"
     :selected-ids="selectedIds" @toggle-selection="$emit('toggleSelection', $event)">
     <template #details="{ asset }"><slot name="details" :asset="asset" /></template>
     <template #previewActions="{ asset }"><slot name="previewActions" :asset="asset" /></template>
@@ -46,7 +47,7 @@ defineEmits<{ toggleSelection: [asset: T] }>()
   </AssetGrid>
   <AssetMasonry
     v-else :assets="assets" :layout="layout" :label="label" :heading-tag="headingTag" :selectable="selectable"
-    :selected-ids="selectedIds" :row-flow="rowFlow" @toggle-selection="$emit('toggleSelection', $event)">
+    :selected-ids="selectedIds" :row-flow="rowFlow" :view-settings="viewSettings" @toggle-selection="$emit('toggleSelection', $event)">
     <template #details="{ asset }"><slot name="details" :asset="asset" /></template>
     <template #previewActions="{ asset }"><slot name="previewActions" :asset="asset" /></template>
     <template #actions="{ asset }"><slot name="actions" :asset="asset" /></template>

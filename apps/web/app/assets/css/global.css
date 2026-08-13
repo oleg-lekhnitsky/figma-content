@@ -8,7 +8,13 @@
   --color-line: rgb(0 0 0 / .18);
   --color-accent: #666;
   --color-danger: #a21b14;
-  --radius: 8px;
+  --material-tinted-bg: rgb(0 0 0 / .3);
+  --material-tinted-bg-mobile: rgb(0 0 0 / .36);
+  --material-tinted-hover-bg: var(--material-tinted-bg);
+  --material-tinted-fg: #fff;
+  --material-tinted-blur: 1.5rem;
+  --material-tinted-saturation: 115%;
+  --radius: 16px;
   --radius-mobile: calc(var(--radius) * 1.5);
   --control-height: 44px;
   --page-padding: var(--space);
@@ -58,7 +64,7 @@ input, select, textarea { border: 0; border-bottom: 1px solid var(--color-line);
 .eyebrow { margin: 0 0 var(--space); color: var(--color-muted); }
 .muted { color: var(--color-muted); }
 .admin-shell.admin-shell.admin-shell { --ink: var(--color-fg); --muted: var(--color-muted); --admin-columns: repeat(4, minmax(0, 1fr)); background: var(--color-bg); }
-.admin-shell.admin-shell .toolbar { background: rgb(255 255 255 / .94); }
+.admin-shell.admin-shell .toolbar { background: var(--color-bg); }
 .admin-shell.admin-shell .close { background: var(--color-surface); }
 .admin-shell { min-height: 100vh; }
 .admin-shell > .toolbar {

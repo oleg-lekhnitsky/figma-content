@@ -4,6 +4,12 @@ export const boardRoleSchema = z.enum(['owner', 'editor', 'contributor', 'viewer
 export const boardMemberRoleSchema = boardRoleSchema.exclude(['owner'])
 export const boardPurposeSchema = z.enum(['showcase', 'review', 'portfolio', 'case'])
 export const boardLayoutSchema = z.enum(['masonry', 'column', 'presentation', 'grid'])
+export const boardViewSettingsSchema = z.object({
+  showText: z.boolean().default(true),
+  radius: z.enum(['none', 'small', 'default', 'large']).default('default'),
+  gap: z.enum(['none', 'tight', 'default', 'wide']).default('default'),
+  columns: z.union([z.enum(['auto', 'even-fewer', 'fewer', 'more', 'even-more']), z.number().int().min(2).max(8)]).default('auto')
+})
 export const portfolioContactLinkSchema = z.object({
   label: z.string().trim().min(1).max(80),
   url: z.string().trim().max(500).refine(value => {
@@ -71,6 +77,7 @@ export const updatePublicCollectionSchema = z.discriminatedUnion('action', [
     path: ['portfolioClient']
   }),
   z.object({ action: z.literal('layout'), layout: boardLayoutSchema }),
+  z.object({ action: z.literal('view-settings'), viewSettings: boardViewSettingsSchema }),
   z.object({ action: z.literal('refresh') }),
   z.object({ action: z.literal('publish') }),
   z.object({ action: z.literal('revoke') })
@@ -94,3 +101,4 @@ export const reviewDecisionSchema = z.object({
 export type PublicCollectionFilters = z.infer<typeof publicCollectionFiltersSchema>
 export type BoardRole = z.infer<typeof boardRoleSchema>
 export type BoardLayout = z.infer<typeof boardLayoutSchema>
+export type BoardViewSettings = z.infer<typeof boardViewSettingsSchema>

@@ -2,12 +2,33 @@ import type { ControllerMessage, SelectedFrame, UiMessage } from './messages'
 
 figma.showUI(__html__, { width: 420, height: 680, themeColors: true })
 
-const exportable = new Set<SceneNode['type']>(['FRAME', 'COMPONENT', 'INSTANCE'])
+type ExportableNode = FrameNode | ComponentNode | InstanceNode
+
+const exportWithoutFrameMask = async (node: ExportableNode, settings: ExportSettings) => {
+  const clone = node.clone()
+  try {
+    // Export the selected frame as a flat canvas: its children may overflow and
+    // the frame itself must not round the uploaded image. The source node stays
+    // untouched, so the user never sees its design change during export.
+    clone.clipsContent = false
+    clone.cornerRadius = 0
+    clone.x = -100000 - clone.width
+    clone.y = -100000 - clone.height
+    return await clone.exportAsync(settings)
+  } finally {
+    clone.remove()
+  }
+}
+
 const selectedNodes = () => {
-  const nodes: SceneNode[] = []
+  const nodes: ExportableNode[] = []
   for (const node of figma.currentPage.selection) {
-    if (exportable.has(node.type)) nodes.push(node)
-    else if (node.type === 'SECTION') nodes.push(...node.children.filter(child => exportable.has(child.type)))
+    if (node.type === 'FRAME' || node.type === 'COMPONENT' || node.type === 'INSTANCE') nodes.push(node)
+    else if (node.type === 'SECTION') {
+      for (const child of node.children) {
+        if (child.type === 'FRAME' || child.type === 'COMPONENT' || child.type === 'INSTANCE') nodes.push(child)
+      }
+    }
   }
   return nodes
 }
@@ -16,9 +37,9 @@ const pageName = (node: BaseNode) => {
   while (current && current.type !== 'PAGE') current = current.parent
   return current?.type === 'PAGE' ? current.name : figma.currentPage.name
 }
-const describe = async (node: SceneNode): Promise<SelectedFrame> => {
+const describe = async (node: ExportableNode): Promise<SelectedFrame> => {
   const previewScale = Math.min(.5, 360 / Math.max(node.width, node.height))
-  const preview = await node.exportAsync({ format: 'PNG', constraint: { type: 'SCALE', value: Math.max(.05, previewScale) } })
+  const preview = await exportWithoutFrameMask(node, { format: 'PNG', constraint: { type: 'SCALE', value: Math.max(.05, previewScale) } })
   const fileKey = figma.fileKey ?? null
   return { id: node.id, name: node.name, width: Math.round(node.width), height: Math.round(node.height), pageName: pageName(node), fileKey, figmaUrl: fileKey ? `https://www.figma.com/design/${fileKey}/_?node-id=${encodeURIComponent(node.id)}` : null, assetId: node.getPluginData('contentLibraryAssetId') || null, preview }
 }
@@ -52,9 +73,9 @@ figma.ui.onmessage = async (message: UiMessage) => {
   }
   if (message.type === 'export') {
     const node = await figma.getNodeByIdAsync(message.nodeId)
-    if (!node || !('exportAsync' in node)) return figma.ui.postMessage({ type: 'export-result', requestId: message.requestId, nodeId: message.nodeId, error: 'This layer is no longer available.' } satisfies ControllerMessage)
+    if (!node || (node.type !== 'FRAME' && node.type !== 'COMPONENT' && node.type !== 'INSTANCE')) return figma.ui.postMessage({ type: 'export-result', requestId: message.requestId, nodeId: message.nodeId, error: 'This layer is no longer available.' } satisfies ControllerMessage)
     try {
-      const bytes = await node.exportAsync({ format: 'PNG', constraint: { type: 'SCALE', value: message.settings.scale } })
+      const bytes = await exportWithoutFrameMask(node, { format: 'PNG', constraint: { type: 'SCALE', value: message.settings.scale } })
       figma.ui.postMessage({ type: 'export-result', requestId: message.requestId, nodeId: message.nodeId, bytes } satisfies ControllerMessage)
     } catch {
       figma.ui.postMessage({ type: 'export-result', requestId: message.requestId, nodeId: message.nodeId, error: 'Unable to export this frame.' } satisfies ControllerMessage)
