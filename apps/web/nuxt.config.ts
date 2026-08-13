@@ -39,7 +39,7 @@ export default defineNuxtConfig({
     sessionSecret: process.env.SESSION_SECRET ?? '',
     pluginCallbackUrl: process.env.PLUGIN_CALLBACK_URL ?? '',
     sessionTtlSeconds: Number(process.env.SESSION_TTL_SECONDS ?? 28_800),
-    maxUploadBytes: Number(process.env.MAX_UPLOAD_BYTES ?? 104_857_600),
+    maxUploadBytes: Math.max(Number(process.env.MAX_UPLOAD_BYTES) || 0, 104_857_600),
     r2AccountId: process.env.R2_ACCOUNT_ID ?? '',
     r2AccessKeyId: process.env.R2_ACCESS_KEY_ID ?? '',
     r2SecretAccessKey: process.env.R2_SECRET_ACCESS_KEY ?? '',

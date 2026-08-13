@@ -553,13 +553,22 @@ const clearDynamicBoardFilters = () => {
   dynamicBoardFilters.dateTo = ''
 }
 const assets = ref<AssetCard[]>([])
+const loadMoreSentinel = ref<HTMLElement | null>(null)
+let loadMoreObserver: IntersectionObserver | undefined
 let liveRefreshTimer: ReturnType<typeof setTimeout> | undefined
 let assetPollTimer: ReturnType<typeof setInterval> | undefined
 let assetEvents: EventSource | undefined
-watch(() => data.value?.data.assets, (next) => {
-  const incoming = next ?? []
-  if (incoming.map(asset => `${asset.id}:${asset.updated_at}`).join('|') === assets.value.map(asset => `${asset.id}:${asset.updated_at}`).join('|')) return
-  assets.value = incoming
+watch(() => data.value?.data, (next) => {
+  if (!next) return
+  const incoming = next.assets ?? []
+  if (next.page <= 1) {
+    if (incoming.map(asset => `${asset.id}:${asset.updated_at}`).join('|') === assets.value.map(asset => `${asset.id}:${asset.updated_at}`).join('|')) return
+    assets.value = incoming
+    return
+  }
+  const merged = new Map(assets.value.map(asset => [asset.id, asset]))
+  for (const asset of incoming) merged.set(asset.id, asset)
+  assets.value = [...merged.values()]
 }, { immediate: true })
 const submitters = computed(() => data.value?.data.submitters ?? [])
 const visibleSubmitters = computed(() => submitters.value.slice(0, 5))
@@ -567,7 +576,14 @@ const submitterName = (submitter: Submitter) => submitter.figma_handle || 'Unkno
 const submitterInitial = (submitter: Submitter) => submitterName(submitter).trim().charAt(0).toUpperCase() || '?'
 const toggleSubmitter = (submitterId: string) => { uploadedBy.value = uploadedBy.value === submitterId ? '' : submitterId }
 const total = computed(() => data.value?.data.total ?? 0)
-const totalPages = computed(() => Math.max(1, Math.ceil(total.value / 24)))
+const canLoadMore = computed(() => !selectedBoardId.value && loadStatus.value !== 'pending' && assets.value.length < total.value)
+const loadNextPage = () => {
+  if (canLoadMore.value) page.value += 1
+}
+watch(loadMoreSentinel, (sentinel, previous) => {
+  if (previous) loadMoreObserver?.unobserve(previous)
+  if (sentinel) loadMoreObserver?.observe(sentinel)
+})
 const resultMessage = computed(() => {
   if (selectedBoardId.value) return selectedBoardStatus.value === 'success' ? `${displayedAssets.value.length} ${displayedAssets.value.length === 1 ? 'asset' : 'assets'} in ${selectedBoard.value?.title ?? 'board'}` : ''
   return loadStatus.value === 'success' ? `${total.value} ${total.value === 1 ? 'asset' : 'assets'}` : ''
@@ -599,7 +615,6 @@ const handleAssetDeleted = (id: string) => {
     data.value.data.assets = data.value.data.assets.filter(asset => asset.id !== id)
     data.value.data.total = Math.max(0, data.value.data.total - 1)
   }
-  if (page.value > 1 && assets.value.length === 0) page.value--
   void refresh()
 }
 const toolbarVisible = ref(true)
@@ -656,6 +671,10 @@ onMounted(() => {
   void resizeSelectedBoardTitle()
   void document.fonts.ready.then(resizeSelectedBoardTitle)
   window.addEventListener('scroll', updateToolbar, { passive: true })
+  loadMoreObserver = new IntersectionObserver(entries => {
+    if (entries.some(entry => entry.isIntersecting)) loadNextPage()
+  }, { rootMargin: '800px 0px' })
+  if (loadMoreSentinel.value) loadMoreObserver.observe(loadMoreSentinel.value)
   assetEvents = new EventSource('/api/live/assets')
   assetEvents.addEventListener('assets-changed', () => {
     clearTimeout(liveRefreshTimer)
@@ -672,6 +691,7 @@ onBeforeUnmount(() => {
   flushArrangeSave()
   clearInterval(assetPollTimer)
   assetEvents?.close()
+  loadMoreObserver?.disconnect()
   cancelAnimationFrame(scrollFrame)
   window.removeEventListener('resize', resizeSelectedBoardTitle)
   window.removeEventListener('scroll', updateToolbar)
@@ -750,7 +770,8 @@ onBeforeUnmount(() => {
         <div v-else-if="!selectedBoardId && error" class="state error" role="alert"><strong>Unable to load assets.</strong><span>Check your connection and try again.</span><button type="button" @click="refresh()">Try again</button></div>
         <div v-else-if="displayedAssets.length === 0" class="state"><strong>{{ selectedBoardId ? 'No matching assets on this board' : hasFilters ? 'No matching assets' : 'No assets yet' }}</strong><span>{{ selectedBoardId ? 'Try another board or change your search.' : hasFilters ? 'Change your search or clear the filters.' : 'Upload frames from the Figma plugin to build this library.' }}</span><button v-if="!selectedBoardId && hasFilters" type="button" @click="clearFilters">Clear filters</button></div>
         <AssetMasonry v-else :key="selectedBoardId || 'all'" :assets="displayedAssets" :hidden="cardsHidden" :stable-columns="false" :animate-changes="!cardsHidden" :can-approve="canApprove && !arrangeExpanded" :view-settings="libraryView" :interactive="!arrangeExpanded" :reorderable="arrangeExpanded" :selectable="arrangeExpanded" :selected-ids="arrangeSelectedIds" @reorder="reorderSelectedBoardAssets" @toggle-selection="toggleArrangeSelection" @toggle-approval="toggleAssetApproval" />
-        <nav v-if="!selectedBoardId && totalPages > 1" class="pagination" aria-label="Pagination"><button :disabled="page === 1" @click="page--">Previous</button><span>Page {{ page }} of {{ totalPages }}</span><button :disabled="page === totalPages" @click="page++">Next</button></nav>
+        <div v-if="canLoadMore" ref="loadMoreSentinel" class="load-more-sentinel" aria-hidden="true" />
+        <span v-if="!selectedBoardId && loadStatus === 'pending' && assets.length" class="sr-only" role="status">Loading more assets</span>
       </div>
     </main>
     <AssetOverlay v-if="selectedAssetId" :asset-id="selectedAssetId" :asset-ids="displayedAssets.map(asset => asset.id)" :preview-url="selectedAssetPreviewUrl" :preview-urls="assetPreviewUrls" @close="closeAsset" @deleted="handleAssetDeleted" @navigate="navigateAsset" />
@@ -758,7 +779,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.library-shell{--space:clamp(12px,1vw,24px);--muted:.45;min-height:100vh;color:#000;background:var(--color-bg);font-size:16px;font-weight:700;letter-spacing:-.015em;line-height:1.15}main{min-height:100vh;padding:var(--space);padding-bottom:calc(var(--space) + 68px)}.index-toolbar{position:sticky;z-index:4;top:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-items:start;gap:var(--space);min-height:68px;margin-top:calc(var(--space)*-1);padding:var(--space) 0;background:var(--color-bg)}.brand{text-decoration:none}.filters{width:100%;display:flex;flex-wrap:nowrap;gap:2px var(--space)}.filters label{min-width:7rem;flex:1}.filters input,.filters select{width:100%;min-height:24px;padding:0;border:0;border-bottom:1px solid rgb(0 0 0/.18);border-radius:0;color:inherit;background:transparent;font:inherit}.filters input::placeholder{color:inherit;opacity:var(--muted)}.count{margin:0;opacity:var(--muted);text-align:right;font-variant-numeric:tabular-nums}.index-toolbar nav{grid-column:4;position:absolute;top:calc(var(--space) + 27px);right:0;display:flex;gap:var(--space)}.index-toolbar nav a{text-decoration:none}.masonry{column-count:6;column-gap:var(--space)}.asset-card{display:inline-block;width:100%;break-inside:avoid;margin-bottom:calc(var(--space)*2);color:inherit;background:transparent;text-decoration:none}.preview{overflow:hidden;border-radius:8px;background:transparent;clip-path:inset(0 round 8px)}.preview img{display:block;width:100%;height:100%;object-fit:cover}.asset-card:hover{opacity:1}.card-body{display:flex;justify-content:space-between;align-items:flex-start;gap:var(--space);padding-top:8px}.card-body h2,.card-body p{margin:0;font:inherit}.card-body p,.card-body>span{opacity:.3}.card-body>span{text-transform:capitalize}.state{min-height:45vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:calc(var(--space)/3);padding:var(--space);text-align:center}.state strong{font-size:16px;line-height:1.15}.state span{font-size:14px;line-height:1.25;opacity:var(--muted)}.state button{min-height:36px;margin-top:calc(var(--space)/3);padding:0 calc(var(--space)*.75);font-size:13px;line-height:1}button{min-height:44px;padding:0 18px;border:0;border-radius:999px;color:white;background:black;font:inherit;cursor:pointer;transition-property:scale,opacity;transition-duration:150ms}.state button:active,.pagination button:active{scale:.96}.pagination{display:flex;align-items:center;justify-content:center;gap:var(--space);padding:calc(var(--space)*2) 0}.pagination span{opacity:var(--muted)}:is(a,button):focus-visible{outline:2px solid #06f90e;outline-offset:2px}.sr-only{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}@media(max-width:2200px){.masonry{column-count:5}}@media(max-width:1680px){.masonry{column-count:4}}@media(max-width:1280px){.masonry{column-count:3}}@media(max-width:900px){.index-toolbar{grid-template-columns:1fr 2fr auto}.count{display:none}.masonry{column-count:2}}@media(max-width:520px){.index-toolbar{grid-template-columns:1fr auto;gap:8px}.brand{grid-column:1}.index-toolbar nav{position:static;grid-column:2;grid-row:1}.card-body{font-size:14px}.masonry{column-count:1}.state button{min-height:44px}}@media(prefers-reduced-motion:reduce){.preview img,button{transition:none}.state button:active,.pagination button:active{scale:1}}
+.library-shell{--space:clamp(12px,1vw,24px);--muted:.45;min-height:100vh;color:#000;background:var(--color-bg);font-size:16px;font-weight:700;letter-spacing:-.015em;line-height:1.15}main{min-height:100vh;padding:var(--space);padding-bottom:calc(var(--space) + 68px)}.index-toolbar{position:sticky;z-index:4;top:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-items:start;gap:var(--space);min-height:68px;margin-top:calc(var(--space)*-1);padding:var(--space) 0;background:var(--color-bg)}.brand{text-decoration:none}.filters{width:100%;display:flex;flex-wrap:nowrap;gap:2px var(--space)}.filters label{min-width:7rem;flex:1}.filters input,.filters select{width:100%;min-height:24px;padding:0;border:0;border-bottom:1px solid rgb(0 0 0/.18);border-radius:0;color:inherit;background:transparent;font:inherit}.filters input::placeholder{color:inherit;opacity:var(--muted)}.count{margin:0;opacity:var(--muted);text-align:right;font-variant-numeric:tabular-nums}.index-toolbar nav{grid-column:4;position:absolute;top:calc(var(--space) + 27px);right:0;display:flex;gap:var(--space)}.index-toolbar nav a{text-decoration:none}.masonry{column-count:6;column-gap:var(--space)}.asset-card{display:inline-block;width:100%;break-inside:avoid;margin-bottom:calc(var(--space)*2);color:inherit;background:transparent;text-decoration:none}.preview{overflow:hidden;border-radius:8px;background:transparent;clip-path:inset(0 round 8px)}.preview img{display:block;width:100%;height:100%;object-fit:cover}.asset-card:hover{opacity:1}.card-body{display:flex;justify-content:space-between;align-items:flex-start;gap:var(--space);padding-top:8px}.card-body h2,.card-body p{margin:0;font:inherit}.card-body p,.card-body>span{opacity:.3}.card-body>span{text-transform:capitalize}.state{min-height:45vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:calc(var(--space)/3);padding:var(--space);text-align:center}.state strong{font-size:16px;line-height:1.15}.state span{font-size:14px;line-height:1.25;opacity:var(--muted)}.state button{min-height:36px;margin-top:calc(var(--space)/3);padding:0 calc(var(--space)*.75);font-size:13px;line-height:1}button{min-height:44px;padding:0 18px;border:0;border-radius:999px;color:white;background:black;font:inherit;cursor:pointer;transition-property:scale,opacity;transition-duration:150ms}.state button:active{scale:.96}.load-more-sentinel{height:1px}.sr-only{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}@media(max-width:2200px){.masonry{column-count:5}}@media(max-width:1680px){.masonry{column-count:4}}@media(max-width:1280px){.masonry{column-count:3}}@media(max-width:900px){.index-toolbar{grid-template-columns:1fr 2fr auto}.count{display:none}.masonry{column-count:2}}@media(max-width:520px){.index-toolbar{grid-template-columns:1fr auto;gap:8px}.brand{grid-column:1}.index-toolbar nav{position:static;grid-column:2;grid-row:1}.card-body{font-size:14px}.masonry{column-count:1}.state button{min-height:44px}}@media(prefers-reduced-motion:reduce){.preview img,button{transition:none}.state button:active{scale:1}}
 .index-toolbar{transition:opacity .18s ease-out,transform .24s cubic-bezier(.2,0,0,1)}
 .library-shell{--header-height:calc(44px + var(--space)*2)}
 .board-tabs-shell{position:sticky;z-index:3;top:var(--header-height);margin:0 calc(var(--space)*-1) calc(var(--space)*2);overflow:hidden;background:var(--color-bg);transition:opacity .18s ease-out,transform .24s cubic-bezier(.2,0,0,1)}.board-tabs{display:flex;gap:var(--space);padding:0 var(--space);overflow-x:auto;overscroll-behavior-x:none;background:var(--color-bg);scrollbar-width:none}.board-tabs::-webkit-scrollbar{display:none}.board-tabs button{position:relative;min-height:44px;max-width:18ch;flex:0 0 auto;display:flex;align-items:center;gap:7px;overflow:hidden;padding:0;color:inherit;background:transparent;border-radius:0;white-space:nowrap}.board-tabs button:first-child{max-width:none}.board-tab-status{width:7px;height:7px;flex:0 0 auto;border:1px solid currentColor;border-radius:50%;opacity:.45}.board-tab-status.is-published{border-color:#06f90e;background:#06f90e;opacity:1}.board-tab-title{min-width:0;overflow:hidden;text-overflow:ellipsis}.board-tabs button[aria-pressed=true]{opacity:1}.board-tabs button[aria-pressed=true]::after{content:"";position:absolute;right:0;bottom:4px;left:0;height:2px;background:currentColor}.board-tabs-shell.toolbar-hidden{pointer-events:none;opacity:0;transform:translateY(calc((var(--header-height) + 100%)*-1))}
