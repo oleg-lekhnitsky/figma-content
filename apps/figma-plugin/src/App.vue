@@ -214,7 +214,6 @@ const upload = async () => {
       const payload = await response.json() as { data: { asset: { id: string } } }
       frame.assetId = payload.data.asset.id
       frame.existingAction = 'version'
-      post({ type: 'bind-asset', nodeId: frame.id, assetId: payload.data.asset.id })
       if (reviewBoardId.value) {
         const submission = await fetch(`${appUrl}/api/plugin/boards/${reviewBoardId.value}/assets`, {
           method: 'POST',

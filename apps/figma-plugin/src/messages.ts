@@ -7,7 +7,6 @@ export type ControllerMessage =
 export type UiMessage =
   | { type: 'refresh-selection' }
   | { type: 'export'; requestId: string; nodeId: string; settings: ExportSettings }
-  | { type: 'bind-asset'; nodeId: string; assetId: string }
   | { type: 'load-state' }
   | { type: 'save-state'; value: unknown }
   | { type: 'save-session'; token: string | null }

@@ -49,18 +49,6 @@ const pageName = (node: BaseNode) => {
   while (current && current.type !== 'PAGE') current = current.parent
   return current?.type === 'PAGE' ? current.name : figma.currentPage.name
 }
-const boundAssetId = (node: ExportableNode) => {
-  const raw = node.getPluginData('contentLibraryAssetId')
-  if (!raw) return null
-  try {
-    const binding = JSON.parse(raw) as { assetId?: unknown; nodeId?: unknown }
-    return binding.nodeId === node.id && typeof binding.assetId === 'string' ? binding.assetId : null
-  } catch {
-    // Legacy bindings contained only the asset ID and were copied by Figma when
-    // a frame was duplicated. They cannot safely identify the current node.
-    return null
-  }
-}
 const describe = async (node: ExportableNode): Promise<SelectedFrame> => {
   const previewScale = Math.min(.5, 360 / Math.max(node.width, node.height))
   const clone = node.clone()
@@ -75,7 +63,7 @@ const describe = async (node: ExportableNode): Promise<SelectedFrame> => {
     clone.remove()
   }
   const fileKey = figma.fileKey ?? null
-  return { id: node.id, name: node.name, width: Math.round(node.width), height: Math.round(node.height), pageName: pageName(node), fileKey, figmaUrl: fileKey ? `https://www.figma.com/design/${fileKey}/_?node-id=${encodeURIComponent(node.id)}` : null, assetId: boundAssetId(node), videoHash: findVideoHash(node), preview }
+  return { id: node.id, name: node.name, width: Math.round(node.width), height: Math.round(node.height), pageName: pageName(node), fileKey, figmaUrl: fileKey ? `https://www.figma.com/design/${fileKey}/_?node-id=${encodeURIComponent(node.id)}` : null, assetId: null, videoHash: findVideoHash(node), preview }
 }
 const postSelection = async () => {
   const frames = await Promise.all(selectedNodes().map(describe))
@@ -99,11 +87,6 @@ figma.ui.onmessage = async (message: UiMessage) => {
   if (message.type === 'save-session') {
     if (message.token) return figma.clientStorage.setAsync('contentLibrarySession', message.token)
     return figma.clientStorage.deleteAsync('contentLibrarySession')
-  }
-  if (message.type === 'bind-asset') {
-    const node = await figma.getNodeByIdAsync(message.nodeId)
-    if (node && 'setPluginData' in node) node.setPluginData('contentLibraryAssetId', JSON.stringify({ assetId: message.assetId, nodeId: node.id }))
-    return
   }
   if (message.type === 'export') {
     const node = await figma.getNodeByIdAsync(message.nodeId)
