@@ -140,14 +140,20 @@ input, select, textarea { border: 0; border-bottom: 1px solid var(--color-line);
   padding: calc(var(--space) / 2);
   border: 0;
   border-radius: 18px;
-  color: var(--color-fg);
-  background: var(--color-bg);
+  color: var(--material-tinted-fg);
+  background: var(--material-tinted-bg);
+  -webkit-backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
+  backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
   box-shadow: 0 18px 50px rgb(0 0 0 / .14);
   font-size: 14px;
   font-weight: 650;
   letter-spacing: -.01em;
 }
-.workspace-popover > p { margin: calc(var(--space) / 2); color: var(--color-muted); font-size: 12px; }
+.workspace-popover > p {
+  margin: calc(var(--space) / 2);
+  color: color-mix(in srgb, var(--material-tinted-fg) 64%, transparent);
+  font-size: 12px;
+}
 .workspace-popover > button {
   display: flex;
   width: 100%;
@@ -160,18 +166,24 @@ input, select, textarea { border: 0; border-bottom: 1px solid var(--color-line);
   background: transparent;
   text-align: left;
 }
-.workspace-popover > button:hover { background: var(--color-surface); }
+.workspace-popover > button:is(:hover, :focus-visible) { background: var(--material-tinted-hover-bg); }
 .workspace-popover > button:disabled { cursor: wait; }
 .workspace-popover button span { display: grid; }
-.workspace-popover small { color: var(--color-muted); font-size: 11px; font-weight: 550; text-transform: capitalize; }
+.workspace-popover small {
+  color: color-mix(in srgb, var(--material-tinted-fg) 64%, transparent);
+  font-size: 11px;
+  font-weight: 550;
+  text-transform: capitalize;
+}
 .workspace-popover button svg { width: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; }
 .workspace-links {
   display: grid;
   gap: calc(var(--space) / 2);
   margin-top: calc(var(--space) / 2);
   padding: calc(var(--space) / 2);
-  border-top: 1px solid var(--color-line);
+  border-top: 1px solid color-mix(in srgb, var(--material-tinted-fg) 28%, transparent);
 }
+.workspace-links a { color: inherit; }
 
 @media (max-width: 720px) {
   h1 { font-size: var(--font-size-h1-mobile); }
@@ -180,6 +192,7 @@ input, select, textarea { border: 0; border-bottom: 1px solid var(--color-line);
   .admin-shell > .toolbar { grid-template-columns: 1fr auto; }
   .admin-shell > main > .intro { grid-template-columns: 1fr; }
   .admin-shell > main > .intro h1 { grid-column: 1; }
+  .workspace-popover { background: var(--material-tinted-bg-mobile); }
 }
 
 @media (prefers-reduced-motion: reduce) {
