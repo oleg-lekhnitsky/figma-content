@@ -10,7 +10,7 @@
   --color-danger: #a21b14;
   --material-tinted-bg: rgb(0 0 0 / .3);
   --material-tinted-bg-mobile: rgb(0 0 0 / .36);
-  --material-tinted-hover-bg: var(--material-tinted-bg);
+  --material-tinted-hover-bg: rgb(0 0 0 / .42);
   --material-tinted-fg: #fff;
   --material-tinted-blur: 1.5rem;
   --material-tinted-saturation: 115%;
@@ -36,7 +36,7 @@
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-::selection { color: #000; background: var(--color-accent); }
+::selection { color: #000; background: var(--color-surface); }
 body { margin: 0; color: var(--color-fg); background: var(--color-bg); }
 h1, h2 { margin: 0; letter-spacing: -.055em; }
 h1 { font-size: var(--font-size-h1); line-height: .9; }

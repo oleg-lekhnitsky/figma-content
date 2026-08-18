@@ -595,6 +595,36 @@ const isAdmin = computed(() => session.value?.data?.user?.role === 'admin')
 const canManageProjects = computed(() => ['editor', 'admin'].includes(session.value?.data?.user?.role ?? ''))
 const canApprove = computed(() => ['editor', 'admin'].includes(session.value?.data?.user?.role ?? ''))
 const canShare = computed(() => ['contributor', 'editor', 'admin'].includes(session.value?.data?.user?.role ?? ''))
+const canRenameAssets = computed(() => ['editor', 'admin'].includes(session.value?.data?.user?.role ?? ''))
+const assetRenameFeedback = ref('')
+const setAssetTitle = (id: string, title: string) => {
+  const update = (items: AssetCard[] | undefined) => {
+    const asset = items?.find(item => item.id === id)
+    if (asset) asset.title = title
+  }
+  update(assets.value)
+  update(data.value?.data.assets)
+  update(selectedBoardData.value?.assets)
+  for (const board of boards.value) update(board.previewAssets)
+}
+const renameAsset = async (asset: AssetCard, title: string) => {
+  title = toTitleCase(title)
+  if (!canRenameAssets.value || !title || title === asset.title) return
+  const previousTitle = asset.title
+  assetRenameFeedback.value = ''
+  setAssetTitle(asset.id, title)
+  try {
+    await $fetch(`/api/assets/${asset.id}`, { method: 'PATCH', body: { title } })
+    assetRenameFeedback.value = `${title} saved.`
+  } catch {
+    setAssetTitle(asset.id, previousTitle)
+    assetRenameFeedback.value = `Unable to rename ${previousTitle}.`
+  }
+}
+const handleAssetRenamed = (id: string, title: string) => {
+  setAssetTitle(id, title)
+  assetRenameFeedback.value = `${title} saved.`
+}
 const toggleAssetApproval = async (asset: AssetCard) => {
   const previousStatus = asset.status
   asset.status = asset.status === 'approved' ? 'draft' : 'approved'
@@ -735,7 +765,7 @@ onBeforeUnmount(() => {
           <button class="filter-panel-toggle is-expanded" type="button" aria-label="Hide filters" aria-expanded="true" @click="closeFilters"><Xmark :size="20" :stroke-width="2" aria-hidden="true" /></button>
         </SelectionPanel>
         <SelectionPanel :visible="compactFiltersVisible && !filtersExpanded && !viewExpanded && !boardSettingsExpanded" label="Asset filters" :wide="searchExpanded || searchClosing" bare raised :instant="filtersMorphing">
-          <Transition name="compact-control"><div v-if="!searchExpanded && !searchClosing" class="mobile-control-blur" :class="{ 'is-morph-source': morphSource === 'filters' }"><button class="filter-panel-toggle" type="button" aria-label="Show filters" aria-expanded="false" @click="openFilters"><span>Filters</span><span v-if="activeFilterCount" class="filter-count">{{ activeFilterCount }}</span></button></div></Transition>
+          <Transition name="compact-control"><div v-if="!searchExpanded && !searchClosing" class="mobile-control-blur" :class="{ 'is-morph-source': morphSource === 'filters' }"><button class="filter-panel-toggle" :class="{ 'has-filter-count': activeFilterCount }" type="button" aria-label="Show filters" aria-expanded="false" @click="openFilters"><span>Filters</span><span v-if="activeFilterCount" class="filter-count">{{ activeFilterCount }}</span></button></div></Transition>
           <Transition name="compact-control"><div v-if="!searchExpanded && !searchClosing" class="mobile-control-blur" :class="{ 'is-morph-source': morphSource === 'view' }"><button class="filter-panel-toggle" type="button" aria-label="Change library view" :aria-expanded="viewExpanded" @click="openView">View</button></div></Transition>
           <Transition name="compact-control"><div v-if="hasFilters && !searchExpanded && !searchClosing" class="mobile-control-blur"><button class="mobile-filter-search is-expanded filter-clear-compact" type="button" aria-label="Clear filters" title="Clear filters" @click="clearFilters"><span class="search-control-icon search-control-icon--close" aria-hidden="true"><Xmark :size="20" :stroke-width="2" /></span></button></div></Transition>
           <Transition name="filter-controls" @after-leave="finishSearchClose"><form v-if="searchExpanded" class="mobile-search-form" role="search" @submit.prevent><label class="search-field"><span class="sr-only">Search assets</span><input v-model="search" type="search" name="filter-search" placeholder="Search" autofocus></label></form></Transition>
@@ -749,19 +779,21 @@ onBeforeUnmount(() => {
           </AssetFilterControls>
           <button class="filter-panel-toggle is-expanded" type="button" aria-label="Hide filters" aria-expanded="true" @click="closeFilters"><Xmark :size="20" :stroke-width="2" aria-hidden="true" /></button>
         </SelectionPanel>
-        <SelectionPanel :visible="compactFiltersVisible && !filtersExpanded && !viewExpanded && !boardSettingsExpanded" label="Board controls" bare raised :instant="filtersMorphing">
-          <div v-if="selectedDynamicBoard" class="mobile-control-blur" :class="{ 'is-morph-source': morphSource === 'filters' }"><button class="filter-panel-toggle" type="button" aria-label="Show board filters" aria-expanded="false" @click="openFilters"><span>Filters</span><span v-if="dynamicBoardFilterCount" class="filter-count">{{ dynamicBoardFilterCount }}</span></button></div>
-          <button class="filter-panel-toggle" :class="{ 'is-morph-source': morphSource === 'view' }" type="button" aria-label="Change library view" aria-expanded="false" @click="openView">View</button>
-          <button v-if="canArrangeSelectedBoard" class="filter-panel-toggle" type="button" :aria-pressed="arrangeExpanded" @click="arrangeExpanded = !arrangeExpanded">{{ arrangeExpanded ? 'Done' : 'Arrange' }}</button>
-          <button v-if="arrangeExpanded && arrangeSelectedIds.length" class="filter-panel-toggle remove-selected-button" type="button" :disabled="arrangeRemoving" @click="removeArrangeSelection">Remove {{ arrangeSelectedIds.length }}</button>
-          <button class="filter-panel-toggle board-settings-button" :class="{ 'is-morph-source': morphSource === 'settings' }" type="button" aria-label="Board settings" title="Board settings" aria-expanded="false" @click="openBoardSettings"><Gear2 :size="20" aria-hidden="true" /></button>
-        </SelectionPanel>
       </template>
 
       <div class="board-swipe-region" @touchstart.passive="startBoardSwipe" @touchend.passive="finishBoardSwipe">
         <div v-if="selectedBoard" class="selected-board-heading" :class="{ 'title-hidden': cardsHidden }">
           <h1 class="selected-board-title"><textarea v-if="canRenameSelectedBoard" ref="boardTitleInput" v-model="boardTitleDraft" class="selected-board-title-input" rows="1" maxlength="120" aria-label="Board name" :disabled="boardRenameBusy" :aria-invalid="boardRenameFeedback.error || undefined" aria-describedby="selected-board-title-feedback" @change="renameSelectedBoard" @keydown="handleBoardTitleKeydown" /><span class="selected-board-title-display" :aria-hidden="canRenameSelectedBoard || undefined"><template v-for="(word, index) in boardTitleWords" :key="`${word}-${index}`"><span class="selected-board-title-word" :style="{ '--word-stagger': `${Math.min(index * 18, 144)}ms` }">{{ word }}</span>{{ index < boardTitleWords.length - 1 ? ' ' : '' }}</template></span></h1>
-          <div class="selected-board-meta"><span>{{ selectedBoard.mode === 'dynamic' ? 'Dynamic board' : 'Static board' }}</span><span id="selected-board-title-feedback" class="selected-board-title-feedback" :class="{ error: boardRenameFeedback.error }" role="status" aria-live="polite">{{ boardRenameFeedback.text }}</span></div>
+          <div class="selected-board-subhead">
+            <div class="selected-board-meta"><span>{{ selectedBoard.mode === 'dynamic' ? 'Dynamic board' : 'Static board' }} · {{ selectedBoard.publication_enabled ? 'Public' : 'Private' }}</span><span id="selected-board-title-feedback" class="selected-board-title-feedback" :class="{ error: boardRenameFeedback.error }" role="status" aria-live="polite">{{ boardRenameFeedback.text }}</span></div>
+            <div class="selected-board-actions">
+              <button v-if="selectedDynamicBoard" class="button-secondary selected-board-action-button" :class="{ 'is-morph-source': morphSource === 'filters', 'has-filter-count': dynamicBoardFilterCount }" type="button" aria-label="Show board filters" :aria-expanded="filtersExpanded" @click="openFilters"><span>Filters</span><span v-if="dynamicBoardFilterCount" class="filter-count">{{ dynamicBoardFilterCount }}</span></button>
+              <button class="button-secondary selected-board-action-button" :class="{ 'is-morph-source': morphSource === 'view' }" type="button" aria-label="Change library view" :aria-expanded="viewExpanded" @click="openView">View</button>
+              <button v-if="canArrangeSelectedBoard" class="button-secondary selected-board-action-button" type="button" :aria-pressed="arrangeExpanded" @click="arrangeExpanded = !arrangeExpanded">{{ arrangeExpanded ? 'Done' : 'Arrange' }}</button>
+              <button v-if="arrangeExpanded && arrangeSelectedIds.length" class="selected-board-action-button remove-selected-button" type="button" :disabled="arrangeRemoving" @click="removeArrangeSelection">Remove {{ arrangeSelectedIds.length }}</button>
+              <button class="button-secondary selected-board-action-button selected-board-settings-button" :class="{ 'is-morph-source': morphSource === 'settings' }" type="button" aria-label="Board settings" title="Board settings" :aria-expanded="boardSettingsExpanded" @click="openBoardSettings"><Gear2 :size="20" aria-hidden="true" /></button>
+            </div>
+          </div>
         </div>
         <span v-if="selectedBoardId && selectedBoardStatus === 'pending' && displayedAssets.length" class="sr-only" role="status">Loading the rest of {{ selectedBoard?.title ?? 'this board' }}</span>
         <AssetMasonrySkeleton v-if="selectedBoardId && selectedBoardStatus === 'pending' && displayedAssets.length === 0" :label="`Loading ${selectedBoard?.title ?? 'board'}`" />
@@ -769,12 +801,13 @@ onBeforeUnmount(() => {
         <AssetMasonrySkeleton v-else-if="!selectedBoardId && loadStatus === 'pending' && assets.length === 0" />
         <div v-else-if="!selectedBoardId && error" class="state error" role="alert"><strong>Unable to load assets.</strong><span>Check your connection and try again.</span><button type="button" @click="refresh()">Try again</button></div>
         <div v-else-if="displayedAssets.length === 0" class="state"><strong>{{ selectedBoardId ? 'No matching assets on this board' : hasFilters ? 'No matching assets' : 'No assets yet' }}</strong><span>{{ selectedBoardId ? 'Try another board or change your search.' : hasFilters ? 'Change your search or clear the filters.' : 'Upload frames from the Figma plugin to build this library.' }}</span><button v-if="!selectedBoardId && hasFilters" type="button" @click="clearFilters">Clear filters</button></div>
-        <AssetMasonry v-else :key="selectedBoardId || 'all'" :assets="displayedAssets" :hidden="cardsHidden" :stable-columns="false" :animate-changes="!cardsHidden" :can-approve="canApprove && !arrangeExpanded" :view-settings="libraryView" :interactive="!arrangeExpanded" :reorderable="arrangeExpanded" :selectable="arrangeExpanded" :selected-ids="arrangeSelectedIds" @reorder="reorderSelectedBoardAssets" @toggle-selection="toggleArrangeSelection" @toggle-approval="toggleAssetApproval" />
+        <AssetMasonry v-else :key="selectedBoardId || 'all'" :assets="displayedAssets" :hidden="cardsHidden" :stable-columns="false" :animate-changes="!cardsHidden" :can-approve="canApprove && !arrangeExpanded" :editable-titles="canRenameAssets && !arrangeExpanded" :view-settings="libraryView" :interactive="!arrangeExpanded" :reorderable="arrangeExpanded" :selectable="arrangeExpanded" :selected-ids="arrangeSelectedIds" @reorder="reorderSelectedBoardAssets" @toggle-selection="toggleArrangeSelection" @toggle-approval="toggleAssetApproval" @rename="renameAsset" />
+        <span class="sr-only" role="status" aria-live="polite">{{ assetRenameFeedback }}</span>
         <div v-if="canLoadMore" ref="loadMoreSentinel" class="load-more-sentinel" aria-hidden="true" />
         <span v-if="!selectedBoardId && loadStatus === 'pending' && assets.length" class="sr-only" role="status">Loading more assets</span>
       </div>
     </main>
-    <AssetOverlay v-if="selectedAssetId" :asset-id="selectedAssetId" :asset-ids="displayedAssets.map(asset => asset.id)" :preview-url="selectedAssetPreviewUrl" :preview-urls="assetPreviewUrls" @close="closeAsset" @deleted="handleAssetDeleted" @navigate="navigateAsset" />
+    <AssetOverlay v-if="selectedAssetId" :asset-id="selectedAssetId" :asset-ids="displayedAssets.map(asset => asset.id)" :preview-url="selectedAssetPreviewUrl" :preview-urls="assetPreviewUrls" @close="closeAsset" @deleted="handleAssetDeleted" @navigate="navigateAsset" @renamed="handleAssetRenamed" />
   </div>
 </template>
 
@@ -785,7 +818,7 @@ onBeforeUnmount(() => {
 .board-tabs-shell{position:sticky;z-index:3;top:var(--header-height);margin:0 calc(var(--space)*-1) calc(var(--space)*2);overflow:hidden;background:var(--color-bg);transition:opacity .18s ease-out,transform .24s cubic-bezier(.2,0,0,1)}.board-tabs{display:flex;gap:var(--space);padding:0 var(--space);overflow-x:auto;overscroll-behavior-x:none;background:var(--color-bg);scrollbar-width:none}.board-tabs::-webkit-scrollbar{display:none}.board-tabs button{position:relative;min-height:44px;max-width:18ch;flex:0 0 auto;display:flex;align-items:center;gap:7px;overflow:hidden;padding:0;color:inherit;background:transparent;border-radius:0;white-space:nowrap}.board-tabs button:first-child{max-width:none}.board-tab-status{width:7px;height:7px;flex:0 0 auto;border:1px solid currentColor;border-radius:50%;opacity:.45}.board-tab-status.is-published{border-color:#06f90e;background:#06f90e;opacity:1}.board-tab-title{min-width:0;overflow:hidden;text-overflow:ellipsis}.board-tabs button[aria-pressed=true]{opacity:1}.board-tabs button[aria-pressed=true]::after{content:"";position:absolute;right:0;bottom:4px;left:0;height:2px;background:currentColor}.board-tabs-shell.toolbar-hidden{pointer-events:none;opacity:0;transform:translateY(calc((var(--header-height) + 100%)*-1))}
 @media(hover:hover) and (pointer:fine){.board-tabs button:not([aria-pressed=true]):hover{opacity:.5}}
 .board-swipe-region{min-height:45vh;touch-action:pan-y}
-.selected-board-heading{margin:0 0 calc(var(--space)*2)}.selected-board-title{position:relative;margin:0;font-size:clamp(2rem,4vw,4rem);font-weight:700;letter-spacing:-.045em;line-height:1;overflow-wrap:anywhere}.selected-board-title-display{display:block;min-height:1em;padding-bottom:.08em}.selected-board-title-word{display:inline-block;opacity:1;transform:translateY(0);transition-property:opacity,transform;transition-duration:.18s,.22s;transition-delay:var(--word-stagger,0ms);transition-timing-function:ease-out,cubic-bezier(.2,0,0,1)}.selected-board-heading.title-hidden .selected-board-title-word{opacity:0;transform:translateY(16px);transition-delay:0ms}.selected-board-title-input{position:absolute;z-index:1;inset:0;display:block;box-sizing:border-box;width:100%;min-height:1em;padding:0 0 .08em;overflow:hidden;resize:none;border:0;border-bottom:1px solid transparent;border-radius:0;color:inherit;background:var(--color-bg);font:inherit;font-weight:inherit;letter-spacing:inherit;line-height:inherit;opacity:0}.selected-board-title-input:focus{border-bottom-color:currentColor;outline:0;opacity:1}.selected-board-title:focus-within .selected-board-title-display{opacity:0}.selected-board-title-input:disabled{opacity:.55}.selected-board-meta{display:flex;align-items:center;gap:8px;margin-top:6px;color:var(--color-muted);font-size:12px;font-weight:600;letter-spacing:0;opacity:1;transform:translateY(0);transition:opacity .18s ease-out,transform .22s cubic-bezier(.2,0,0,1)}.selected-board-heading.title-hidden .selected-board-meta{opacity:0;transform:translateY(16px)}.selected-board-title-feedback{opacity:.8}.selected-board-title-feedback:empty{display:none}.selected-board-title-feedback.error{color:var(--color-danger);opacity:1}
+.selected-board-heading{margin:0 0 calc(var(--space)*2)}.selected-board-title{position:relative;margin:0;font-size:clamp(2rem,4vw,4rem);font-weight:700;letter-spacing:-.045em;line-height:1;overflow-wrap:anywhere}.selected-board-title-display{display:block;min-height:1em;padding-bottom:.08em}.selected-board-title-word{display:inline-block;opacity:1;transform:translateY(0);transition-property:opacity,transform;transition-duration:.18s,.22s;transition-delay:var(--word-stagger,0ms);transition-timing-function:ease-out,cubic-bezier(.2,0,0,1)}.selected-board-heading.title-hidden .selected-board-title-word{opacity:0;transform:translateY(16px);transition-delay:0ms}.selected-board-title-input{position:absolute;z-index:1;inset:0;display:block;box-sizing:border-box;width:100%;min-height:1em;padding:0 0 .08em;overflow:hidden;resize:none;border:0;border-bottom:1px solid transparent;border-radius:0;color:inherit;background:var(--color-bg);font:inherit;font-weight:inherit;letter-spacing:inherit;line-height:inherit;opacity:0}.selected-board-title-input:focus{border-bottom-color:currentColor;outline:0;opacity:1}.selected-board-title:focus-within .selected-board-title-display{opacity:0}.selected-board-title-input:disabled{opacity:.55}.selected-board-subhead{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:calc(var(--space)/2) var(--space);margin-top:6px}.selected-board-meta{display:flex;align-items:center;gap:8px;color:var(--color-muted);font-size:12px;font-weight:600;letter-spacing:0;opacity:1;transform:translateY(0);transition:opacity .18s ease-out,transform .22s cubic-bezier(.2,0,0,1)}.selected-board-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:calc(var(--space)/2)}.selected-board-action-button{--action-stagger:0ms;flex:0 0 auto;min-height:36px;padding-inline:calc(var(--space)*.75);font-size:13px;opacity:1;transform:translateY(0);transition-property:opacity,transform,scale;transition-duration:180ms,220ms,150ms;transition-delay:var(--action-stagger),var(--action-stagger),0ms;transition-timing-function:ease-out,cubic-bezier(.2,0,0,1),ease}.selected-board-action-button:nth-child(2){--action-stagger:35ms}.selected-board-action-button:nth-child(3){--action-stagger:70ms}.selected-board-action-button:nth-child(4){--action-stagger:105ms}.selected-board-settings-button{width:36px;min-width:36px;padding:0;display:grid;place-items:center}.selected-board-settings-button svg{width:18px;height:18px}.selected-board-heading.title-hidden .selected-board-meta{opacity:0;transform:translateY(16px)}.selected-board-heading.title-hidden .selected-board-action-button{pointer-events:none;opacity:0;transform:translateY(6px);transition-delay:0ms,0ms,0ms}.selected-board-title-feedback{opacity:.8}.selected-board-title-feedback:empty{display:none}.selected-board-title-feedback.error{color:var(--color-danger);opacity:1}
 .library-shell{--space:inherit}
 @media(max-width:520px){.library-shell :deep(.asset-masonry .card-body p),.library-shell :deep(.asset-masonry .card-meta){display:none}}
 .index-toolbar.toolbar-hidden{pointer-events:none;opacity:0;transform:translateY(calc(-100% - var(--space)))}
@@ -829,8 +862,12 @@ onBeforeUnmount(() => {
   .mobile-search-form label{flex:1 1 auto}
   .mobile-search-form input{width:100%;max-width:none}
 }
+.selected-board-title{width:85%}.selected-board-title,.selected-board-title-display{text-wrap:pretty}@media(max-width:720px){.selected-board-title{width:100%}}
 .preview{background:transparent}.preview.is-loading{background:var(--color-surface)}.preview img{opacity:0;transition:opacity .22s ease-out}.preview img.is-loaded{opacity:1}
 .asset-card{opacity:1;transform:translateY(0);transition-property:opacity,transform;transition-duration:.18s,.22s;transition-delay:var(--card-stagger,0ms);transition-timing-function:ease-out,cubic-bezier(.2,0,0,1);animation:card-fade-in .42s cubic-bezier(.2,0,0,1) backwards;animation-delay:var(--card-stagger,0ms)}.masonry.cards-hidden .asset-card{opacity:0;transform:translateY(16px);transition-delay:0ms}@keyframes card-fade-in{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
 .result-swap-enter-active,.result-swap-leave-active{transition-property:opacity,transform;transition-duration:180ms;transition-timing-function:cubic-bezier(.2,0,0,1)}.result-swap-enter-from{opacity:0;transform:translateY(8px)}.result-swap-leave-to{opacity:0;transform:translateY(-4px)}
-@media(prefers-reduced-motion:reduce){.index-toolbar,.board-tabs-shell,.filter-controls-enter-active,.filter-controls-leave-active,.result-swap-enter-active,.result-swap-leave-active,.search-control-icon{transition-duration:.01ms}.asset-card{transition:none;animation:none}.masonry.cards-hidden .asset-card,.selected-board-heading.title-hidden .selected-board-title-word,.selected-board-heading.title-hidden .selected-board-meta{opacity:1;transform:none}.selected-board-title-word,.selected-board-meta{transition:none}.preview img{transition:none}.figma-button{transition-duration:.01ms;transform:translate(-50%,0)}.figma-button:active{scale:1}}
+.filter-panel-toggle.has-filter-count{gap:calc(var(--space)/3);padding-left:calc(var(--space)*1.25);padding-right:calc(var(--space)*.75)}
+.selected-board-action-button.has-filter-count{display:inline-flex;align-items:center;justify-content:center;gap:calc(var(--space)/3);padding-left:var(--space);padding-right:calc(var(--space)/2)}
+.selected-board-action-button.has-filter-count .filter-count{flex:0 0 auto}
+@media(prefers-reduced-motion:reduce){.index-toolbar,.board-tabs-shell,.filter-controls-enter-active,.filter-controls-leave-active,.result-swap-enter-active,.result-swap-leave-active,.search-control-icon{transition-duration:.01ms}.asset-card{transition:none;animation:none}.masonry.cards-hidden .asset-card,.selected-board-heading.title-hidden .selected-board-title-word,.selected-board-heading.title-hidden .selected-board-meta,.selected-board-heading.title-hidden .selected-board-action-button{opacity:1;transform:none}.selected-board-title-word,.selected-board-meta,.selected-board-action-button{transition:none}.preview img{transition:none}.figma-button{transition-duration:.01ms;transform:translate(-50%,0)}.figma-button:active{scale:1}}
 </style>

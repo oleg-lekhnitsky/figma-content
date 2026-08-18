@@ -19,7 +19,7 @@ onMounted(async () => {
 <template>
   <main class="page-shell">
     <section class="message-panel" aria-labelledby="oauth-title">
-      <p class="eyebrow">Authentication</p><h1 id="oauth-title" class="display-title">Connecting<br>to Figma.</h1>
+      <h1 id="oauth-title" class="display-title">Connecting<br>to Figma.</h1>
       <p v-if="!errorMessage" class="muted" role="status">Opening Figma authentication…</p>
       <template v-else>
         <p class="muted" role="alert">{{ errorMessage }}</p>

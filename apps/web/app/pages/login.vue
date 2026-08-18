@@ -27,10 +27,14 @@ const passwordLogin = async () => {
 <template>
   <main class="page-shell">
     <section class="message-panel" aria-labelledby="login-title">
-      <p class="eyebrow">Private library</p>
+
       <h1 id="login-title" class="display-title">Sign in to<br>Content Library.</h1>
       <p class="muted">Sign in with the email and temporary password provided by an administrator.</p>
-      <form @submit.prevent="passwordLogin"><label for="login-email">Email</label><input id="login-email" v-model="email" name="email" type="email" autocomplete="username" required><label for="login-password">Password</label><input id="login-password" v-model="password" name="password" type="password" autocomplete="current-password" required><button class="button" type="submit" :disabled="submitting">{{ submitting ? 'Signing in…' : 'Sign in' }}</button></form>
+      <form @submit.prevent="passwordLogin"><label for="login-email">Email</label><input id="login-email"
+          v-model="email" name="email" type="email" autocomplete="username" required><label
+          for="login-password">Password</label><input id="login-password" v-model="password" name="password"
+          type="password" autocomplete="current-password" required><button class="button" type="submit"
+          :disabled="submitting">{{ submitting ? 'Signing in…' : 'Sign in' }}</button></form>
       <p class="form-error" role="alert">{{ errorMessage }}</p>
       <div class="alternative"><span>or</span></div>
       <p class="muted">Team members can continue with their approved Figma account.</p>
@@ -39,4 +43,73 @@ const passwordLogin = async () => {
   </main>
 </template>
 
-<style scoped>.message-panel{padding:clamp(2rem,6vw,6rem) 0}.message-panel form{display:grid;gap:8px;margin-top:var(--space)}label{margin-top:8px;color:var(--color-muted);font-size:12px}input{box-sizing:border-box;width:100%;min-height:44px;padding:0 8px;border:0;border-bottom:1px solid var(--color-line);border-radius:0;color:inherit;background:transparent;font:inherit}.message-panel .button{justify-self:start;margin-top:8px}.secondary{color:var(--color-fg);background:var(--color-surface)}.form-error{min-height:1.25rem;margin:8px 0 0;color:#a20f0f}.alternative{display:flex;align-items:center;gap:12px;margin:var(--space) 0;color:var(--color-muted);font-size:12px}.alternative::before,.alternative::after{height:1px;flex:1;background:var(--color-line);content:""}:is(button):focus-visible{outline:2px solid #06f90e;outline-offset:2px}</style>
+<style
+  scoped>
+  .message-panel {
+    padding: clamp(2rem, 6vw, 6rem) 0
+  }
+
+  .message-panel form {
+    display: grid;
+    gap: 8px;
+    margin-top: var(--space)
+  }
+
+  label {
+    margin-top: 8px;
+    color: var(--color-muted);
+    font-size: 12px
+  }
+
+  input {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 44px;
+    padding: 0 8px;
+    border: 0;
+    border-bottom: 1px solid var(--color-line);
+    border-radius: 0;
+    color: inherit;
+    background: transparent;
+    font: inherit
+  }
+
+  .message-panel .button {
+    justify-self: start;
+    margin-top: 8px;
+        margin-left: -2px;
+  }
+
+  .secondary {
+    color: var(--color-fg);
+    background: var(--color-surface)
+  }
+
+  .form-error {
+    min-height: 1.25rem;
+    margin: 8px 0 0;
+    color: #a20f0f
+  }
+
+  .alternative {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: var(--space) 0;
+    color: var(--color-muted);
+    font-size: 12px
+  }
+
+  .alternative::before,
+  .alternative::after {
+    height: 1px;
+    flex: 1;
+    background: var(--color-line);
+    content: ""
+  }
+
+  :is(button):focus-visible {
+    outline: 2px solid #06f90e;
+    outline-offset: 2px
+  }
+</style>

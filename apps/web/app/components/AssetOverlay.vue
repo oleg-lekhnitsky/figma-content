@@ -1,19 +1,24 @@
 <script setup lang="ts">
-import { Heart, MoreH, Search, X } from 'reicon-vue'
+import { Figma, Heart, MoreH, Search, X } from 'reicon-vue'
+import { toTitleCase } from '~/utils/text'
 
 const props = withDefaults(defineProps<{ assetId: string; assetIds?: string[]; previewUrl?: string; previewUrls?: Record<string, string> }>(), { assetIds: () => [], previewUrl: '', previewUrls: () => ({}) })
-const emit = defineEmits<{ close: []; deleted: [id: string]; navigate: [id: string] }>()
-interface AssetDetail { id: string; uploaded_by: string; title: string; description: string | null; width: number; height: number; file_size: number; mime_type: string; status: string; version: number; created_at: string; updated_at: string; figma_url: string; language: string | null; content_type: string | null; project_id: string | null; campaign_id: string | null; projects: { name: string } | null; campaigns: { name: string } | null; asset_tags: Array<{ tags: { id: string; name: string } | null }>; allowed_users: { figma_handle: string | null } | null; versions: Array<{ id: string; version: number; width: number; height: number; file_size: number; created_at: string }> }
+const emit = defineEmits<{ close: []; deleted: [id: string]; navigate: [id: string]; renamed: [id: string, title: string] }>()
+interface AssetDetail { id: string; uploaded_by: string; title: string; description: string | null; width: number; height: number; file_size: number; mime_type: string; status: string; version: number; created_at: string; updated_at: string; figma_url: string; language: string | null; content_type: string | null; project_id: string | null; campaign_id: string | null; projects: { name: string } | null; campaigns: { name: string } | null; asset_tags: Array<{ tags: { id: string; name: string } | null }>; allowed_users: { figma_handle: string | null; avatar_url: string | null } | null; versions: Array<{ id: string; version: number; width: number; height: number; file_size: number; created_at: string }> }
 interface SessionResponse { data: { authenticated: boolean; user?: { id: string; role: string } } }
 interface Board { id: string; title: string; mode: 'dynamic' | 'static'; role: 'owner' | 'editor' | 'contributor' | 'viewer'; itemCount: number; previewAssets: Array<{ id: string; previewUrl: string; mime_type?: string | null; width: number; height: number }> }
 interface Option { id: string; name: string }
 const dialog = ref<HTMLDialogElement>()
 const overlayContent = ref<HTMLElement>()
 const assetVisual = ref<HTMLElement>()
-const { data, status, error, refresh } = await useLazyFetch<{ data: { asset: AssetDetail } }>(() => `/api/assets/${props.assetId}`)
+const assetMore = ref<HTMLElement>()
+const assetMoreTrigger = ref<HTMLButtonElement>()
+const assetMoreMenu = ref<HTMLElement>()
+const moreOpen = ref(false)
+const { data, error, refresh } = await useLazyFetch<{ data: { asset: AssetDetail } }>(() => `/api/assets/${props.assetId}`)
 const { data: previewData, execute: loadFullPreview } = await useLazyFetch<{ data: { id: string; url: string } }>(() => `/api/assets/${props.assetId}/preview`, { immediate: false })
 const { data: session } = await useLazyFetch<SessionResponse>('/api/auth/session')
-const { data: boardData, refresh: refreshBoards } = await useLazyFetch<{ data: { collections: Board[] } }>('/api/shares')
+const { data: boardData, status: boardStatus, refresh: refreshBoards } = await useLazyFetch<{ data: { collections: Board[] } }>('/api/shares')
 const boardCreator = ref<{ openCreate: () => Promise<void> }>()
 const { data: projectData } = await useLazyFetch<{ data: { projects: Option[] } }>('/api/projects')
 const { data: campaignData } = await useLazyFetch<{ data: { campaigns: Option[] } }>('/api/campaigns')
@@ -21,8 +26,25 @@ const fetchedAsset = computed(() => data.value?.data.asset)
 const retainedAsset = shallowRef<AssetDetail>()
 watch(fetchedAsset, next => { if (next) retainedAsset.value = next }, { immediate: true })
 const asset = computed(() => fetchedAsset.value ?? retainedAsset.value)
-const displayedPreviewUrl = ref(props.previewUrl)
-watch(() => [props.assetId, props.previewUrl], () => { displayedPreviewUrl.value = props.previewUrl }, { immediate: true })
+const showInitialSkeleton = ref(!asset.value)
+const skeletonRevealing = ref(false)
+let skeletonTimer: ReturnType<typeof setTimeout> | undefined
+watch(asset, async next => {
+  if (!next || !showInitialSkeleton.value) return
+  await nextTick()
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    skeletonRevealing.value = true
+    skeletonTimer = setTimeout(() => {
+      showInitialSkeleton.value = false
+      skeletonRevealing.value = false
+    }, 140)
+  }))
+}, { immediate: true })
+const thumbnailPreviewUrl = computed(() => props.previewUrl || props.previewUrls[props.assetId] || '')
+const displayedPreviewUrl = ref(thumbnailPreviewUrl.value)
+watch(() => [props.assetId, thumbnailPreviewUrl.value], () => {
+  displayedPreviewUrl.value = thumbnailPreviewUrl.value
+}, { immediate: true, flush: 'sync' })
 watch(() => previewData.value?.data, async (preview) => {
   if (!preview || preview.id !== props.assetId || !import.meta.client) return
   const requestedAssetId = props.assetId
@@ -39,10 +61,15 @@ watch(() => previewData.value?.data, async (preview) => {
   try { await image.decode() } catch { await loaded }
   if (props.assetId === requestedAssetId && image.complete && image.naturalWidth > 0) displayedPreviewUrl.value = preview.url
 }, { immediate: true })
-const resolvedPreviewUrl = computed(() => displayedPreviewUrl.value)
+const resolvedPreviewUrl = computed(() => displayedPreviewUrl.value || thumbnailPreviewUrl.value)
 const role = computed(() => session.value?.data.user?.role)
 const canEdit = computed(() => ['editor', 'admin'].includes(role.value ?? '') || (role.value === 'contributor' && asset.value?.uploaded_by === session.value?.data.user?.id))
 const canApprove = computed(() => ['editor', 'admin'].includes(role.value ?? ''))
+const canOpenBoardPicker = computed(() => {
+  if (asset.value?.status !== 'approved') return false
+  if (!session.value?.data.user) return true
+  return ['editor', 'admin'].includes(role.value ?? '') || (role.value === 'contributor' && asset.value.uploaded_by === session.value.data.user.id)
+})
 const eligibleBoards = computed(() => (boardData.value?.data.collections ?? []).filter(board => board.mode === 'static' && ['owner', 'editor', 'contributor'].includes(board.role) && (board.role !== 'contributor' || asset.value?.uploaded_by === session.value?.data.user?.id)))
 const boardSearch = ref('')
 const filteredEligibleBoards = computed(() => {
@@ -57,7 +84,7 @@ const nextPreviewUrl = computed(() => nextAssetId.value ? props.previewUrls[next
 const boardId = ref('')
 const boardPickerOpen = ref(false)
 const addingBoardId = ref('')
-const editing = ref(false); const title = ref(''); const description = ref(''); const projectId = ref(''); const campaignId = ref(''); const tagsText = ref(''); const language = ref(''); const contentType = ref(''); const actionError = ref(''); const actionMessage = ref(''); const downloading = ref(false); const saving = ref(false); const approvalBusy = ref(false)
+const editing = ref(false); const title = ref(''); const description = ref(''); const projectId = ref(''); const campaignId = ref(''); const tagsText = ref(''); const language = ref(''); const contentType = ref(''); const actionError = ref(''); const actionMessage = ref(''); const downloading = ref(false); const saving = ref(false); const titleSaving = ref(false); const approvalBusy = ref(false)
 const isClosing = ref(false)
 const isMobile = ref(false)
 const gestureX = ref(0)
@@ -76,6 +103,32 @@ let scrollLocked = false
 let closeTimer: ReturnType<typeof setTimeout> | undefined
 let mobileQuery: MediaQueryList | undefined
 const updateMobile = () => { isMobile.value = mobileQuery?.matches ?? false }
+const closeMoreMenu = (restoreFocus = false) => {
+  moreOpen.value = false
+  if (restoreFocus) void nextTick(() => assetMoreTrigger.value?.focus())
+}
+const handleMoreMenuPointerDown = (event: PointerEvent) => {
+  if (moreOpen.value && !assetMore.value?.contains(event.target as Node)) closeMoreMenu()
+}
+const menuItems = () => [...(assetMoreMenu.value?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') ?? [])]
+const handleMoreMenuKeydown = (event: KeyboardEvent) => {
+  const items = menuItems()
+  if (!items.length) return
+  const current = items.indexOf(document.activeElement as HTMLButtonElement)
+  let next = current
+  if (event.key === 'ArrowDown') next = (current + 1) % items.length
+  else if (event.key === 'ArrowUp') next = (current - 1 + items.length) % items.length
+  else if (event.key === 'Home') next = 0
+  else if (event.key === 'End') next = items.length - 1
+  else return
+  event.preventDefault()
+  items[next]?.focus()
+}
+watch(moreOpen, async open => {
+  if (!open) return
+  await nextTick()
+  menuItems()[0]?.focus()
+})
 const resetEditor = () => {
   if (!asset.value) return
   title.value = asset.value.title
@@ -107,12 +160,15 @@ onMounted(() => {
   mobileQuery.addEventListener('change', updateMobile)
   lockPageScroll()
   dialog.value?.showModal()
+  document.addEventListener('pointerdown', handleMoreMenuPointerDown)
   if (!props.previewUrl || !isMobile.value) void loadFullPreview()
 })
 onBeforeUnmount(() => {
   clearTimeout(closeTimer)
   clearTimeout(swipeTimer)
+  clearTimeout(skeletonTimer)
   mobileQuery?.removeEventListener('change', updateMobile)
+  document.removeEventListener('pointerdown', handleMoreMenuPointerDown)
   unlockPageScroll()
 })
 const finishClose = () => {
@@ -138,8 +194,44 @@ const toggleApproval = async () => {
 }
 const startEditing = () => { resetEditor(); actionError.value = ''; actionMessage.value = ''; editing.value = true }
 const cancelEditing = () => { resetEditor(); actionError.value = ''; editing.value = false }
+const saveTitle = async () => {
+  if (!asset.value || !canEdit.value || titleSaving.value) return
+  const nextTitle = toTitleCase(title.value)
+  if (!nextTitle) {
+    title.value = asset.value.title
+    return
+  }
+  if (nextTitle === asset.value.title) return
+  const previousTitle = asset.value.title
+  titleSaving.value = true
+  actionError.value = ''
+  asset.value.title = nextTitle
+  emit('renamed', asset.value.id, nextTitle)
+  try {
+    await $fetch(`/api/assets/${asset.value.id}`, { method: 'PATCH', body: { title: nextTitle } })
+    actionMessage.value = `${nextTitle} saved.`
+  } catch {
+    asset.value.title = previousTitle
+    title.value = previousTitle
+    emit('renamed', asset.value.id, previousTitle)
+    actionError.value = 'Unable to rename this asset.'
+  } finally {
+    titleSaving.value = false
+  }
+}
+const handleTitleKeydown = (event: KeyboardEvent) => {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault()
+    ;(event.currentTarget as HTMLTextAreaElement).blur()
+  } else if (event.key === 'Escape') {
+    event.preventDefault()
+    title.value = asset.value?.title ?? ''
+    ;(event.currentTarget as HTMLTextAreaElement).blur()
+  }
+}
 const saveDetails = async () => {
   saving.value = true
+  title.value = toTitleCase(title.value)
   const tags = [...new Set(tagsText.value.split(/[,\n]/).map(tag => tag.trim()).filter(Boolean))]
   try {
     const saved = await patchAsset({
@@ -202,6 +294,16 @@ const gestureStyle = computed(() => ({
   opacity: String(Math.max(.42, 1 - Math.max(0, gestureY.value) / 320)),
   '--swipe-x': `${gestureX.value}px`
 }))
+const assetVisualStyle = computed(() => {
+  const thumbnail = thumbnailPreviewUrl.value
+  const background = !thumbnail || asset.value?.mime_type.startsWith('video/') ? {} : {
+    backgroundImage: `url(${JSON.stringify(thumbnail)})`,
+    backgroundPosition: 'center',
+    backgroundRepeat: 'no-repeat',
+    backgroundSize: 'contain'
+  }
+  return isMobile.value ? { ...gestureStyle.value, ...background } : background
+})
 const startGesture = (event: PointerEvent) => {
   if (event.pointerType !== 'touch' || editing.value || gestureSettling.value) return
   gesturePointerId = event.pointerId
@@ -280,19 +382,14 @@ watch(() => props.assetId, id => {
 
 <template>
   <Teleport to="body">
-    <dialog ref="dialog" class="asset-dialog" :class="{ 'is-closing': isClosing }" aria-labelledby="asset-overlay-title"
+    <dialog ref="dialog" class="asset-dialog" :class="{ 'is-closing': isClosing }" aria-label="Asset details"
       @cancel.prevent="cancelOverlay" @keydown="handleAssetNavigationKey">
-      <div class="overlay-toolbar"><span id="asset-overlay-title">Asset details</span><span v-if="asset"
-          class="muted">Version {{ asset.version
-          }}</span><button class="close-button" type="button" aria-label="Close asset details" autofocus @click="close">
-          <X :size="22" aria-hidden="true" />
-        </button></div>
-      <main v-if="status === 'pending' && !asset" class="overlay-content overlay-loading" role="status"
-        aria-label="Loading asset details">
-        <section class="asset-visual" :class="{ 'skeleton-visual': !resolvedPreviewUrl }" aria-hidden="true"><AssetMedia
-            v-if="resolvedPreviewUrl" class="current-preview" :src="resolvedPreviewUrl" alt="" /></section>
+      <main v-if="showInitialSkeleton" class="overlay-content overlay-loading"
+        :class="{ 'is-revealing': skeletonRevealing }" role="status" aria-label="Loading asset details">
+        <section class="asset-visual" :class="{ 'skeleton-visual': !resolvedPreviewUrl }" aria-hidden="true">
+          <AssetMedia v-if="resolvedPreviewUrl" class="current-preview" :src="resolvedPreviewUrl" alt="" />
+        </section>
         <aside class="skeleton-panel" aria-hidden="true">
-          <span class="skeleton-line skeleton-status" />
           <span class="skeleton-line skeleton-title" />
           <div class="skeleton-actions"><span /><span /></div>
           <span class="skeleton-line skeleton-field" />
@@ -301,22 +398,24 @@ watch(() => props.assetId, id => {
           <span class="skeleton-line skeleton-meta" />
         </aside>
       </main>
-      <div v-else-if="error" class="overlay-state" role="alert"><strong>Unable to load this asset.</strong><button
-          @click="refresh()">Try again</button></div>
-      <main v-else-if="asset" ref="overlayContent" class="overlay-content">
+      <div v-if="error && !asset && !showInitialSkeleton" class="overlay-state" role="alert"><strong>Unable to load this
+          asset.</strong><button @click="refresh()">Try again</button></div>
+      <main v-if="asset" ref="overlayContent" class="overlay-content">
         <section ref="assetVisual" class="asset-visual"
           :class="{ 'skeleton-visual': !resolvedPreviewUrl, 'is-dragging': isMobile && gestureActive }"
-          :style="isMobile ? gestureStyle : undefined" aria-describedby="mobile-gesture-hint"
-          @pointerdown="startGesture" @pointermove="moveGesture" @pointerup="finishGesture"
-          @pointercancel="resetGesture" @transitionend="finishSwipeTransition"><span id="mobile-gesture-hint"
-            class="sr-only">Swipe left or right to browse assets. Pull down to close.</span><button class="pull-handle"
-            type="button" aria-label="Close asset details" @pointerdown.stop @click="close" /><img
-            v-if="isMobile && previousPreviewUrl" class="swipe-preview previous-preview" :src="previousPreviewUrl" alt=""
-            draggable="false"><AssetMedia v-if="resolvedPreviewUrl" class="current-preview" :src="resolvedPreviewUrl" :mime-type="asset.mime_type"
-            :alt="`Preview of ${asset.title}`" draggable="false" /><img v-if="isMobile && nextPreviewUrl"
-            class="swipe-preview next-preview" :src="nextPreviewUrl" alt="" draggable="false"><button
-            class="details-hint" type="button" aria-label="Show asset details" @pointerdown.stop
-            @click="revealDetails"><svg viewBox="0 0 24 24" aria-hidden="true">
+          :style="assetVisualStyle" aria-describedby="mobile-gesture-hint" @pointerdown="startGesture"
+          @pointermove="moveGesture" @pointerup="finishGesture" @pointercancel="resetGesture"
+          @transitionend="finishSwipeTransition"><span id="mobile-gesture-hint" class="sr-only">Swipe left or right to
+            browse assets. Pull down to close.</span><button class="pull-handle" type="button"
+            aria-label="Close asset details" @pointerdown.stop @click="close" /><img
+            v-if="isMobile && previousPreviewUrl" class="swipe-preview previous-preview" :src="previousPreviewUrl"
+            alt="" draggable="false">
+          <AssetMedia v-if="resolvedPreviewUrl" class="current-preview" :src="resolvedPreviewUrl"
+            :mime-type="asset.mime_type" :alt="`Preview of ${asset.title}`" loading="eager" fetchpriority="high"
+            draggable="false" /><img
+            v-if="isMobile && nextPreviewUrl" class="swipe-preview next-preview" :src="nextPreviewUrl" alt=""
+            draggable="false"><button class="details-hint" type="button" aria-label="Show asset details"
+            @pointerdown.stop @click="revealDetails"><svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="m6 9 6 6 6-6" />
             </svg><span>Details</span></button><button v-if="previousAssetId && !editing"
             class="asset-navigation previous" type="button" aria-label="Previous asset"
@@ -326,9 +425,9 @@ watch(() => props.assetId, id => {
             aria-label="Next asset" @click.stop="navigateAsset(nextAssetId)"><svg viewBox="0 0 24 24"
               aria-hidden="true">
               <path d="m9 5 7 7-7 7" />
-            </svg></button></section>
+            </svg></button>
+        </section>
         <aside>
-          <span class="asset-status">{{ asset.status }}</span>
           <form v-if="editing" class="edit-form" @submit.prevent="saveDetails">
             <label>Title<input v-model="title" name="title" required maxlength="200"></label>
             <label>Description<textarea v-model="description" name="description" rows="4" maxlength="5000" /></label>
@@ -351,34 +450,44 @@ watch(() => props.assetId, id => {
                 aria-describedby="tags-hint" /></label>
             <small id="tags-hint" class="field-hint">Separate tags with commas.</small>
             <div class="action-row"><button type="submit" :disabled="saving">{{ saving ? 'Saving…' : 'Save changes'
-                }}</button><button class="button-secondary" type="button" :disabled="saving"
+            }}</button><button class="button-secondary" type="button" :disabled="saving"
                 @click="cancelEditing">Cancel</button></div>
           </form>
           <template v-else>
-            <h1>{{ asset.title }}</h1>
+            <h1><textarea v-if="canEdit" v-model="title" class="asset-title-input" rows="1" maxlength="200"
+                aria-label="Asset name" :disabled="titleSaving" @change="saveTitle"
+                @keydown="handleTitleKeydown" /><span v-else>{{ asset.title }}</span></h1>
             <p v-if="asset.description" class="description">{{ asset.description }}</p>
           </template>
-          <div v-if="!editing" class="primary-actions"><button v-if="asset.status === 'approved' && eligibleBoards.length"
-              class="button board-picker-trigger" type="button" @click="openBoardPicker">Add</button><a
-              class="button-secondary action-button" :href="asset.figma_url" target="_blank"
-              rel="noopener noreferrer">Open in
-              Figma</a><button v-if="canApprove" class="button-secondary approval-toggle" type="button"
+          <div v-if="!editing" class="primary-actions"><button v-if="canOpenBoardPicker"
+              class="button board-picker-trigger" type="button" @click="openBoardPicker">Add</button>
+              <button v-if="canApprove" class="button-secondary approval-toggle" type="button"
               :aria-pressed="asset.status === 'approved'"
               :aria-label="asset.status === 'approved' ? 'Remove approval' : 'Approve asset'"
               :title="asset.status === 'approved' ? 'Remove approval' : 'Approve asset'" :disabled="approvalBusy"
-              @click="toggleApproval"><Heart :size="20" :weight="asset.status === 'approved' ? 'Filled' : 'Outline'"
-                aria-hidden="true" /></button>
-            <details class="asset-more">
-              <summary class="button-secondary" aria-label="More asset actions">
+              @click="toggleApproval">
+              <Heart :size="20" :weight="asset.status === 'approved' ? 'Filled' : 'Outline'" aria-hidden="true" />
+            </button>
+              <a
+              class="button-secondary action-button" :href="asset.figma_url" target="_blank"
+              rel="noopener noreferrer" aria-label="Open in Figma" title="Open in Figma"><Figma class="figma-mark" :size="18" aria-hidden="true" /></a>
+            <div ref="assetMore" class="asset-more" @keydown.esc.stop.prevent="closeMoreMenu(true)">
+              <button ref="assetMoreTrigger" class="button-secondary" type="button" aria-label="More asset actions" aria-haspopup="menu"
+                :aria-expanded="moreOpen" @click="moreOpen = !moreOpen">
                 <MoreH :size="20" aria-hidden="true" />
-              </summary>
-              <div class="asset-more-menu"><button class="button-secondary" type="button" :disabled="downloading"
-                  @click="download">{{ downloading ? 'Preparing…' : 'Download' }}</button><button v-if="canEdit"
-                  class="button-secondary" type="button" @click="startEditing">Edit details</button><button
-                  v-if="canEdit && asset.status !== 'archived'" class="button-secondary" type="button"
-                  @click="patchAsset({ status: 'archived' })">Archive</button><button v-if="role === 'admin'"
-                  class="button-secondary danger-button" type="button" @click="remove">Delete asset</button></div>
-            </details>
+              </button>
+              <Transition name="asset-menu">
+                <div v-if="moreOpen" ref="assetMoreMenu" class="asset-more-menu" role="menu"
+                  aria-label="Asset actions" @keydown="handleMoreMenuKeydown"><button role="menuitem" type="button"
+                    :disabled="downloading" @click="closeMoreMenu(); download()">{{ downloading ? 'Preparing…' :
+                    'Download' }}</button><button v-if="canEdit" role="menuitem" type="button"
+                    @click="closeMoreMenu(); startEditing()">Edit details</button><button
+                    v-if="canEdit && asset.status !== 'archived'" role="menuitem" type="button"
+                    @click="closeMoreMenu(); patchAsset({ status: 'archived' })">Archive</button><button
+                    v-if="role === 'admin'" class="danger-button" role="menuitem" type="button"
+                    @click="closeMoreMenu(); remove()">Delete asset</button></div>
+              </Transition>
+            </div>
           </div>
           <p v-if="actionError" class="error" role="alert">{{ actionError }}</p>
           <p v-if="actionMessage" class="success" role="status">{{ actionMessage }}</p>
@@ -409,26 +518,27 @@ watch(() => props.assetId, id => {
             </div>
             <div>
               <dt>Uploaded by</dt>
-              <dd>{{ asset.allowed_users?.figma_handle ?? 'Unknown' }}</dd>
+              <dd class="uploader-info">
+                <img v-if="asset.allowed_users?.avatar_url" :src="asset.allowed_users.avatar_url" alt="">
+                <span>{{ asset.allowed_users?.figma_handle ?? 'Unknown' }}</span>
+              </dd>
             </div>
           </dl>
-          <section v-if="!editing" class="meta-section">
-            <h2>Tags</h2>
-            <p>{{asset.asset_tags.map(item => item.tags?.name).filter(Boolean).join(', ') || 'No tags'}}</p>
+          <section v-if="!editing && asset.asset_tags.some(item => item.tags)" class="meta-section">
+            <ul class="meta-tags" aria-label="Asset tags">
+              <li v-for="item in asset.asset_tags" v-show="item.tags" :key="item.tags?.id">
+                {{ item.tags?.name }}
+              </li>
+            </ul>
           </section>
-          <section class="meta-section">
-            <h2>Version history</h2>
-            <ol>
-              <li v-for="item in asset.versions" :key="item.id"><strong>Version {{ item.version }}</strong><span>{{
-                item.width }}
-                  × {{ item.height }} · {{ new Date(item.created_at).toLocaleDateString() }}</span></li>
-            </ol>
-          </section>
+
         </aside>
       </main>
       <section v-if="boardPickerOpen" class="board-picker" role="dialog" aria-modal="true"
         aria-labelledby="board-picker-title">
-        <header><h2 id="board-picker-title">Add to board</h2></header>
+        <header>
+          <h2 id="board-picker-title">Add to board</h2>
+        </header>
         <label class="board-picker-search">
           <Search :size="22" aria-hidden="true" /><span class="sr-only">Search boards</span><input v-model="boardSearch"
             type="search" placeholder="Search" autofocus>
@@ -437,18 +547,23 @@ watch(() => props.assetId, id => {
           <button v-for="board in filteredEligibleBoards" :key="board.id" class="board-picker-option" type="button"
             :disabled="Boolean(addingBoardId)" :aria-label="`Add asset to ${board.title}`"
             @click="addToBoard(board.id)">
-            <span class="board-picker-preview" :class="{ 'is-empty': !board.previewAssets.length }"><AssetMedia
-                v-if="board.previewAssets[0]" :src="board.previewAssets[0].previewUrl" :mime-type="board.previewAssets[0].mime_type" alt="" loading="lazy" /><span v-else aria-hidden="true" /></span>
+            <span class="board-picker-preview" :class="{ 'is-empty': !board.previewAssets.length }">
+              <AssetMedia v-if="board.previewAssets[0]" :src="board.previewAssets[0].previewUrl"
+                :mime-type="board.previewAssets[0].mime_type" alt="" loading="lazy" /><span v-else aria-hidden="true" />
+            </span>
             <span class="board-picker-info"><strong>{{ board.title }}</strong><span>{{ addingBoardId === board.id ?
               'Adding…' :
-              `${board.itemCount} ${board.itemCount===1 ? 'item' : 'items'}` }}</span></span>
+              `${board.itemCount} ${board.itemCount === 1 ? 'item' : 'items'}` }}</span></span>
           </button>
-          <p v-if="!filteredEligibleBoards.length" class="board-picker-empty">No boards found</p>
+          <p v-if="boardStatus === 'pending'" class="board-picker-empty">Loading boards…</p>
+          <p v-else-if="!filteredEligibleBoards.length" class="board-picker-empty">No boards found</p>
         </div>
         <footer class="board-picker-footer"><button class="button" type="button"
             @click="boardCreator?.openCreate()">Create
-            board</button><button class="button-secondary board-picker-cancel" type="button" aria-label="Close board picker"
-            @click="boardPickerOpen = false"><X :size="20" aria-hidden="true" /></button>
+            board</button><button class="button-secondary board-picker-cancel" type="button"
+            aria-label="Close board picker" @click="boardPickerOpen = false">
+            <X :size="20" aria-hidden="true" />
+          </button>
           <ShareCollection ref="boardCreator" hide-trigger @created="refreshBoards" />
         </footer>
       </section>
@@ -458,6 +573,9 @@ watch(() => props.assetId, id => {
 
 <style scoped>
 .asset-dialog {
+  --asset-overlay-fg: rgb(0 0 0 / .82);
+  --asset-overlay-muted: rgb(0 0 0 / .5);
+  --asset-overlay-divider: rgb(0 0 0 / .14);
   width: 100%;
   max-width: none;
   height: 100dvh;
@@ -465,11 +583,10 @@ watch(() => props.assetId, id => {
   margin: 0;
   padding: 0;
   border: 0;
-  color: var(--color-fg);
-  background: var(--color-bg);
-  box-shadow: 0 24px 80px rgb(0 0 0/.18);
+  color: var(--asset-overlay-fg);
+  background: transparent;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   overflow: visible;
   overscroll-behavior: contain;
   transform: translateY(0);
@@ -478,9 +595,26 @@ watch(() => props.assetId, id => {
   transition-timing-function: cubic-bezier(.2, 0, 0, 1), ease-out
 }
 
+.asset-dialog::before {
+  content: '';
+  position: fixed;
+  z-index: 0;
+  inset: 0;
+  pointer-events: none;
+  background: rgb(255 255 255 / .72);
+  backdrop-filter: blur(var(--filter-overlay-blur));
+  -webkit-backdrop-filter: blur(var(--filter-overlay-blur))
+}
+
+.overlay-content {
+  position: relative;
+  z-index: 1
+}
+
 .asset-dialog::backdrop {
-  background: rgb(0 0 0/.24);
-  backdrop-filter: blur(3px);
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   transition-property: background-color, backdrop-filter;
   transition-duration: .2s;
   transition-timing-function: ease-out
@@ -509,40 +643,16 @@ watch(() => props.assetId, id => {
   }
 }
 
-.overlay-toolbar {
-  z-index: 2;
-  display: grid;
-  grid-template-columns: 1fr 1fr auto;
-  align-items: center;
-  gap: var(--space);
-  min-height: calc(44px + var(--space)*2);
-  padding: var(--space);
-  background: var(--color-bg);
-  backdrop-filter: blur(12px)
-}
-
-.close-button {
-  width: 44px;
-  padding: 0;
-  display: grid;
-  place-items: center;
-  color: #000;
-  background: var(--color-surface)
-}
-
-.close-button svg {
-  width: 22px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.7
+.asset-dialog .muted {
+  color: var(--asset-overlay-muted)
 }
 
 .overlay-content {
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(20rem, .65fr);
+  grid-template-columns: minmax(0, 1.9fr) minmax(18rem, .5fr);
   gap: calc(var(--space)*2);
-  padding: 0 var(--space) var(--space);
+  padding: var(--page-padding);
   overflow: visible
 }
 
@@ -552,6 +662,7 @@ watch(() => props.assetId, id => {
   min-height: 0;
   background: var(--bg);
   border-radius: var(--radius);
+  clip-path: inset(0 round var(--radius));
   overflow: hidden;
   transition-property: transform, opacity;
   transition-duration: .24s;
@@ -580,12 +691,13 @@ watch(() => props.assetId, id => {
   white-space: nowrap
 }
 
-.asset-visual :is(img,video) {
+.asset-visual :is(img, video) {
   position: absolute;
   inset: 0;
   display: block;
   width: 100%;
   height: 100%;
+  border-radius: inherit;
   object-fit: contain
 }
 
@@ -598,12 +710,29 @@ watch(() => props.assetId, id => {
 .skeleton-actions span,
 .skeleton-rows span {
   background: var(--color-surface);
+  opacity: .4;
 }
 
 .skeleton-panel {
   display: grid;
   align-content: start;
   gap: var(--space);
+}
+
+@media(min-width:761px) {
+  .overlay-loading {
+    position: absolute;
+    z-index: 1;
+    inset: 0;
+    background: transparent;
+    opacity: 1;
+    transition: opacity 140ms ease-out;
+    pointer-events: none;
+  }
+
+  .overlay-loading.is-revealing {
+    opacity: 0;
+  }
 }
 
 .skeleton-line {
@@ -715,17 +844,49 @@ aside {
 }
 
 .asset-status {
-  color: var(--color-muted);
+  color: var(--asset-overlay-muted);
   text-transform: capitalize
 }
 
 h1 {
-  margin: .3em 0
+  /* margin: .3em 0 */
+  font-size: calc(var(--font-size-h2)/1.25)
+}
+
+.asset-title-input {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: calc(1lh + .22em);
+  margin-block: -.08em -.14em;
+  padding-block: .08em .14em;
+  padding-inline: 0;
+  overflow: hidden;
+  resize: none;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  field-sizing: content;
+}
+
+.asset-title-input:focus {
+  border-bottom-color: currentColor;
+  outline: 0;
+}
+
+.asset-title-input:disabled {
+  opacity: var(--muted);
 }
 
 .description {
   max-width: 38rem;
-  color: var(--color-muted);
+  color: var(--asset-overlay-muted);
   line-height: 1.35
 }
 
@@ -733,8 +894,12 @@ h1 {
 .action-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--filter-action-gap);
   margin: var(--space) 0;
+}
+
+.primary-actions {
+  flex-wrap: nowrap
 }
 
 .primary-actions> :first-child,
@@ -746,15 +911,51 @@ h1 {
 .primary-actions>.action-button.action-button,
 .primary-actions>.approval-toggle,
 .primary-actions>.asset-more,
-.primary-actions>.asset-more>summary {
+.primary-actions>.asset-more>button {
   box-sizing: border-box;
   height: var(--control-height);
   min-height: var(--control-height);
 }
 
+.primary-actions>.button,
+.primary-actions>.action-button.action-button,
+.primary-actions>.approval-toggle,
+.primary-actions>.asset-more>button {
+  margin: 0;
+  border: 0;
+  color: var(--filter-overlay-panel-color);
+  background: var(--filter-overlay-panel-background);
+  box-shadow: none;
+  opacity: 1;
+  backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
+  -webkit-backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
+  transition:
+    scale 150ms ease-out,
+    background-color 150ms ease-out;
+}
+
+@media (hover: hover) and (pointer: fine) {
+
+  .primary-actions>.button:hover,
+  .primary-actions>.action-button.action-button:hover,
+  .primary-actions>.approval-toggle:hover,
+  .primary-actions>.asset-more>button:hover {
+    color: var(--filter-overlay-panel-color);
+    background: var(--filter-overlay-control-hover-background);
+    opacity: 1;
+  }
+}
+
 .primary-actions>.action-button.action-button {
   margin-left: 0;
-  padding-inline: 1.25rem
+  width: var(--control-height);
+  min-width: var(--control-height);
+  padding: 0
+}
+
+.primary-actions .figma-mark {
+  flex: 0 0 auto;
+  transform: translateY(-1px)
 }
 
 .approval-toggle {
@@ -773,7 +974,7 @@ h1 {
   position: relative
 }
 
-.asset-more summary {
+.asset-more>button {
   width: var(--control-height);
   height: var(--control-height);
   min-height: var(--control-height);
@@ -781,32 +982,81 @@ h1 {
   place-items: center;
   margin: 0;
   padding: 0;
-  list-style: none;
   cursor: pointer
-}
-
-.asset-more summary::-webkit-details-marker {
-  display: none
 }
 
 .asset-more-menu {
   position: absolute;
   z-index: 5;
   right: 0;
-  bottom: calc(100% + 8px);
-  min-width: max-content;
+  top: calc(100% + var(--filter-action-gap));
+  min-width: 12rem;
   display: grid;
-  gap: 4px;
-  padding: 8px;
-  border-radius: calc(var(--radius)*2);
-  background: var(--color-bg);
-  box-shadow: 0 12px 40px rgb(0 0 0/.18)
+  gap: calc(var(--space) / 8);
+  padding: calc(var(--space) / 4);
+  border-radius: var(--radius);
+  color: var(--material-tinted-fg);
+  background: var(--material-tinted-bg);
+  box-shadow: 0 calc(var(--space) / 2) calc(var(--space) * 2) rgb(0 0 0/.14);
+  backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
+  -webkit-backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation))
 }
 
-.asset-more-menu .button-secondary.button-secondary {
+.asset-more-menu>button {
   width: 100%;
+  min-height: var(--control-height);
   margin: 0;
-  justify-content: flex-start
+  padding-inline: calc(var(--space) / 2);
+  justify-content: flex-start;
+  border-radius: calc(var(--radius) - var(--space) / 4);
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  opacity: 1;
+}
+
+.asset-more-menu>button:is(:hover,:focus-visible) {
+  color: inherit;
+  background: var(--material-tinted-hover-bg);
+  opacity: 1;
+}
+
+.asset-more-menu>.danger-button {
+  color: var(--color-danger);
+  background: transparent
+}
+
+.asset-more-menu>.danger-button:is(:hover,:focus-visible) {
+  color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 14%, transparent)
+}
+
+.asset-menu-enter-active,
+.asset-menu-leave-active {
+  transition-property: opacity, translate, scale;
+  transition-duration: 120ms;
+  transition-timing-function: ease-out;
+  transform-origin: top right;
+}
+
+.asset-menu-enter-from,
+.asset-menu-leave-to {
+  opacity: 0;
+  translate: 0 calc(var(--space) / -4);
+  scale: .98;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .asset-menu-enter-active,
+  .asset-menu-leave-active {
+    transition-property: opacity;
+  }
+
+  .asset-menu-enter-from,
+  .asset-menu-leave-to {
+    translate: none;
+    scale: 1;
+  }
 }
 
 .danger-button {
@@ -818,7 +1068,7 @@ h1 {
 }
 
 .success {
-  color: var(--color-muted)
+  color: var(--asset-overlay-muted)
 }
 
 .board-picker-trigger {
@@ -914,7 +1164,8 @@ h1 {
   padding: calc(var(--space) / 2);
   color: var(--color-fg);
   background: transparent;
-  text-align: left
+  text-align: left;
+  border-radius: var(--radius);
 }
 
 .board-picker-option:hover {
@@ -931,7 +1182,7 @@ h1 {
   background: var(--color-surface)
 }
 
-.board-picker-preview :is(img,video) {
+.board-picker-preview :is(img, video) {
   display: block;
   width: 100%;
   height: 100%;
@@ -998,7 +1249,7 @@ h1 {
 label {
   display: block;
   margin-top: var(--space);
-  color: var(--color-muted)
+  color: var(--asset-overlay-muted)
 }
 
 .edit-form {
@@ -1022,7 +1273,7 @@ label {
 
 .field-hint {
   margin-top: calc(var(--space) * -1);
-  color: var(--color-muted);
+  color: var(--asset-overlay-muted);
 }
 
 input,
@@ -1038,7 +1289,7 @@ textarea,
 
 dl {
   margin-top: calc(var(--space)*2);
-  border-top: 1px solid rgb(0 0 0/.16)
+  border-top: 1px solid var(--asset-overlay-divider)
 }
 
 dl div {
@@ -1046,15 +1297,30 @@ dl div {
   grid-template-columns: 7rem 1fr;
   gap: var(--space);
   padding: 10px 0;
-  border-bottom: 1px solid rgb(0 0 0/.16)
+  border-bottom: 1px solid var(--asset-overlay-divider)
 }
 
 dt {
-  color: var(--color-muted)
+  color: var(--asset-overlay-muted)
 }
 
 dd {
   margin: 0
+}
+
+.uploader-info {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--space) / 3)
+}
+
+.uploader-info img {
+  width: calc(var(--control-height) * .5);
+  height: calc(var(--control-height) * .5);
+  flex: 0 0 auto;
+  border-radius: 50%;
+  object-fit: cover;
+  outline: 1px solid oklch(0 0 0 / .1)
 }
 
 .meta-section {
@@ -1066,7 +1332,28 @@ h2 {
 }
 
 .meta-section p {
-  color: var(--color-muted)
+  color: var(--asset-overlay-muted)
+}
+
+.meta-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--space) / 3);
+  margin: 0;
+  padding: 0;
+  list-style: none
+}
+
+.meta-tags li {
+  min-height: calc(var(--control-height) * .75);
+  display: inline-flex;
+  align-items: center;
+  padding-inline: calc(var(--space) / 2);
+  border: 1px solid var(--asset-overlay-divider);
+  border-radius: 999px;
+  color: var(--asset-overlay-fg);
+  font-size: .875rem;
+  line-height: 1
 }
 
 ol {
@@ -1082,7 +1369,7 @@ li {
 }
 
 li span {
-  color: var(--color-muted)
+  color: var(--asset-overlay-muted)
 }
 
 .overlay-state {
@@ -1095,9 +1382,20 @@ li span {
 
 @media(max-width:760px) {
   .asset-dialog {
-    color: var(--color-fg);
+    --asset-overlay-fg: var(--color-fg);
+    --asset-overlay-muted: var(--color-muted);
+    --asset-overlay-divider: rgb(0 0 0 / .16);
+    color: var(--asset-overlay-fg);
     background: var(--color-bg);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
     grid-template-rows: minmax(0, 1fr)
+  }
+
+  .asset-dialog::before {
+    background: var(--color-bg);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none
   }
 
   .overlay-content {
@@ -1121,8 +1419,9 @@ li span {
     user-select: none
   }
 
-  .asset-visual :is(img,video) {
+  .asset-visual :is(img, video) {
     padding: max(calc(var(--space)*3), env(safe-area-inset-top)) var(--space) max(calc(var(--space)*3), env(safe-area-inset-bottom));
+    border-radius: var(--radius-mobile);
     object-fit: contain;
     object-position: 50% calc(50% - 2dvh);
     pointer-events: none;
@@ -1148,28 +1447,6 @@ li span {
 
   .asset-visual .next-preview {
     transform: translate3d(calc(100% + var(--swipe-x)), 0, 0)
-  }
-
-  .overlay-toolbar {
-    position: absolute;
-    z-index: 5;
-    inset: 0 0 auto;
-    min-height: calc(44px + var(--space)*2);
-    display: flex;
-    justify-content: flex-end;
-    padding-top: max(var(--space), env(safe-area-inset-top));
-    color: var(--color-fg);
-    background: transparent;
-    backdrop-filter: none;
-    pointer-events: none
-  }
-
-  .overlay-toolbar>span {
-    display: none
-  }
-
-  .close-button {
-    display: none
   }
 
   .pull-handle {

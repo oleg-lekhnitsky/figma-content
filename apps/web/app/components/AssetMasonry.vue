@@ -24,6 +24,7 @@ const props = withDefaults(defineProps<{
   stableColumns?: boolean
   animateChanges?: boolean
   canApprove?: boolean
+  editableTitles?: boolean
   viewSettings?: BoardViewSettings
 }>(), {
   interactive: false,
@@ -37,12 +38,14 @@ const props = withDefaults(defineProps<{
   rowFlow: false,
   stableColumns: false,
   animateChanges: false,
-  canApprove: false
+  canApprove: false,
+  editableTitles: false
 })
 const emit = defineEmits<{
   toggleSelection: [asset: T]
   reorder: [fromIndex: number, toIndex: number]
   toggleApproval: [asset: T]
+  rename: [asset: T, title: string]
 }>()
 const inheritedViewSettings = inject<Ref<BoardViewSettings> | undefined>('boardViewSettings', undefined)
 const effectiveViewSettings = computed(() => props.viewSettings ?? inheritedViewSettings?.value)
@@ -92,6 +95,28 @@ const openAsset = (event: MouseEvent, id: string) => {
   }
 }
 const cardStagger = (index: number) => `${Math.min(index * 18, 144)}ms`
+const commitTitle = (asset: T, event: Event) => {
+  const input = event.currentTarget as HTMLInputElement
+  const title = input.value.trim()
+  if (!title) {
+    input.value = asset.title
+    return
+  }
+  if (title !== asset.title) emit('rename', asset, title)
+}
+const handleTitleKeydown = (asset: T, event: KeyboardEvent) => {
+  const input = event.currentTarget as HTMLInputElement
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    input.value = asset.title
+    input.blur()
+    return
+  }
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    input.blur()
+  }
+}
 const moveDraggedTo = (index: number) => {
   if (!draggedId.value) return
   const fromIndex = renderedAssets.value.findIndex(asset => asset.id === draggedId.value)
@@ -266,7 +291,10 @@ onBeforeUnmount(() => {
       </div>
       <div class="card-body">
         <div>
-          <component :is="headingTag" class="card-title"><NuxtLink v-if="interactive" :to="assetLink(asset.id)">{{ asset.title }}</NuxtLink><template v-else>{{ asset.title }}</template></component>
+          <component :is="headingTag" class="card-title" :title="asset.title">
+            <input v-if="editableTitles" class="card-title-input" type="text" :value="asset.title" maxlength="160" :aria-label="`Rename ${asset.title}`" @click.stop @pointerdown.stop @change="commitTitle(asset, $event)" @keydown="handleTitleKeydown(asset, $event)">
+            <NuxtLink v-else-if="interactive" :to="assetLink(asset.id)">{{ asset.title }}</NuxtLink><template v-else>{{ asset.title }}</template>
+          </component>
           <slot name="details" :asset="asset"><p v-if="interactive">{{ projectAndTags(asset) }}</p><p v-else-if="asset.description">{{ asset.description }}</p></slot>
         </div>
         <slot name="actions" :asset="asset"><span v-if="interactive" class="card-meta card-status">{{ asset.status }}</span></slot>
@@ -289,7 +317,8 @@ onBeforeUnmount(() => {
 .preview-link{display:block;width:100%;height:100%}.preview-link:hover,.card-body a:hover{opacity:1}
 .preview :is(img,video){display:block;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .12s ease-out}.preview :is(img,video).is-loaded{opacity:1}
 .asset-card.is-priority .preview :is(img,video){transition:none}
-.card-body{display:flex;justify-content:space-between;align-items:flex-start;gap:var(--space);padding-top:8px}.card-body .card-title,.card-body :deep(p){margin:0;font:inherit;letter-spacing:inherit}.card-body a{text-decoration:none}.card-body :deep(p),.card-meta{opacity:.3}.card-meta{white-space:nowrap}.card-status{text-transform:capitalize}
+.card-body{display:flex;justify-content:space-between;align-items:flex-start;gap:var(--space);padding-top:8px}.card-body>div{min-width:0;flex:1}.card-body .card-title,.card-body :deep(p){margin:0;font:inherit;letter-spacing:inherit}.card-title{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.card-title a{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.card-body a{text-decoration:none}.card-body :deep(p),.card-meta{opacity:.3}.card-meta{white-space:nowrap}.card-status{text-transform:capitalize}
+.card-title-input{box-sizing:border-box;display:block;width:100%;min-width:0;overflow:hidden;padding:0;border:0;border-bottom:1px solid transparent;border-radius:0;color:inherit;background:transparent;font:inherit;font-weight:inherit;letter-spacing:inherit;line-height:inherit;text-overflow:ellipsis;white-space:nowrap}.card-title-input:focus{border-bottom-color:currentColor;outline:0;text-overflow:clip}.card-title-input:focus-visible{outline:0}
 .card-quick-actions{position:absolute;z-index:2;left:50%;bottom:10px;display:flex;align-items:center;gap:calc(var(--space)/4);visibility:hidden;transform:translate(-50%,8px) scale(.96);pointer-events:none;transition:transform 150ms cubic-bezier(.2,0,0,1);transition-behavior:allow-discrete}
 .figma-button,.card-approval-toggle{min-height:32px;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:999px;color:var(--material-tinted-fg);background:var(--material-tinted-bg);font-size:12px;text-decoration:none;white-space:nowrap;box-shadow:none;-webkit-backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));transition:scale 150ms,background-color 150ms cubic-bezier(.2,0,0,1)}
 .figma-button{padding:0 13px}.card-approval-toggle{width:32px;min-width:32px;padding:0}
