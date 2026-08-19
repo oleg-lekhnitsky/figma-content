@@ -27,9 +27,12 @@ const renderedOverlay = ref(props.overlay)
 const overlayClosing = ref(false)
 const sheetDragY = ref(0)
 const sheetDragging = ref(false)
+const sheetDismissing = ref(false)
 let sheetPointerId: number | undefined
 let sheetStartY = 0
-let sheetStartTime = 0
+let sheetLastY = 0
+let sheetLastTime = 0
+let sheetReleaseVelocity = 0
 let previousBodyOverflow = ''
 let previousRootOverflow = ''
 let pageScrollLocked = false
@@ -68,6 +71,7 @@ const finishOverlayClose = () => {
   overlayClosing.value = false
   sheetDragY.value = 0
   sheetDragging.value = false
+  sheetDismissing.value = false
   sheetPointerId = undefined
 }
 
@@ -90,6 +94,7 @@ watch(() => [props.visible, props.overlay] as const, async ([visible, overlay]) 
     overlayClosing.value = false
     sheetDragY.value = 0
     sheetDragging.value = false
+    sheetDismissing.value = false
     sheetPointerId = undefined
     return
   }
@@ -119,24 +124,37 @@ const startSheetDrag = (event: PointerEvent) => {
   if (!handle) return
   sheetPointerId = event.pointerId
   sheetStartY = event.clientY
-  sheetStartTime = performance.now()
+  sheetLastY = event.clientY
+  sheetLastTime = performance.now()
+  sheetReleaseVelocity = 0
+  sheetDismissing.value = false
   sheetDragging.value = true
   handle.setPointerCapture(event.pointerId)
 }
 
 const moveSheetDrag = (event: PointerEvent) => {
   if (!sheetDragging.value || event.pointerId !== sheetPointerId) return
+  const now = performance.now()
+  const elapsed = now - sheetLastTime
+  if (elapsed > 0) sheetReleaseVelocity = (event.clientY - sheetLastY) / elapsed
+  sheetLastY = event.clientY
+  sheetLastTime = now
   sheetDragY.value = Math.max(0, event.clientY - sheetStartY)
 }
 
 const finishSheetDrag = (event: PointerEvent) => {
   if (!sheetDragging.value || event.pointerId !== sheetPointerId) return
-  const elapsed = Math.max(performance.now() - sheetStartTime, 1)
-  const velocity = sheetDragY.value / elapsed
+  const velocity = performance.now() - sheetLastTime < 120 ? sheetReleaseVelocity : 0
   sheetDragging.value = false
   sheetPointerId = undefined
-  if (sheetDragY.value > 56 || velocity > .45) {
-    emit('close')
+  const sheet = panelRoot.value?.querySelector<HTMLElement>('.asset-filter-controls')
+  const dismissDistance = Math.min(96, (sheet?.offsetHeight ?? window.innerHeight) * .18)
+  if (sheetDragY.value > dismissDistance || velocity > .45) {
+    sheetDismissing.value = true
+    requestAnimationFrame(() => {
+      sheetDragY.value = (sheet?.offsetHeight ?? window.innerHeight) + 48
+      emit('close')
+    })
     return
   }
   sheetDragY.value = 0
@@ -145,6 +163,7 @@ const finishSheetDrag = (event: PointerEvent) => {
 const cancelSheetDrag = (event: PointerEvent) => {
   if (!sheetDragging.value || event.pointerId !== sheetPointerId) return
   sheetDragging.value = false
+  sheetDismissing.value = false
   sheetPointerId = undefined
   sheetDragY.value = 0
 }
@@ -166,7 +185,7 @@ onBeforeUnmount(() => {
   <Teleport to="body">
     <Transition name="selection-panel" :css="!instant" @after-leave="$emit('afterLeave')">
       <div
-        v-if="visible" ref="panelRoot" class="selection-panel" :class="{ 'selection-panel--wide': wide, 'selection-panel--bare': bare, 'selection-panel--raised': raised, 'selection-panel--filter-overlay': renderedOverlay, 'selection-panel--filter-closing': overlayClosing, 'selection-panel--instant': instant, 'selection-panel--sheet-dragging': sheetDragging }" role="region"
+        v-if="visible" ref="panelRoot" class="selection-panel" :class="{ 'selection-panel--wide': wide, 'selection-panel--bare': bare, 'selection-panel--raised': raised, 'selection-panel--filter-overlay': renderedOverlay, 'selection-panel--filter-closing': overlayClosing, 'selection-panel--instant': instant, 'selection-panel--sheet-dragging': sheetDragging, 'selection-panel--sheet-dismissing': sheetDismissing }" role="region"
         :style="renderedOverlay ? { '--sheet-drag-y': `${sheetDragY}px` } : undefined"
         :aria-label="label" @click="handlePanelClick" @click.self="handleBackdropClick" @animationend.self="handleOverlayAnimationEnd"
         @pointerdown="startSheetDrag" @pointermove="moveSheetDrag" @pointerup="finishSheetDrag"
@@ -266,8 +285,9 @@ onBeforeUnmount(() => {
     animation: selection-sheet-in var(--filter-overlay-enter-duration) var(--filter-overlay-enter-easing) both;
   }
 
-  .selection-panel--filter-overlay.selection-panel--filter-closing :deep(.asset-filter-controls) {
-    animation: selection-sheet-out 260ms var(--filter-overlay-exit-easing) both;
+  .selection-panel--filter-overlay.selection-panel--sheet-dismissing :deep(.asset-filter-controls) {
+    animation: none;
+    transition: transform 260ms var(--filter-overlay-exit-easing);
   }
 
   .selection-panel--wide {
@@ -296,11 +316,6 @@ onBeforeUnmount(() => {
 @keyframes selection-sheet-in {
   from { translate: 0 2rem; opacity: 0; }
   to { translate: 0 0; opacity: 1; }
-}
-
-@keyframes selection-sheet-out {
-  from { translate: 0 0; opacity: 1; }
-  to { translate: 0 1rem; opacity: 0; }
 }
 
 </style>
