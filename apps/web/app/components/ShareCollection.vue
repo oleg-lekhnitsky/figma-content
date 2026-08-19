@@ -565,7 +565,7 @@ ul {
 .board-menu summary {
   min-height: 32px;
   height: 32px;
-  font-size: 12px;
+  font-size: var(--font-size-label);
 }
 
 .board-menu summary {
@@ -607,7 +607,7 @@ ul {
 }
 
 .board-meta {
-  font-size: 14px;
+  font-size: var(--font-size-body-compact);
   line-height: 1.2;
 }
 
@@ -746,7 +746,7 @@ ul {
   top: 3px;
   right: 0;
   color: var(--color-muted);
-  font-size: 12px;
+  font-size: var(--font-size-label);
   line-height: 1.2
 }
 

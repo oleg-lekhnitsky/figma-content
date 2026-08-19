@@ -26,13 +26,18 @@
   --font-size-h2: clamp(2.25rem, 3vw, 4rem);
   --font-size-h3: 24px;
   --font-size-h1-mobile: clamp(2.75rem, 13vw, 4.5rem);
+  --font-size-body: 1rem;
+  --font-size-body-compact: .875rem;
+  --font-size-label: .75rem;
+  --font-size-caption: .6875rem;
+  --font-size-control: .875rem;
   --font-family-ui:
     "ABC Diatype Cyrillic Trial", "Helvetica Now Display", "Helvetica Neue",
     Helvetica, Arial, sans-serif;
   --icon-stroke-width: 1.5;
   color-scheme: light;
   font-family: var(--font-family-ui);
-  font-size: 16px;
+  font-size: var(--font-size-body);
   font-weight: 700;
   letter-spacing: -0.015em;
   line-height: 1.15;
@@ -317,6 +322,7 @@ textarea {
   left: 0;
   width: min(280px, calc(100vw - var(--space) * 2));
   padding: calc(var(--space) / 2);
+  overflow: hidden;
   border: 0;
   border-radius: 18px;
   color: var(--material-tinted-fg);
@@ -326,14 +332,17 @@ textarea {
   backdrop-filter: blur(var(--material-tinted-blur))
     saturate(var(--material-tinted-saturation));
   box-shadow: 0 18px 50px rgb(0 0 0 / 0.14);
-  font-size: 14px;
+  font-size: var(--font-size-body-compact);
   font-weight: 650;
   letter-spacing: -0.01em;
+  isolation: isolate;
+  transform: translateZ(0);
+  contain: paint;
 }
 .workspace-popover > p {
   margin: calc(var(--space) / 2);
   color: color-mix(in srgb, var(--material-tinted-fg) 64%, transparent);
-  font-size: 12px;
+  font-size: var(--font-size-label);
 }
 .workspace-popover > button {
   display: flex;
@@ -358,7 +367,7 @@ textarea {
 }
 .workspace-popover small {
   color: color-mix(in srgb, var(--material-tinted-fg) 64%, transparent);
-  font-size: 11px;
+  font-size: var(--font-size-caption);
   font-weight: 550;
   text-transform: capitalize;
 }

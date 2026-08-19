@@ -158,8 +158,8 @@ const showAllAssets = () => {
 <style scoped>
 .board-video-composer {
   --video-panel-radius: clamp(1.25rem, 2vw, 2rem);
-  --video-type-caption: 11px;
-  --video-type-body: 12px;
+  --video-type-caption: var(--font-size-caption);
+  --video-type-body: var(--font-size-label);
   --video-weight-regular: 500;
   --video-weight-strong: 600;
   --video-text-muted: color-mix(in srgb, var(--filter-overlay-panel-color) 58%, transparent);
@@ -202,7 +202,7 @@ const showAllAssets = () => {
 }
 
 .video-composer-heading>div>p {
-  font-size: 12px;
+  font-size: var(--font-size-label);
   opacity: .62
 }
 
@@ -1281,6 +1281,7 @@ const showAllAssets = () => {
     height: min(78dvh, 46rem);
     max-height: min(78dvh, 46rem);
     display: block;
+    padding-bottom: env(safe-area-inset-bottom);
     overflow: hidden;
     border-radius: calc(var(--radius-mobile)*2) calc(var(--radius-mobile)*2) 0 0;
     background: var(--filter-overlay-panel-background-mobile);
@@ -1366,10 +1367,11 @@ const showAllAssets = () => {
 
   :deep(.video-mobile-panel.is-mobile-open .video-panel-scroll),
   .video-assets-panel.is-mobile-open :deep(.video-panel-scroll) {
-    max-height: min(78dvh, 46rem);
+    height: 100%;
+    max-height: 100%;
     padding-top: calc(var(--space)*2);
-    padding-bottom: calc(var(--space)*3 + env(safe-area-inset-bottom));
-    scroll-padding-bottom: calc(var(--space)*3 + env(safe-area-inset-bottom))
+    padding-bottom: calc(var(--space)*3);
+    scroll-padding-bottom: calc(var(--space)*3)
   }
 
   :deep(.video-inspector label:has(> .video-range-input)),

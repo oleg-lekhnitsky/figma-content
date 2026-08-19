@@ -67,6 +67,7 @@ const columnOptions: Array<{ value: BoardViewSettings['columns']; label: string 
   color: inherit;
   font-size: var(--filter-option-font-size);
   font-weight: 700;
+  line-height: 1;
 }
 
 </style>

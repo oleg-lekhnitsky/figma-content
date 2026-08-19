@@ -257,6 +257,14 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 520px) {
+  .selection-panel--filter-overlay :deep(.asset-filter-controls) {
+    animation: selection-sheet-in var(--filter-overlay-enter-duration) var(--filter-overlay-enter-easing) both;
+  }
+
+  .selection-panel--filter-overlay.selection-panel--filter-closing :deep(.asset-filter-controls) {
+    animation: selection-sheet-out 260ms var(--filter-overlay-exit-easing) both;
+  }
+
   .selection-panel--wide {
     width: calc(100vw - var(--space)*2);
     box-sizing: border-box;
@@ -278,6 +286,16 @@ onBeforeUnmount(() => {
   .selection-panel--wide :slotted(button) {
     flex: 0 0 auto
   }
+}
+
+@keyframes selection-sheet-in {
+  from { translate: 0 2rem; opacity: 0; }
+  to { translate: 0 0; opacity: 1; }
+}
+
+@keyframes selection-sheet-out {
+  from { translate: 0 0; opacity: 1; }
+  to { translate: 0 1rem; opacity: 0; }
 }
 
 </style>

@@ -1330,7 +1330,7 @@ dd {
 }
 
 h2 {
-  font-size: 1rem
+  font-size: var(--font-size-body)
 }
 
 .meta-section p {
@@ -1354,7 +1354,7 @@ h2 {
   border: 1px solid var(--asset-overlay-divider);
   border-radius: 999px;
   color: var(--asset-overlay-fg);
-  font-size: .875rem;
+  font-size: var(--font-size-body-compact);
   line-height: 1
 }
 
@@ -1384,20 +1384,20 @@ li span {
 
 @media(max-width:760px) {
   .asset-dialog {
-    --asset-overlay-fg: var(--color-fg);
-    --asset-overlay-muted: var(--color-muted);
-    --asset-overlay-divider: rgb(0 0 0 / .16);
+    --asset-overlay-fg: rgb(0 0 0 / .82);
+    --asset-overlay-muted: rgb(0 0 0 / .5);
+    --asset-overlay-divider: rgb(0 0 0 / .14);
     color: var(--asset-overlay-fg);
-    background: var(--color-bg);
+    background: transparent;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
     grid-template-rows: minmax(0, 1fr)
   }
 
   .asset-dialog::before {
-    background: var(--color-bg);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none
+    background: rgb(255 255 255 / .72);
+    backdrop-filter: blur(var(--filter-overlay-blur));
+    -webkit-backdrop-filter: blur(var(--filter-overlay-blur))
   }
 
   .overlay-content {
@@ -1415,7 +1415,7 @@ li span {
     width: 100%;
     height: 100dvh;
     border-radius: 0;
-    background: var(--color-bg);
+    background: transparent;
     clip-path: none;
     touch-action: none;
     user-select: none
@@ -1473,7 +1473,7 @@ li span {
     width: 44px;
     height: 5px;
     border-radius: 999px;
-    background: color-mix(in srgb, var(--color-fg) 34%, transparent)
+    background: color-mix(in srgb, var(--asset-overlay-fg) 34%, transparent)
   }
 
   .details-hint {
@@ -1488,7 +1488,7 @@ li span {
     justify-content: center;
     gap: 2px;
     padding: 4px 16px;
-    color: var(--color-muted);
+    color: var(--asset-overlay-muted);
     background: transparent;
     translate: -50% 0
   }
@@ -1503,7 +1503,7 @@ li span {
   }
 
   .details-hint span {
-    font-size: 12px
+    font-size: var(--font-size-label)
   }
 
   .asset-navigation {
@@ -1516,8 +1516,8 @@ li span {
     display: block;
     box-sizing: border-box;
     padding: calc(var(--space)*2) var(--space) max(calc(var(--space)*3), env(safe-area-inset-bottom));
-    color: var(--color-fg);
-    background: var(--color-bg);
+    color: var(--asset-overlay-fg);
+    background: transparent;
     overflow: visible
   }
 

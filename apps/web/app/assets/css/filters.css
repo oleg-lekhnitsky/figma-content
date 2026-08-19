@@ -41,11 +41,11 @@
   --filter-option-gap: .375rem;
   --filter-option-height: 2.125rem;
   --filter-option-padding: .75rem;
-  --filter-option-font-size: .875rem;
+  --filter-option-font-size: var(--font-size-control);
   --filter-action-gap: .5rem;
   --filter-action-height: 2.75rem;
   --filter-action-padding: 1.125rem;
-  --filter-action-font-size: .875rem;
+  --filter-action-font-size: var(--font-size-control);
   --filter-action-transition-duration: 260ms;
   --filter-action-transition-distance: .5rem;
   --filter-morph-duration: var(--filter-overlay-enter-duration);
@@ -240,7 +240,7 @@ button.filter-dropdown-trigger { display: flex; align-items: center; white-space
   .filter-dropdown,
   .filter-dropdown-trigger.filter-dropdown-trigger { height: var(--filter-control-height-mobile); min-height: var(--filter-control-height-mobile); }
   .asset-filter-controls > .search-field { flex: 1 1 auto; }
-  .asset-filter-controls > .search-field > input { width: 100%; max-width: none; font-size: 1rem; }
+  .asset-filter-controls > .search-field > input { width: 100%; max-width: none; font-size: var(--font-size-body); }
 }
 
 /* OEM journal-inspired full-screen filter takeover. */
@@ -724,7 +724,6 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
     -webkit-overflow-scrolling: touch;
     transform: translate3d(0, var(--sheet-drag-y, 0px), 0);
     transition: transform 180ms var(--filter-overlay-enter-easing);
-    animation: filter-sheet-in var(--filter-overlay-enter-duration) var(--filter-overlay-enter-easing) both;
   }
 
   .selection-panel--filter-overlay .filter-sheet-handle {
@@ -757,10 +756,6 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
     transition: none;
   }
 
-  .selection-panel--filter-overlay.selection-panel--filter-closing .asset-filter-controls {
-    animation: filter-sheet-out 260ms var(--filter-overlay-exit-easing) both;
-  }
-
   .selection-panel--filter-overlay > .filter-panel-toggle.is-expanded {
     display: none;
   }
@@ -788,11 +783,6 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
 @keyframes filter-sheet-in {
   from { translate: 0 2rem; opacity: 0; }
   to { translate: 0 0; opacity: 1; }
-}
-
-@keyframes filter-sheet-out {
-  from { translate: 0 0; opacity: 1; }
-  to { translate: 0 1rem; opacity: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
