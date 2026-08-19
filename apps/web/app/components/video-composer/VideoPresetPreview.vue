@@ -8,21 +8,20 @@ import VideoPresetFrame from '~/components/video-composer/VideoPresetFrame.vue'
 const props = defineProps<{ template: VideoTemplate; assets: AssetMasonryItem[]; previewing?: boolean }>()
 const previewStyle = computed<CSSProperties>(() => ({ '--preview-duration': `${Math.max(1.2, Math.min(4, props.template.preset?.secondsPerSlide || 2))}s`, '--preview-tilt': `${(props.template.preset?.tilt || props.template.preset?.rotationZ || 0) * .35}deg`, '--preview-spin': `${props.template.preset?.spin || 0}deg` } as CSSProperties))
 const previewClasses = computed(() => [`is-${props.template.collection}`, `is-${props.template.preset?.direction || 'up'}`, `is-${props.template.preset?.scaleStyle || 'bloom'}`, `grow-${props.template.preset?.growFrom || 'center'}`, `effect-${props.template.preset?.flickerEffect || 'off'}`, `drift-${props.template.preset?.driftDirection || 'up'}`])
-const previewAssets = computed(() => props.assets.length ? Array.from({ length: 4 }, (_, index) => props.assets[index % props.assets.length]!) : [])
 const frameUrl = ref('')
 const liveReady = ref(false)
+const renderGeneratedFrame = ref(false)
 watch(() => props.previewing, value => { if (!value) liveReady.value = false })
+onMounted(() => {
+  renderGeneratedFrame.value = !window.matchMedia('(max-width: 640px), (pointer: coarse)').matches
+})
 </script>
 
 <template>
   <span class="video-template-thumb video-preset-preview" :class="[previewClasses, { 'is-live-active': previewing }]"
     :style="previewStyle" aria-hidden="true"><img v-if="frameUrl" class="video-preset-first-frame" :src="frameUrl"
       alt=""><template v-else>
-      <VideoPresetFrame v-if="assets.length" :template="template" :assets="assets" @ready="frameUrl = $event" /><span
-        class="video-preset-preview-track"><img v-for="(asset, index) in previewAssets" :key="`${asset.id}-${index}`"
-          :src="asset.previewUrl" alt="" :style="{ '--preview-index': index }"><template v-if="!previewAssets.length"><i
-            v-for="index in 4" :key="index"
-            :style="{ background: template.thumbnail, '--preview-index': index - 1 }" /></template></span>
+      <VideoPresetFrame v-if="renderGeneratedFrame && assets.length" :template="template" :assets="assets" @ready="frameUrl = $event" />
     </template>
     <VideoLivePresetPreview v-if="previewing && assets.length" class="video-live-layer"
       :class="{ 'is-ready': liveReady }" :template="template" :assets="assets" @ready="liveReady = true" />
@@ -402,11 +401,11 @@ watch(() => props.previewing, value => { if (!value) liveReady.value = false })
 
 @keyframes preview-flicker-drift {
   from {
-    transform: translateY(8%)
+    transform: translateY(0%)
   }
 
   to {
-    transform: translateY(-8%)
+    transform: translateY(-0%)
   }
 }
 

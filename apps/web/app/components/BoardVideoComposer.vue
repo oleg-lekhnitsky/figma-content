@@ -17,7 +17,21 @@ type MobilePanel = 'templates' | 'scene' | 'canvas' | 'assets'
 const mobilePanel = ref<MobilePanel | null>(null)
 const mobilePanelTrigger = ref<HTMLElement | null>(null)
 const mobilePanelClose = ref<HTMLButtonElement | null>(null)
+const mobileSheetDragY = ref(0)
+const mobileSheetDragging = ref(false)
+const mobileSheetDismissing = ref(false)
+let mobileSheetPointerId: number | undefined
+let mobileSheetStartY = 0
+let mobileSheetLastY = 0
+let mobileSheetLastTime = 0
+let mobileSheetReleaseVelocity = 0
+let mobileSheetMoved = false
+let mobileSheetCloseTimer: ReturnType<typeof setTimeout> | undefined
 const openMobilePanel = async (panel: MobilePanel, event: MouseEvent) => {
+  clearTimeout(mobileSheetCloseTimer)
+  mobileSheetDragY.value = 0
+  mobileSheetDragging.value = false
+  mobileSheetDismissing.value = false
   mobilePanelTrigger.value = event.currentTarget instanceof HTMLElement ? event.currentTarget : null
   mobilePanel.value = panel
   await nextTick()
@@ -25,9 +39,64 @@ const openMobilePanel = async (panel: MobilePanel, event: MouseEvent) => {
 }
 const closeMobilePanel = async () => {
   if (!mobilePanel.value) return
+  clearTimeout(mobileSheetCloseTimer)
   mobilePanel.value = null
+  mobileSheetDragY.value = 0
+  mobileSheetDragging.value = false
+  mobileSheetDismissing.value = false
+  mobileSheetPointerId = undefined
   await nextTick()
   mobilePanelTrigger.value?.focus()
+}
+const startMobileSheetDrag = (event: PointerEvent) => {
+  if (event.pointerType !== 'touch' || mobileSheetDismissing.value) return
+  mobileSheetPointerId = event.pointerId
+  mobileSheetStartY = event.clientY
+  mobileSheetLastY = event.clientY
+  mobileSheetLastTime = performance.now()
+  mobileSheetReleaseVelocity = 0
+  mobileSheetMoved = false
+  mobileSheetDragging.value = true
+  ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
+}
+const moveMobileSheetDrag = (event: PointerEvent) => {
+  if (!mobileSheetDragging.value || event.pointerId !== mobileSheetPointerId) return
+  event.preventDefault()
+  const now = performance.now()
+  const elapsed = now - mobileSheetLastTime
+  if (elapsed > 0) mobileSheetReleaseVelocity = (event.clientY - mobileSheetLastY) / elapsed
+  mobileSheetLastY = event.clientY
+  mobileSheetLastTime = now
+  mobileSheetDragY.value = Math.max(0, event.clientY - mobileSheetStartY)
+  if (mobileSheetDragY.value > 4) mobileSheetMoved = true
+}
+const finishMobileSheetDrag = (event: PointerEvent) => {
+  if (!mobileSheetDragging.value || event.pointerId !== mobileSheetPointerId) return
+  const velocity = performance.now() - mobileSheetLastTime < 120 ? mobileSheetReleaseVelocity : 0
+  mobileSheetDragging.value = false
+  mobileSheetPointerId = undefined
+  const sheetHeight = Math.min(window.innerHeight * .5, 512)
+  if (mobileSheetDragY.value > Math.min(96, sheetHeight * .18) || velocity > .45) {
+    mobileSheetDismissing.value = true
+    requestAnimationFrame(() => { mobileSheetDragY.value = sheetHeight + 48 })
+    mobileSheetCloseTimer = setTimeout(() => { void closeMobilePanel() }, 260)
+    return
+  }
+  mobileSheetDragY.value = 0
+}
+const cancelMobileSheetDrag = (event: PointerEvent) => {
+  if (!mobileSheetDragging.value || event.pointerId !== mobileSheetPointerId) return
+  mobileSheetDragging.value = false
+  mobileSheetPointerId = undefined
+  mobileSheetDragY.value = 0
+}
+const handleMobileSheetHandleClick = (event: MouseEvent) => {
+  if (mobileSheetMoved) {
+    event.preventDefault()
+    mobileSheetMoved = false
+    return
+  }
+  void closeMobilePanel()
 }
 watch(() => props.assets.map(asset => asset.id), (ids) => {
   const available = new Set(ids)
@@ -70,7 +139,10 @@ const handlePlaybackShortcut = (event: KeyboardEvent) => {
   togglePlayback()
 }
 onMounted(() => window.addEventListener('keydown', handlePlaybackShortcut))
-onBeforeUnmount(() => window.removeEventListener('keydown', handlePlaybackShortcut))
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handlePlaybackShortcut)
+  clearTimeout(mobileSheetCloseTimer)
+})
 const moveAsset = (assetId: string, targetId: string) => {
   if (assetId === targetId) return
   const next = [...assetOrder.value]
@@ -111,7 +183,7 @@ const showAllAssets = () => {
 </script>
 
 <template>
-  <div class="board-video-composer">
+  <div class="board-video-composer" :class="{ 'has-mobile-panel': mobilePanel, 'is-mobile-sheet-dragging': mobileSheetDragging, 'is-mobile-sheet-dismissing': mobileSheetDismissing }" :style="{ '--video-mobile-sheet-drag-y': `${mobileSheetDragY}px` }">
     <main class="video-composer-center">
       <VideoPreviewStage :key="template.renderer" :safe-area="settings.safeArea" @ready="setCanvas" />
     </main>
@@ -147,7 +219,7 @@ const showAllAssets = () => {
         </div>
       </section>
     </aside>
-    <button v-if="mobilePanel" ref="mobilePanelClose" class="video-mobile-sheet-handle" type="button" aria-label="Close video settings" @click="closeMobilePanel"><span aria-hidden="true" /></button>
+    <button v-if="mobilePanel" ref="mobilePanelClose" class="video-mobile-sheet-handle" type="button" aria-label="Close video settings" @pointerdown="startMobileSheetDrag" @pointermove="moveMobileSheetDrag" @pointerup="finishMobileSheetDrag" @pointercancel="cancelMobileSheetDrag" @click="handleMobileSheetHandleClick"><span aria-hidden="true" /></button>
     <VideoTimeline :progress="progress" :duration="totalDuration" :playing="playing" @seek="seek" @toggle="togglePlayback">
       <p role="status" aria-live="polite">{{ feedback }}</p>
       <button class="button-primary video-export-button" type="button" :disabled="exporting || !activeAssets.length" :aria-label="exporting ? 'Rendering video' : 'Download video'" :title="exporting ? 'Rendering video' : 'Download video'" @click="renderVideo"><Download3 class="video-export-icon" :size="20" weight="Outline" aria-hidden="true" /><span class="video-export-label">{{ exporting ? 'Rendering…' : 'Export video' }}</span></button>
@@ -1180,12 +1252,26 @@ const showAllAssets = () => {
   }
 
   .board-video-composer {
+    --video-mobile-sheet-height: min(50dvh, 32rem);
+    box-sizing: border-box;
+    height: calc(100dvh - var(--space));
+    max-height: calc(100dvh - var(--space));
     min-height: 0;
     grid-template-columns: 1fr;
-    gap: calc(var(--space)/3);
+    grid-template-rows: minmax(0, 1fr) auto auto;
+    gap: calc(var(--space)/2);
     padding: var(--space) calc(var(--space)/2) calc(var(--space)/2);
+    overflow: hidden;
     border-radius: var(--radius-mobile);
-    
+  }
+
+  .board-video-composer.has-mobile-panel {
+    grid-template-rows: minmax(0, 42dvh);
+  }
+
+  .board-video-composer.has-mobile-panel > :deep(.video-timeline),
+  .board-video-composer.has-mobile-panel > .video-mobile-toolbar {
+    display: none;
   }
 
   .board-video-composer > *,
@@ -1203,7 +1289,9 @@ const showAllAssets = () => {
   }
 
   .video-composer-center {
-    height: auto;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
     order: 1
   }
 
@@ -1260,9 +1348,9 @@ const showAllAssets = () => {
     padding: 0;
     border: 0;
     border-radius: 0;
-    background: rgb(255 255 255/.72);
-    backdrop-filter: blur(var(--filter-overlay-blur));
-    -webkit-backdrop-filter: blur(var(--filter-overlay-blur))
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none
   }
 
   .board-video-composer > :deep(.video-mobile-panel),
@@ -1278,8 +1366,8 @@ const showAllAssets = () => {
     z-index: 41;
     inset: auto 0 0;
     width: 100%;
-    height: min(78dvh, 46rem);
-    max-height: min(78dvh, 46rem);
+    height: var(--video-mobile-sheet-height);
+    max-height: var(--video-mobile-sheet-height);
     display: block;
     padding-bottom: env(safe-area-inset-bottom);
     overflow: hidden;
@@ -1287,7 +1375,22 @@ const showAllAssets = () => {
     background: var(--filter-overlay-panel-background-mobile);
     backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
     -webkit-backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
+    transform: translate3d(0, var(--video-mobile-sheet-drag-y, 0), 0);
+    transition: transform 180ms var(--filter-overlay-enter-easing);
     animation: filter-sheet-in var(--filter-overlay-enter-duration) var(--filter-overlay-enter-easing) both
+  }
+
+  .board-video-composer.is-mobile-sheet-dragging > :deep(.video-mobile-panel.is-mobile-open),
+  .board-video-composer.is-mobile-sheet-dragging .video-composer-right > :deep(.video-mobile-panel.is-mobile-open),
+  .board-video-composer.is-mobile-sheet-dragging .video-composer-right > .video-mobile-panel.is-mobile-open {
+    transition: none;
+  }
+
+  .board-video-composer.is-mobile-sheet-dismissing > :deep(.video-mobile-panel.is-mobile-open),
+  .board-video-composer.is-mobile-sheet-dismissing .video-composer-right > :deep(.video-mobile-panel.is-mobile-open),
+  .board-video-composer.is-mobile-sheet-dismissing .video-composer-right > .video-mobile-panel.is-mobile-open {
+    animation: none;
+    transition: transform 260ms var(--filter-overlay-exit-easing);
   }
 
   .video-composer-right {
@@ -1312,7 +1415,7 @@ const showAllAssets = () => {
     position: fixed;
     z-index: 42;
     left: 50%;
-    bottom: calc(min(78dvh, 46rem) - 44px);
+    bottom: calc(var(--video-mobile-sheet-height) - 44px);
     width: 44px;
     height: 44px;
     min-height: 44px;
@@ -1322,7 +1425,17 @@ const showAllAssets = () => {
     color: var(--filter-overlay-panel-color);
     background: transparent;
     translate: -50% 0;
-    touch-action: manipulation
+    transform: translate3d(0, var(--video-mobile-sheet-drag-y, 0), 0);
+    transition: transform 180ms var(--filter-overlay-enter-easing);
+    touch-action: none
+  }
+
+  .board-video-composer.is-mobile-sheet-dragging .video-mobile-sheet-handle {
+    transition: none;
+  }
+
+  .board-video-composer.is-mobile-sheet-dismissing .video-mobile-sheet-handle {
+    transition: transform 260ms var(--filter-overlay-exit-easing);
   }
 
   .video-mobile-sheet-handle > span {
@@ -1398,7 +1511,8 @@ const showAllAssets = () => {
   }
 
   :deep(.video-stage) {
-    height: auto;
+    width: 100%;
+    height: 100%;
     min-height: 0;
     padding: 0;
     background: transparent;

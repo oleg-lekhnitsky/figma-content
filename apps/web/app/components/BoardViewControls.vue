@@ -26,48 +26,30 @@ const columnOptions: Array<{ value: BoardViewSettings['columns']; label: string 
   <div class="asset-filter-controls asset-filter-controls--expanded board-view-controls">
     <button class="filter-sheet-handle" type="button" aria-label="Close view settings"><span aria-hidden="true" /></button>
     <h2 class="filter-overlay-title">Board view</h2>
-    <fieldset class="filter-option-group">
-      <legend>Card text</legend>
+    <section class="filter-option-group" role="group" aria-labelledby="board-view-card-text">
+      <h3 id="board-view-card-text">Card text</h3>
       <div class="filter-option-list">
         <button type="button" :aria-pressed="modelValue.showText" :disabled="disabled" @click="update('showText', true)">Show</button>
         <button type="button" :aria-pressed="!modelValue.showText" :disabled="disabled" @click="update('showText', false)">Hide</button>
       </div>
-    </fieldset>
-    <fieldset class="filter-option-group">
-      <legend>Corners</legend>
+    </section>
+    <section class="filter-option-group" role="group" aria-labelledby="board-view-corners">
+      <h3 id="board-view-corners">Corners</h3>
       <div class="filter-option-list">
         <button v-for="option in radiusOptions" :key="option.value" type="button" :aria-pressed="modelValue.radius === option.value" :disabled="disabled" @click="update('radius', option.value)">{{ option.label }}</button>
       </div>
-    </fieldset>
-    <fieldset class="filter-option-group">
-      <legend>Spacing</legend>
+    </section>
+    <section class="filter-option-group" role="group" aria-labelledby="board-view-spacing">
+      <h3 id="board-view-spacing">Spacing</h3>
       <div class="filter-option-list">
         <button v-for="option in gapOptions" :key="option.value" type="button" :aria-pressed="modelValue.gap === option.value" :disabled="disabled" @click="update('gap', option.value)">{{ option.label }}</button>
       </div>
-    </fieldset>
-    <fieldset class="filter-option-group">
-      <legend>Columns</legend>
+    </section>
+    <section class="filter-option-group" role="group" aria-labelledby="board-view-columns">
+      <h3 id="board-view-columns">Columns</h3>
       <div class="filter-option-list">
         <button v-for="option in columnOptions" :key="option.value" type="button" :aria-pressed="modelValue.columns === option.value" :disabled="disabled" @click="update('columns', option.value)">{{ option.label }}</button>
       </div>
-    </fieldset>
+    </section>
   </div>
 </template>
-
-<style scoped>
-.board-view-controls fieldset {
-  min-inline-size: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-
-.board-view-controls legend {
-  margin-block-end: var(--filter-option-gap);
-  color: inherit;
-  font-size: var(--filter-option-font-size);
-  font-weight: 700;
-  line-height: 1;
-}
-
-</style>

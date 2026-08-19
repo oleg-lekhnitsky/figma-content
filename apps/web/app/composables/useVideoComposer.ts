@@ -541,7 +541,20 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     stop();exporting.value=true;feedback.value='Rendering locally…';progress.value=0
     try{const stream=target.captureStream(settings.value.fps),chunks:BlobPart[]=[],recorder=new MediaRecorder(stream,{mimeType,videoBitsPerSecond:8_000_000});recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};const done=new Promise<void>((resolve,reject)=>{recorder.onstop=()=>resolve();recorder.onerror=()=>reject(new Error())});recorder.start(250);const started=performance.now();await new Promise<void>(resolve=>{const frame=async()=>{progress.value=Math.min(totalDuration.value,(performance.now()-started)/1000);await drawAt(Math.min(progress.value,totalDuration.value-.001));if(progress.value<totalDuration.value)requestAnimationFrame(frame);else resolve()};requestAnimationFrame(frame)});recorder.stop();await done;stream.getTracks().forEach(track=>track.stop());const blob=new Blob(chunks,{type:mimeType}),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`${boardTitle.value.trim().replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'').toLowerCase()||'board'}.${mimeType.includes('mp4')?'mp4':'webm'}`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);feedback.value='Video exported.'}catch{feedback.value='Video export failed. Try another browser or a smaller board.'}finally{exporting.value=false;progress.value=0;void drawAt(0)}
   }
-  watch(()=>settings.value.templateId,()=>{stop();disposeRenderer();progress.value=0;if(template.value.preset)Object.assign(settings.value,template.value.preset);settings.value.visibleCount=countForAssets();void nextTick(async()=>{if(template.value.collection==='flicker')await preloadFlickerAssets();await drawAt(0);if(template.value.renderer==='webgl'||template.value.collection==='flicker')togglePlayback()})})
+  watch(()=>settings.value.templateId,(templateId,previousTemplateId)=>{
+    stop()
+    const previousRenderer=videoTemplates.find(item=>item.id===previousTemplateId)?.renderer
+    if(previousRenderer===template.value.renderer)disposeTextures()
+    else disposeRenderer()
+    progress.value=0
+    if(template.value.preset)Object.assign(settings.value,template.value.preset)
+    settings.value.visibleCount=countForAssets()
+    void nextTick(async()=>{
+      if(template.value.collection==='flicker')await preloadFlickerAssets()
+      await drawAt(0)
+      if(template.value.renderer==='webgl'||template.value.collection==='flicker')togglePlayback()
+    })
+  })
   watch(
     ()=>[settings.value.format,settings.value.fit,settings.value.transition,settings.value.secondsPerSlide,settings.value.showTitles,settings.value.direction,settings.value.gap,settings.value.tilt,settings.value.scaleCenter,settings.value.tiltMode,settings.value.easing,settings.value.cornerRadius,settings.value.distance,settings.value.centerScale,settings.value.fade,settings.value.offsetX,settings.value.offsetY,settings.value.scaleFocus,settings.value.solo,settings.value.visibleCount,settings.value.planeSize,settings.value.cycles,settings.value.staggerFrames,settings.value.delayFrames,settings.value.cycleDegrees,settings.value.orbitRadius,settings.value.perspective,settings.value.rotationX,settings.value.rotationY,settings.value.rotationZ,settings.value.reverse,settings.value.spin,settings.value.spread,settings.value.staggerSeconds,settings.value.scaleStyle,settings.value.growFrom,settings.value.imageFit,settings.value.flickerEffect,settings.value.flickerPacing,settings.value.scaleDirection,settings.value.driftDirection,settings.value.scaleAmount,settings.value.driftAmount,settings.value.delaySeconds,settings.value.backgroundColor,settings.value.globeMinScale,settings.value.globeMaxScale,settings.value.globeAxis,settings.value.globeMotion,settings.value.globeStops,settings.value.globeFaceCamera,settings.value.globeShowBackfaces,settings.value.globeFlipImage],
     ()=>{if(!playing.value)void nextTick(()=>drawAt(progress.value))}

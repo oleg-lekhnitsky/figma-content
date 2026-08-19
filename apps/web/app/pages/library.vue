@@ -470,7 +470,7 @@ const clearFilters = () => {
   customDateTo.value = ''
 }
 const supportsFilterMorph = () => import.meta.client
-  && window.matchMedia('(min-width: 521px)').matches
+  && window.matchMedia('(min-width: 761px)').matches
   && 'startViewTransition' in document
   && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
 const morphPanel = async (panel: 'filters'|'view'|'video'|'settings', update: () => void, direction: 'opening'|'closing', keepMorphMode = false) => {
