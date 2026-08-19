@@ -70,12 +70,4 @@ const columnOptions: Array<{ value: BoardViewSettings['columns']; label: string 
   line-height: 1;
 }
 
-@media (max-width: 520px) {
-  /* Keep the bottom-aligned sheet's top edge stable while mobile Safari's
-     browser chrome changes the dynamic viewport during its entrance. */
-  .board-view-controls {
-    height: min(26rem, 90svh);
-  }
-}
-
 </style>

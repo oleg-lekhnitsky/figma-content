@@ -20,11 +20,25 @@ const startPreview = (event: PointerEvent, templateId: string) => {
 const stopPreview = (event: PointerEvent) => {
   if (event.pointerType === 'mouse') previewing.value = null
 }
+let previousTouchY = 0
+const startPanelTouch = (event: TouchEvent) => {
+  previousTouchY = event.touches[0]?.clientY ?? 0
+}
+const containPanelTouch = (event: TouchEvent) => {
+  const touch = event.touches[0]
+  if (!touch) return
+  const scroller = event.currentTarget as HTMLElement
+  const deltaY = touch.clientY - previousTouchY
+  previousTouchY = touch.clientY
+  const atTop = scroller.scrollTop <= 0
+  const atBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1
+  if ((atTop && deltaY > 0) || (atBottom && deltaY < 0)) event.preventDefault()
+}
 </script>
 
 <template>
   <section class="video-panel video-template-browser">
-    <div class="video-panel-scroll">
+    <div class="video-panel-scroll" @touchstart.passive="startPanelTouch" @touchmove="containPanelTouch">
       <header><button v-if="openFolder" class="video-template-back" type="button"
           aria-label="Back to template collections" @click="openFolder = null">
           <ChevronLeft :size="18" weight="Outline" :stroke-width="2" aria-hidden="true" />
