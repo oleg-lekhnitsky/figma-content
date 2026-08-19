@@ -1,0 +1,104 @@
+import type { VideoComposerSettings, VideoTemplate } from '~/types/video-composer'
+
+const carouselDefaults: Partial<VideoComposerSettings> = { direction:'up',scaleCenter:false,scaleFocus:'center',centerScale:1.4,tiltMode:'off',tilt:0,solo:false,visibleCount:6,planeSize:600,gap:40,distance:100,cornerRadius:0,offsetX:0,offsetY:0,fade:0,cycles:1,secondsPerSlide:1.6,staggerFrames:2,delayFrames:0,easing:'glide' }
+const preset = (overrides: Partial<VideoComposerSettings>) => ({ ...carouselDefaults, ...overrides })
+const verticalThumb = 'linear-gradient(90deg,transparent 28%,#d8d8d8 28% 72%,transparent 72%),#090909'
+const horizontalThumb = 'linear-gradient(0deg,transparent 28%,#d8d8d8 28% 72%,transparent 72%),#090909'
+const fadedVerticalThumb = 'linear-gradient(180deg,transparent 4%,#d8d8d8 28% 66%,transparent 94%),#090909'
+const fadedHorizontalThumb = 'linear-gradient(90deg,transparent 4%,#d8d8d8 28% 66%,transparent 94%),#090909'
+
+const carouselPresetDefinitions: Array<readonly [string, string, Partial<VideoComposerSettings>]> = [
+  ['01',verticalThumb,{}],
+  ['02',horizontalThumb,{ direction:'left',planeSize:546 }],
+  ['03',fadedVerticalThumb,{ gap:235,planeSize:568,scaleCenter:true,centerScale:1.45,fade:40 }],
+  ['04',fadedHorizontalThumb,{ direction:'left',gap:190,planeSize:440,scaleCenter:true,centerScale:1.45,fade:40 }],
+  ['05',verticalThumb,{ gap:80,planeSize:730,secondsPerSlide:2.3,staggerFrames:0,easing:'linear' }],
+  ['06',horizontalThumb,{ direction:'left',gap:80,planeSize:540,secondsPerSlide:2.3,staggerFrames:0,easing:'linear' }],
+  ['07',verticalThumb,{ gap:500,planeSize:850,easing:'smooth' }],
+  ['08',horizontalThumb,{ direction:'left',gap:500,planeSize:642,easing:'smooth' }],
+  ['09',verticalThumb,{ gap:332,planeSize:600,solo:true,scaleCenter:true,secondsPerSlide:1.5,staggerFrames:0,delayFrames:15,easing:'smooth' }],
+  ['10',horizontalThumb,{ direction:'left',gap:332,planeSize:454,solo:true,scaleCenter:true,secondsPerSlide:1.5,staggerFrames:0,delayFrames:15,easing:'smooth' }],
+  ['11',verticalThumb,{ gap:235,planeSize:568,scaleCenter:true,scaleFocus:'start',centerScale:1.65 }],
+  ['12',horizontalThumb,{ direction:'left',gap:140,planeSize:466,scaleCenter:true,scaleFocus:'start',centerScale:1.75 }],
+  ['13',verticalThumb,{ direction:'down',gap:500,planeSize:850,scaleCenter:true,scaleFocus:'end',centerScale:2,easing:'smooth' }],
+  ['14',horizontalThumb,{ direction:'right',gap:500,planeSize:639,scaleCenter:true,scaleFocus:'end',centerScale:2,easing:'smooth' }],
+  ['15',verticalThumb,{ gap:0,planeSize:614,scaleCenter:true,scaleFocus:'start',centerScale:1.8,staggerFrames:0,easing:'sweep' }],
+  ['16',horizontalThumb,{ direction:'left',gap:0,planeSize:473,scaleCenter:true,scaleFocus:'start',centerScale:1.8,staggerFrames:0,easing:'sweep' }],
+  ['17',verticalThumb,{ gap:273,planeSize:748,tiltMode:'alternate',tilt:-25,staggerFrames:0,easing:'sweep' }],
+  ['18',horizontalThumb,{ direction:'left',gap:273,planeSize:657,tiltMode:'alternate',tilt:-25,staggerFrames:0,easing:'sweep' }]
+]
+const carouselPresets: VideoTemplate[] = carouselPresetDefinitions.map(([number,thumbnail,settings]) => ({ id:`carousel-${number}`,name:`Carousel ${number}`,description:'Editable carousel preset.',renderer:'webgl',collection:'carousel',thumbnail,preset:preset(settings) }))
+
+const carousel3dDefaults: Partial<VideoComposerSettings> = { visibleCount:12,cycles:1,cycleDegrees:360,distance:1300,secondsPerSlide:8,reverse:false,planeSize:400,rotationX:30,rotationY:38,rotationZ:0,orbitRadius:280,perspective:140,cornerRadius:0,fade:0,offsetX:0,offsetY:0,easing:'linear' }
+const carousel3dThumb = 'linear-gradient(145deg,transparent 20%,#d8d8d8 21% 47%,transparent 48% 55%,#aaa 56% 78%,transparent 79%),#090909'
+const carousel3dPresetDefinitions: Array<readonly [string, Partial<VideoComposerSettings>]> = [
+  ['01',{}],
+  ['02',{ visibleCount:9,cycles:6,cycleDegrees:60,distance:990,secondsPerSlide:1.5,reverse:true,rotationX:6,rotationY:18,rotationZ:-17,orbitRadius:330,perspective:100,fade:30,easing:'sweep' }],
+  ['03',{ cycles:2,cycleDegrees:180,distance:1870,secondsPerSlide:4,reverse:true,rotationX:0,rotationY:-17,orbitRadius:330,perspective:210,fade:20,easing:'sweep' }],
+  ['04',{ visibleCount:9,cycles:6,cycleDegrees:60,distance:1250,secondsPerSlide:2,reverse:true,planeSize:410,rotationX:0,rotationY:0,orbitRadius:210,perspective:300,fade:20,offsetX:50.5,easing:'sweep' }],
+  ['05',{ visibleCount:33,distance:1370,secondsPerSlide:20,reverse:true,planeSize:250,rotationX:22,rotationY:0,orbitRadius:480,perspective:160,offsetY:-6 }]
+]
+const carousel3dPresets: VideoTemplate[] = carousel3dPresetDefinitions.map(([number,settings]) => {
+  const values={...carousel3dDefaults,...settings}
+  return { id:`carousel-3d-${number}`,name:`Carousel 3D ${number}`,description:'Editable 3D carousel preset.',renderer:'webgl',collection:'carousel-3d',thumbnail:carousel3dThumb,preset:values }
+})
+
+const globeDefaults: Partial<VideoComposerSettings> = { visibleCount:40,orbitRadius:355,globeMinScale:10,globeMaxScale:20,distance:1000,perspective:100,fade:0,cornerRadius:0,offsetX:0,offsetY:0,rotationX:0,rotationY:0,rotationZ:0,cycles:1,secondsPerSlide:7,cycleDegrees:360,delaySeconds:0,globeStops:8,reverse:false,globeAxis:'y',globeMotion:'continuous',globeFaceCamera:true,globeShowBackfaces:true,globeFlipImage:false,planeSize:1000,easing:'linear' }
+const globeThumb = 'radial-gradient(circle at 50% 50%,transparent 0 17%,#d8d8d8 18% 22%,transparent 23% 31%,#aaa 32% 36%,transparent 37%),#090909'
+const globePresetDefinitions: Array<readonly [string, Partial<VideoComposerSettings>, readonly [number,number,number,number]]> = [
+  ['01',{},[.25,.25,.75,.75]],
+  ['02',{ globeAxis:'x',cycles:6,cycleDegrees:60,orbitRadius:300,secondsPerSlide:1,globeMaxScale:22 },[.8,.27,.2,.75]],
+  ['03',{ globeAxis:'z',orbitRadius:890,distance:900,secondsPerSlide:15,globeMaxScale:22,globeMinScale:3,perspective:150 },[.25,.25,.75,.75]],
+  ['04',{ fade:23,orbitRadius:480,distance:750,secondsPerSlide:10,globeMaxScale:6,globeMinScale:2,reverse:true,perspective:135 },[.25,.25,.75,.75]],
+  ['05',{ visibleCount:60,fade:40,orbitRadius:480,distance:1250,secondsPerSlide:10,globeMaxScale:10.5,globeMinScale:6,reverse:true,perspective:110,globeFaceCamera:false },[.25,.25,.75,.75]],
+  ['06',{ visibleCount:60,orbitRadius:505,distance:0,secondsPerSlide:15,globeMaxScale:12,globeMinScale:7,reverse:true,perspective:145,globeFaceCamera:false,globeFlipImage:true },[.25,.25,.75,.75]],
+  ['07',{ visibleCount:60,fade:44,orbitRadius:800,distance:4450,secondsPerSlide:15,globeMaxScale:15.46,globeMinScale:.01,perspective:35,globeFaceCamera:false,globeShowBackfaces:false },[.25,.25,.75,.75]],
+  ['08',{ visibleCount:60,fade:15,cycles:2,cycleDegrees:180,orbitRadius:480,distance:650,secondsPerSlide:5,globeMaxScale:6,globeMinScale:1.5,perspective:150 },[.86,.14,.14,.86]],
+  ['09',{ cycles:2,orbitRadius:580,distance:2000,secondsPerSlide:5,globeMaxScale:51.5,globeMinScale:14,reverse:true,perspective:135,globeShowBackfaces:false },[.7,.101,.3,.899]],
+  ['10',{ visibleCount:10,cycles:6,cycleDegrees:60,orbitRadius:480,distance:650,secondsPerSlide:1.5,globeMaxScale:20,globeMinScale:5,reverse:true,perspective:150 },[.8,.27,.2,.75]],
+  ['11',{ globeMotion:'stepped',globeStops:8,orbitRadius:595,distance:1000,secondsPerSlide:15,globeMaxScale:33.09,globeMinScale:.01,reverse:true,perspective:90,globeFaceCamera:false },[.33,0,0,1]],
+  ['12',{ visibleCount:30,globeAxis:'x',fade:26,globeMotion:'stepped',globeStops:6,orbitRadius:595,distance:1000,secondsPerSlide:15,globeMaxScale:33.09,globeMinScale:.01,perspective:90 },[.87,0,.13,1]],
+  ['13',{ visibleCount:16,globeAxis:'x',fade:26,globeMotion:'stepped',globeStops:6,orbitRadius:595,distance:1000,secondsPerSlide:15,globeMaxScale:44.79,globeMinScale:4.4,perspective:85 },[.87,0,.13,1]],
+  ['14',{ visibleCount:41,globeMotion:'stepped',globeStops:6,orbitRadius:905,distance:150,secondsPerSlide:15,globeMaxScale:66.06,globeMinScale:19.59,perspective:105 },[.87,0,.13,1]],
+  ['15',{ visibleCount:60,globeMotion:'stepped',globeStops:6,orbitRadius:165,distance:150,secondsPerSlide:12,globeMaxScale:23.99,globeMinScale:6.73,perspective:160 },[.76,0,.24,1]],
+  ['16',{ fade:23,globeMotion:'continuous',globeStops:8,orbitRadius:480,distance:750,secondsPerSlide:10,globeMaxScale:13.77,globeMinScale:1.19,reverse:true,rotationZ:33,perspective:135 },[.25,.25,.75,.75]]
+]
+const globePresets: VideoTemplate[] = globePresetDefinitions.map(([number,settings,bezier]) => ({ id:`globe-${number}`,name:`Globe ${number}`,description:'Editable spherical image globe.',renderer:'webgl',collection:'globe',thumbnail:globeThumb,bezier,preset:{...globeDefaults,...settings} }))
+
+const scaleDefaults: Partial<VideoComposerSettings> = { visibleCount:10,secondsPerSlide:2,planeSize:100,cornerRadius:0,spin:0,staggerSeconds:.4,scaleStyle:'bloom',growFrom:'center',imageFit:'fit',offsetX:0,offsetY:0 }
+const scaleThumbs = [
+  'radial-gradient(circle at 50% 50%,#d8d8d8 0 18%,#aaa 19% 31%,#777 32% 42%,transparent 43%),#090909',
+  'radial-gradient(circle at 50% 50%,transparent 0 18%,#777 19% 31%,#aaa 32% 42%,#d8d8d8 43% 55%,transparent 56%),#090909',
+  'conic-gradient(from -45deg at 50% 50%,transparent 0 12%,#d8d8d8 13% 37%,transparent 38% 62%,#aaa 63% 87%,transparent 88%),#090909',
+  'linear-gradient(0deg,#d8d8d8 0 42%,transparent 43%),radial-gradient(circle at 50% 75%,#aaa 0 28%,transparent 29%),#090909'
+]
+const scalePresetDefinitions: Array<readonly [string, Partial<VideoComposerSettings>, readonly [number,number,number,number]]> = [
+  ['01',{},[0,0,0,.99]],
+  ['02',{ scaleStyle:'recede' },[0,0,0,.99]],
+  ['03',{ spin:-45,scaleStyle:'bloom' },[.16,1,.3,1]],
+  ['04',{ staggerSeconds:.6,secondsPerSlide:4,growFrom:'bottom',scaleStyle:'bloom' },[.87,0,.13,1]]
+]
+const scalePresets: VideoTemplate[] = scalePresetDefinitions.map(([number,settings,bezier],index) => ({ id:`scale-${number}`,name:`Scale ${number}`,description:'Editable scale preset.',renderer:'webgl',collection:'scale',thumbnail:scaleThumbs[index]!,bezier,preset:{...scaleDefaults,...settings} }))
+
+const flickerDefaults: Partial<VideoComposerSettings> = { visibleCount:6,delaySeconds:0,cycles:1,flickerEffect:'off',flickerPacing:'equal',offsetX:0,offsetY:0,driftDirection:'up',secondsPerSlide:6,scaleDirection:'forward',planeSize:100,driftAmount:30,scaleAmount:30,cornerRadius:0,fit:'cover' }
+const flickerPresetDefinitions: Array<readonly [string, Partial<VideoComposerSettings>, readonly [number,number,number,number]]> = [
+  ['01',{},[.25,.25,.75,.75]],
+  ['02',{ visibleCount:12,cycles:2,flickerPacing:'eased',secondsPerSlide:4,planeSize:73 },[.7,.101,.3,.899]],
+  ['03',{ flickerEffect:'scale',planeSize:118,scaleAmount:15 },[.86,.14,.14,.86]],
+  ['04',{ flickerEffect:'drift',planeSize:107,driftAmount:7 },[.86,.14,.14,.86]],
+  ['05',{ flickerEffect:'drift',driftDirection:'left',planeSize:107,driftAmount:7 },[.86,.14,.14,.86]],
+  ['06',{ flickerEffect:'drift',secondsPerSlide:8,planeSize:63,driftAmount:80 },[.86,.14,.14,.86]],
+  ['07',{ flickerEffect:'drift',driftDirection:'left',secondsPerSlide:8,planeSize:63,driftAmount:100 },[.86,.14,.14,.86]],
+  ['08',{ flickerEffect:'scale',driftDirection:'left',secondsPerSlide:8,scaleDirection:'reverse',planeSize:63,driftAmount:40,scaleAmount:40 },[.86,.14,.14,.86]],
+  ['09',{ flickerEffect:'scale',driftDirection:'left',secondsPerSlide:8,planeSize:63,driftAmount:40,scaleAmount:40 },[.86,.14,.14,.86]],
+  ['10',{ flickerEffect:'scale',driftDirection:'left',secondsPerSlide:3,scaleDirection:'reverse',planeSize:63,driftAmount:40,scaleAmount:5 },[.86,.14,.14,.86]]
+]
+const flickerPresets: VideoTemplate[] = flickerPresetDefinitions.map(([number,settings,bezier]) => ({ id:`flicker-${number}`,name:`Flicker ${number}`,description:'Editable flicker preset.',renderer:'canvas-2d',collection:'flicker',thumbnail:'linear-gradient(135deg,transparent 12%,#d8d8d8 13% 87%,transparent 88%),#090909',bezier,preset:{...flickerDefaults,...settings} }))
+
+export const videoTemplates: VideoTemplate[] = [
+  ...flickerPresets,
+  ...carouselPresets,
+  ...carousel3dPresets,
+  ...globePresets,
+  ...scalePresets
+]

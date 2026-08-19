@@ -185,7 +185,6 @@ onBeforeUnmount(() => {
   bottom: var(--space);
   max-width: calc(100vw - var(--space)*2);
   display: flex;
-  align-items: center;
   gap: var(--filter-panel-control-gap, .375rem);
   padding: 8px;
   border-radius: 999px;
@@ -195,6 +194,10 @@ onBeforeUnmount(() => {
   backdrop-filter: blur(80px) saturate(140%);
   -webkit-backdrop-filter: blur(40px) saturate(140%);
   transform: translateX(-50%);
+}
+
+.selection-panel:not(.selection-panel--filter-overlay) {
+  align-items: center;
 }
 
 .selection-panel--wide {

@@ -1,0 +1,50 @@
+<script setup lang="ts">
+import type { VideoTemplate } from '~/types/video-composer'
+import type { AssetMasonryItem } from '~/types/asset-masonry'
+import { ChevronLeft } from 'reicon-vue'
+import VideoPresetPreview from '~/components/video-composer/VideoPresetPreview.vue'
+
+const props = defineProps<{ templates: VideoTemplate[]; modelValue: string; assets: AssetMasonryItem[] }>()
+defineEmits<{ 'update:modelValue': [value: string] }>()
+type Folder = 'carousel' | 'carousel-3d' | 'globe' | 'scale' | 'flicker'
+const folders: Array<{ id: Folder; label: string }> = [{ id: 'carousel', label: 'Carousel' }, { id: 'carousel-3d', label: 'Carousel 3D' }, { id: 'globe', label: 'Globe' }, { id: 'scale', label: 'Scale' }, { id: 'flicker', label: 'Flicker' }]
+const openFolder = ref<Folder | null>(null)
+const folderTemplates = (folder: Folder) => props.templates.filter(item => item.collection === folder)
+const visibleTemplates = computed(() => openFolder.value ? folderTemplates(openFolder.value) : [])
+const folderLabel = computed(() => folders.find(folder => folder.id === openFolder.value)?.label || 'Templates')
+const rootItemCount = computed(() => folders.length + props.templates.filter(item => !item.collection).length)
+const previewing = ref<string | null>(null)
+</script>
+
+<template>
+  <section class="video-panel video-template-browser">
+    <div class="video-panel-scroll">
+      <header><button v-if="openFolder" class="video-template-back" type="button"
+          aria-label="Back to template collections" @click="openFolder = null">
+          <ChevronLeft :size="18" weight="Outline" :stroke-width="2" aria-hidden="true" />
+        </button>
+        <p>{{ folderLabel }}</p><span>{{ openFolder ? visibleTemplates.length : rootItemCount }}</span>
+      </header>
+      <div v-if="!openFolder" class="video-template-list video-template-root">
+        <button v-for="template in templates.filter(item => !item.collection)" :key="template.id"
+          class="video-template-featured" type="button" :aria-pressed="modelValue === template.id"
+          @click="$emit('update:modelValue', template.id)">
+          <VideoPresetPreview :template="template" :assets="assets" />
+          <strong>{{ template.name }}</strong><small>{{ template.description }}</small>
+        </button>
+        <button v-for="folder in folders" :key="folder.id" class="video-template-folder" type="button"
+          @click="openFolder = folder.id">
+          <h3>{{ folder.label }}</h3>
+        </button>
+      </div>
+      <div v-else class="video-template-list">
+        <button v-for="template in visibleTemplates" :key="template.id" class="video-template-preset" type="button"
+          :aria-pressed="modelValue === template.id" @mouseenter="previewing = template.id"
+          @mouseleave="previewing = null" @click="$emit('update:modelValue', template.id)">
+          <VideoPresetPreview :template="template" :assets="assets" :previewing="previewing === template.id" />
+          <strong>{{ template.name }}</strong>
+        </button>
+      </div>
+    </div>
+  </section>
+</template>

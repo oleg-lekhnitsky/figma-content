@@ -1,0 +1,1251 @@
+<script setup lang="ts">
+import type { AssetMasonryItem } from '~/types/asset-masonry'
+import { Eye, EyeOff, Menu4 } from 'reicon-vue'
+import { videoTemplates } from '~/utils/video-templates'
+import VideoCanvasInspector from '~/components/video-composer/VideoCanvasInspector.vue'
+import VideoPreviewStage from '~/components/video-composer/VideoPreviewStage.vue'
+import VideoSceneInspector from '~/components/video-composer/VideoSceneInspector.vue'
+import VideoTemplateBrowser from '~/components/video-composer/VideoTemplateBrowser.vue'
+import VideoTimeline from '~/components/video-composer/VideoTimeline.vue'
+
+const props = defineProps<{ assets: AssetMasonryItem[]; boardTitle: string }>()
+const assetOrder = ref<string[]>([])
+const hiddenAssetIds = ref(new Set<string>())
+const draggedAssetId = ref<string>()
+const assetStatus = ref('')
+watch(() => props.assets.map(asset => asset.id), (ids) => {
+  const available = new Set(ids)
+  assetOrder.value = [...assetOrder.value.filter(id => available.has(id)), ...ids.filter(id => !assetOrder.value.includes(id))]
+  hiddenAssetIds.value = new Set([...hiddenAssetIds.value].filter(id => available.has(id)))
+}, { immediate: true })
+const orderedAssets = computed(() => {
+  const byId = new Map(props.assets.map(asset => [asset.id, asset]))
+  return assetOrder.value.map(id => byId.get(id)).filter((asset): asset is AssetMasonryItem => Boolean(asset))
+})
+const activeAssets = computed(() => orderedAssets.value.filter(asset => !hiddenAssetIds.value.has(asset.id)))
+const assetRef = computed(() => activeAssets.value)
+const titleRef = computed(() => props.boardTitle)
+const { settings, template, playing, exporting, progress, feedback, totalDuration, setCanvas, togglePlayback, seek, renderVideo } = useVideoComposer(assetRef, titleRef)
+const handlePlaybackShortcut = (event: KeyboardEvent) => {
+  if (event.code !== 'Space' || event.repeat || event.defaultPrevented) return
+  const target = event.target instanceof Element ? event.target : null
+  if (target?.closest('button, input, select, textarea, [contenteditable="true"]')) return
+  event.preventDefault()
+  togglePlayback()
+}
+onMounted(() => window.addEventListener('keydown', handlePlaybackShortcut))
+onBeforeUnmount(() => window.removeEventListener('keydown', handlePlaybackShortcut))
+const moveAsset = (assetId: string, targetId: string) => {
+  if (assetId === targetId) return
+  const next = [...assetOrder.value]
+  const from = next.indexOf(assetId)
+  const to = next.indexOf(targetId)
+  if (from < 0 || to < 0) return
+  next.splice(from, 1)
+  next.splice(to, 0, assetId)
+  assetOrder.value = next
+  assetStatus.value = `Moved ${orderedAssets.value.find(asset => asset.id === assetId)?.title || 'asset'} to position ${to + 1}`
+}
+const moveAssetBy = (assetId: string, offset: number) => {
+  const index = assetOrder.value.indexOf(assetId)
+  const target = assetOrder.value[index + offset]
+  if (target) moveAsset(assetId, target)
+}
+const beginAssetDrag = (event: DragEvent, asset: AssetMasonryItem) => {
+  draggedAssetId.value = asset.id
+  event.dataTransfer?.setData('text/plain', asset.id)
+  if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
+  const thumbnail = (event.currentTarget as HTMLElement)?.closest('li')?.querySelector('img')
+  if (thumbnail instanceof HTMLImageElement && thumbnail.complete) event.dataTransfer?.setDragImage(thumbnail, thumbnail.width / 2, thumbnail.height / 2)
+}
+const previewAssetDrop = (targetId: string) => {
+  if (draggedAssetId.value) moveAsset(draggedAssetId.value, targetId)
+}
+const toggleAsset = (asset: AssetMasonryItem) => {
+  const next = new Set(hiddenAssetIds.value)
+  if (next.has(asset.id)) next.delete(asset.id)
+  else next.add(asset.id)
+  hiddenAssetIds.value = next
+  assetStatus.value = `${asset.title} ${next.has(asset.id) ? 'hidden' : 'shown'}`
+}
+const showAllAssets = () => {
+  hiddenAssetIds.value = new Set()
+  assetStatus.value = 'All assets shown'
+}
+</script>
+
+<template>
+  <div class="board-video-composer">
+    <main class="video-composer-center">
+      <VideoPreviewStage :key="template.renderer" :safe-area="settings.safeArea" @ready="setCanvas" />
+    </main>
+    <VideoTemplateBrowser v-model="settings.templateId" :templates="videoTemplates" :assets="activeAssets" />
+    <VideoSceneInspector v-model="settings" :template="template" />
+    <aside class="video-composer-right">
+      <VideoCanvasInspector v-model="settings" />
+      <section class="video-panel video-assets-panel">
+        <div class="video-panel-scroll">
+        <header>
+          <p>Assets</p><span>{{ activeAssets.length }}/{{ assets.length }}</span>
+        </header>
+        <ol>
+          <li v-for="asset in orderedAssets" :key="asset.id" :class="{ 'is-hidden': hiddenAssetIds.has(asset.id), 'is-dragging': draggedAssetId === asset.id }" @dragenter.prevent="previewAssetDrop(asset.id)" @dragover.prevent="$event.dataTransfer && ($event.dataTransfer.dropEffect = 'move')" @drop.prevent="draggedAssetId = undefined">
+            <button class="video-asset-handle" type="button" draggable="true" :aria-label="`Reorder ${asset.title}. Use Alt and arrow keys to move.`" @dragstart="beginAssetDrag($event, asset)" @dragend="draggedAssetId = undefined" @keydown.alt.up.prevent="moveAssetBy(asset.id, -1)" @keydown.alt.down.prevent="moveAssetBy(asset.id, 1)"><Menu4 :size="16" aria-hidden="true" /></button>
+            <img :src="asset.previewUrl" alt=""><span>{{ asset.title }}</span>
+            <span class="video-asset-mobile-order">
+              <button type="button" :disabled="assetOrder[0] === asset.id" :aria-label="`Move ${asset.title} earlier`" @click="moveAssetBy(asset.id, -1)">↑</button>
+              <button type="button" :disabled="assetOrder[assetOrder.length - 1] === asset.id" :aria-label="`Move ${asset.title} later`" @click="moveAssetBy(asset.id, 1)">↓</button>
+            </span>
+            <button class="video-asset-visibility" type="button" :aria-label="hiddenAssetIds.has(asset.id) ? `Show ${asset.title}` : `Hide ${asset.title}`" :aria-pressed="!hiddenAssetIds.has(asset.id)" @click="toggleAsset(asset)"><EyeOff v-if="hiddenAssetIds.has(asset.id)" :size="16" aria-hidden="true" /><Eye v-else :size="16" aria-hidden="true" /></button>
+          </li>
+        </ol>
+        <button v-if="hiddenAssetIds.size" class="video-assets-show-all" type="button" @click="showAllAssets">Show all</button>
+        <p class="sr-only" role="status" aria-live="polite">{{ assetStatus }}</p>
+        </div>
+      </section>
+    </aside>
+    <VideoTimeline :progress="progress" :duration="totalDuration" :playing="playing" @seek="seek" @toggle="togglePlayback">
+      <p role="status" aria-live="polite">{{ feedback }}</p>
+      <button class="button-primary" type="button" :disabled="exporting || !activeAssets.length" @click="renderVideo">{{ exporting ? 'Rendering…' : 'Export video' }}</button>
+    </VideoTimeline>
+  </div>
+</template>
+
+<style scoped>
+.board-video-composer {
+  --video-panel-radius: clamp(1.25rem, 2vw, 2rem);
+  --video-type-caption: 11px;
+  --video-type-body: 12px;
+  --video-weight-regular: 500;
+  --video-weight-strong: 600;
+  --video-text-muted: color-mix(in srgb, var(--filter-overlay-panel-color) 58%, transparent);
+  --video-text-secondary: color-mix(in srgb, var(--filter-overlay-panel-color) 72%, transparent);
+  --video-range-label-color: color-mix(in srgb, var(--filter-overlay-panel-color) 88%, transparent);
+  --video-range-value-color: color-mix(in srgb, var(--filter-overlay-panel-color) 76%, transparent);
+  --video-inspector-section-gap: calc(var(--space)*.75);
+  --video-inspector-control-gap: .5rem;
+  --video-inspector-pair-gap: calc(var(--space)/2);
+  display: grid;
+  grid-template-columns: minmax(190px, .62fr) minmax(190px, .68fr) minmax(360px, 1.5fr) minmax(210px, .7fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: calc(var(--space)/2);
+  align-items: stretch;
+  width: 100%;
+  height: 100dvh;
+  min-height: 0;
+  margin: 0 auto;
+  padding: var(--space);
+  border-radius: var(--radius);
+  color: var(--filter-overlay-panel-color)
+}
+
+.video-composer-heading {
+  grid-column: 1/-1;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: var(--space)
+}
+
+.video-composer-heading p,
+.video-composer-heading h2 {
+  margin: 0
+}
+
+.video-composer-heading>p {
+  max-width: 44ch;
+  opacity: .68
+}
+
+.video-composer-heading>div>p {
+  font-size: 12px;
+  opacity: .62
+}
+
+.video-composer-center {
+  grid-column: 3;
+  grid-row: 1;
+  display: grid;
+  gap: calc(var(--space)/2);
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.board-video-composer > :deep(.video-template-browser) {
+  grid-column: 1;
+  grid-row: 1
+}
+
+.board-video-composer > :deep(.video-inspector) {
+  grid-column: 2;
+  grid-row: 1
+}
+
+.video-composer-right {
+  grid-column: 4;
+  grid-row: 1;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: calc(var(--space)/2);
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.video-composer-right :deep(.video-panel:first-child) {
+  height: auto
+}
+
+.video-assets-panel ol {
+  display: grid;
+  align-content: start;
+  gap: calc(var(--space)/4);
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  scrollbar-width: none;
+  list-style: none
+}
+
+.video-assets-panel ol::-webkit-scrollbar {
+  display: none
+}
+
+.video-assets-panel :deep(.video-panel-scroll) {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  overflow: hidden
+}
+
+.video-assets-panel li {
+  display: grid;
+  grid-template-columns: 24px 38px minmax(0, 1fr) 32px;
+  align-items: center;
+  gap: calc(var(--space)/4);
+  min-height: 44px;
+  border-radius: calc(var(--radius)/2);
+  font-size: var(--video-type-body);
+  font-weight: var(--video-weight-strong);
+  transition: opacity 150ms ease-out, background-color 150ms ease-out
+}
+
+.video-asset-mobile-order {
+  display: none
+}
+
+.video-assets-panel li.is-hidden {
+  opacity: .42
+}
+
+.video-assets-panel li.is-dragging {
+  opacity: .24
+}
+
+.video-assets-panel li:has(.video-asset-handle:focus-visible),
+.video-assets-panel li:has(.video-asset-visibility:focus-visible) {
+  background: rgb(255 255 255/.1)
+}
+
+.video-assets-panel img {
+  width: 38px;
+  height: 38px;
+  border-radius: calc(var(--radius)/3);
+  object-fit: cover
+}
+
+.video-asset-handle,
+.video-asset-visibility {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: inherit;
+  background: transparent
+}
+
+.video-asset-handle {
+  width: 24px;
+  cursor: grab
+}
+
+.video-asset-handle:active {
+  cursor: grabbing
+}
+
+.video-asset-handle:focus-visible,
+.video-asset-visibility:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 1px
+}
+
+.video-assets-show-all {
+  min-height: 40px;
+  margin-top: calc(var(--space)/2)
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0
+}
+
+:deep(.video-panel) {
+  height: 100%;
+  max-height: none;
+  overflow: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  border: 0;
+  border-radius: var(--video-panel-radius);
+  color: var(--filter-overlay-panel-color);
+  background: var(--filter-overlay-panel-background);
+  backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation));
+  -webkit-backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation))
+}
+
+:deep(.video-panel-scroll) {
+  height: 100%;
+  max-height: 100%;
+  align-content: start;
+  padding: var(--space);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+:deep(.video-panel-scroll::-webkit-scrollbar) {
+  display: none
+}
+
+:deep(.video-panel header) {
+  display: flex;
+  min-height: 26px;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space);
+  margin-bottom: calc(var(--space)*.75)
+}
+
+:deep(.video-panel header p) {
+  margin: 0;
+  color: var(--video-text-secondary);
+  font-size: var(--video-type-body);
+  font-weight: var(--video-weight-strong);
+  line-height: 1;
+  letter-spacing: 0
+}
+
+:deep(.video-panel header span) {
+  color: var(--video-text-muted);
+  font-size: var(--video-type-caption);
+  font-weight: var(--video-weight-regular);
+  line-height: 1
+}
+
+:deep(.video-template-list) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: calc(var(--space)/3)
+}
+
+:deep(.video-template-list>button) {
+  width: 100%;
+  min-height: 0;
+  padding: calc(var(--space)/4);
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius)/2);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  transition-property: background-color, border-color, transform;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out
+}
+
+:deep(.video-template-list>button:active) {
+  transform: scale(.96)
+}
+
+:deep(.video-template-list>button[aria-pressed=true]) {
+  border-color: rgb(255 255 255/.62);
+  background: rgb(255 255 255/.12)
+}
+
+:deep(.video-template-featured) {
+  grid-column: 1/-1;
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 2px calc(var(--space)/3)
+}
+
+:deep(.video-template-featured .video-template-thumb) {
+  grid-row: 1/3;
+  width: 54px;
+  height: 68px
+}
+
+:deep(.video-template-preset .video-template-thumb) {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3/4
+}
+
+:deep(.video-template-thumb) {
+  border-radius: calc(var(--radius)/1)
+}
+
+:deep(.video-template-list strong) {
+  display: block;
+  margin-top: 6px;
+  font-size: var(--video-type-caption);
+  font-weight: var(--video-weight-strong);
+  text-align: center
+}
+
+:deep(.video-template-featured strong) {
+  align-self: end;
+  margin: 0;
+  font-size: var(--video-type-body);
+  text-align: left
+}
+
+:deep(.video-template-list small) {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--video-text-muted);
+  font-size: var(--video-type-caption);
+  font-weight: var(--video-weight-regular);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2
+}
+
+:deep(.video-template-group) {
+  grid-column: 1/-1;
+  margin: calc(var(--space)/3) 0 0;
+  color: var(--video-text-muted);
+  font-size: var(--video-type-caption);
+  font-weight: var(--video-weight-strong);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  opacity: 1
+}
+
+:deep(.video-template-root) {
+  grid-template-columns: 1fr
+}
+
+:deep(.video-template-folder) {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start
+}
+
+:deep(.video-template-folder h3) {
+  margin: 0;
+  font-size: var(--font-size-h3);
+  line-height: 1;
+  text-align: left
+}
+
+:deep(.video-template-browser>.video-panel-scroll>header) {
+  align-items: center
+}
+
+:deep(.video-template-back) {
+  width: 26px;
+  min-width: 26px;
+  min-height: 26px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+
+:deep(.video-template-browser>.video-panel-scroll>header:has(.video-template-back)) {
+  grid-template-columns: 32px minmax(0, 1fr) 32px;
+  display: grid;
+  gap: 0
+}
+
+:deep(.video-template-browser>.video-panel-scroll>header:has(.video-template-back) p) {
+  text-align: center
+}
+
+:deep(.video-template-browser>.video-panel-scroll>header:has(.video-template-back) span) {
+  justify-self: end
+}
+
+:deep(.video-inspector>.video-panel-scroll) {
+  display: grid;
+  gap: var(--video-inspector-section-gap)
+}
+
+:deep(.video-inspector>.video-panel-scroll>header) {
+  margin-bottom: 0
+}
+
+:deep(.video-inspector fieldset) {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0
+}
+
+:deep(.video-inspector legend),
+:deep(.video-inspector label) {
+  display: grid;
+  gap: .375rem;
+  color: var(--video-text-secondary);
+  font-size: var(--video-type-body);
+  font-weight: var(--video-weight-strong)
+}
+
+:deep(.video-choice-row) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--filter-option-gap);
+  margin-top: var(--video-inspector-control-gap)
+}
+
+:deep(.video-inspector fieldset>.video-control-pair) {
+  margin-top: var(--video-inspector-control-gap)
+}
+
+:deep(.video-choice-row button),
+:deep(.video-toggle) {
+  min-height: var(--filter-option-height);
+  padding: 0 var(--filter-option-padding);
+  border: var(--filter-hairline) solid rgb(255 255 255/.42);
+  border-radius: var(--filter-pill-radius);
+  background: transparent;
+  color: inherit;
+  font-size: var(--video-type-body);
+  font-weight: var(--video-weight-regular);
+  line-height: 1;
+  text-transform: capitalize;
+  opacity: 1
+}
+
+:deep(.video-choice-row button:is(:hover,:focus-visible)),
+:deep(.video-toggle:is(:hover,:focus-visible)) {
+  background: var(--filter-overlay-control-hover-background)
+}
+
+:deep(.video-choice-row button[aria-pressed=true]),
+:deep(.video-toggle[aria-pressed=true]) {
+  border-color: var(--filter-overlay-primary-background);
+  background: var(--filter-overlay-primary-background);
+  color: var(--filter-overlay-primary-color)
+}
+
+:deep(.video-choice-row button:disabled) {
+  opacity: .35
+}
+
+:deep(.video-inspector label>span) {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px
+}
+
+:deep(.video-inspector output) {
+  font-variant-numeric: tabular-nums;
+  font-size: var(--video-type-body);
+  font-weight: var(--video-weight-regular);
+  color: var(--video-text-muted);
+  opacity: 1
+}
+
+:deep(.video-inspector input[type=range]) {
+  width: 100%;
+  margin: 0;
+  accent-color: currentColor
+}
+
+:deep(.video-hex-color) {
+  position: relative;
+  display: grid;
+  gap: var(--video-inspector-control-gap)
+}
+
+.video-composer-right > :deep(.video-inspector:first-child),
+.video-composer-right > :deep(.video-inspector:first-child > .video-panel-scroll) {
+  overflow: visible
+}
+
+.video-composer-right > :deep(.video-inspector:first-child) {
+  position: relative;
+  isolation: isolate;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none
+}
+
+.video-composer-right > :deep(.video-inspector:first-child)::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--filter-overlay-panel-background);
+  backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation));
+  -webkit-backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation));
+  content: '';
+  pointer-events: none
+}
+
+:deep(.video-hex-color-field) {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  height: 34px;
+  padding: 4px 10px 4px 5px;
+  border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
+  border-radius: 999px;
+  color: var(--video-range-value-color)
+}
+
+:deep(.video-hex-color-swatch) {
+  box-sizing: border-box;
+  width: 24px;
+  min-width: 24px;
+  max-width: 24px;
+  height: 24px;
+  min-height: 24px;
+  max-height: 24px;
+  flex: 0 0 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px oklch(0 0 0/.1);
+  cursor: pointer
+}
+
+:deep(.video-hex-color input) {
+  width: 6.5ch;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-transform: uppercase
+}
+
+:deep(.video-hex-color-field:has(input:focus-visible)) {
+  outline: 2px solid currentColor;
+  outline-offset: 2px
+}
+
+:deep(.video-hex-color-swatch:focus-visible),
+:deep(.video-hex-palette button:focus-visible) {
+  outline: 2px solid currentColor;
+  outline-offset: 2px
+}
+
+:deep(.video-hex-palette) {
+  position: absolute;
+  z-index: 20;
+  right: 0;
+  bottom: calc(100% + 6px);
+  left: 0;
+  display: grid;
+  width: 210px;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 16px;
+  background: var(--filter-overlay-panel-background);
+  backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation));
+  -webkit-backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation));
+  box-shadow: 0 10px 30px oklch(0 0 0/.18)
+}
+
+:deep(.video-color-picker-toolbar) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 28px;
+  color: var(--video-range-value-color);
+  font-variant-numeric: tabular-nums
+}
+
+:deep(.video-color-picker-toolbar button) {
+  display: grid;
+  box-sizing: border-box;
+  width: 28px;
+  min-width: 28px;
+  max-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  max-height: 28px;
+  flex: 0 0 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  place-items: center;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  color: inherit;
+  line-height: 1;
+  cursor: pointer
+}
+
+:deep(.video-color-picker-toolbar svg) {
+  width: 16px;
+  height: 16px
+}
+
+:deep(.video-color-spectrum) {
+  position: relative;
+  height: 150px;
+  overflow: hidden;
+  border-radius: 10px;
+  background:
+    linear-gradient(to top, #000, transparent),
+    linear-gradient(to right, #fff, transparent),
+    hsl(var(--video-picker-hue) 100% 50%);
+  cursor: crosshair;
+  touch-action: none
+}
+
+:deep(.video-color-spectrum:focus-visible) {
+  outline: 2px solid currentColor;
+  outline-offset: 2px
+}
+
+:deep(.video-color-spectrum-handle) {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px oklch(0 0 0/.5);
+  translate: -50% -50%;
+  pointer-events: none
+}
+
+:deep(.video-color-hue) {
+  display: block
+}
+
+:deep(.video-color-hue input[type=range]) {
+  width: 100%;
+  height: 14px;
+  margin: 0;
+  border-radius: 999px;
+  background: linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00);
+  appearance: none
+}
+
+:deep(.video-color-hue input[type=range]::-webkit-slider-thumb) {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: 0 0 0 1px oklch(0 0 0/.5);
+  appearance: none
+}
+
+:deep(.video-color-hue input[type=range]::-moz-range-thumb) {
+  width: 12px;
+  height: 12px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: 0 0 0 1px oklch(0 0 0/.5)
+}
+
+:deep(.video-inspector label:has(> .video-range-input)) {
+  position: relative;
+  display: block;
+  min-height: 34px
+}
+
+:deep(.video-inspector label:has(> .video-range-input)>span) {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 8px 0 10px;
+  color: var(--video-range-label-color);
+  font-size: var(--video-type-body);
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none
+}
+
+:deep(.video-inspector label:has(> .video-range-input) output) {
+  display: inline-flex;
+  align-items: center;
+  max-width: 45%;
+  min-height: 20px;
+  padding: 0 6px;
+  overflow: hidden;
+  border-radius: 6px;
+  color: var(--video-range-value-color);
+  text-overflow: ellipsis
+}
+
+:deep(.video-control-pair) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: var(--video-inspector-pair-gap);
+  row-gap: var(--video-inspector-section-gap)
+}
+
+:deep(.video-choice-row button),
+:deep(.video-toggle) {
+  transition-property: background-color, color, border-color, transform;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out
+}
+
+:deep(.video-choice-row button:active),
+:deep(.video-toggle:active) {
+  transform: scale(.96)
+}
+
+:deep(.video-stage) {
+  position: relative;
+  display: grid;
+  box-sizing: border-box;
+  place-items: center;
+  height: 100%;
+  min-height: min(66vh, 720px);
+  padding: var(--space);
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--video-panel-radius);
+  color: var(--filter-overlay-panel-color);
+  background: var(--filter-overlay-panel-background);
+  backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation));
+  -webkit-backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation))
+}
+
+:deep(.video-stage canvas) {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--color-bg);
+}
+
+:deep(.video-canvas-wrap) {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 0;
+  height: 0;
+  max-width: 100%;
+  max-height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: var(--radius)
+}
+
+:deep(.video-safe-area) {
+  position: absolute;
+  inset: 10%;
+  border: 1px dashed rgb(255 255 255/.72);
+  border-radius: calc(var(--radius)/3);
+  pointer-events: none
+}
+
+:deep(.video-reset) {
+  width: 100%;
+  min-height: var(--filter-action-height);
+  padding: 0 var(--filter-action-padding);
+  border: 0;
+  border-radius: var(--filter-pill-radius);
+  background: var(--filter-overlay-primary-background);
+  color: var(--filter-overlay-primary-color);
+  font-size: var(--filter-action-font-size);
+  font-weight: 600
+}
+
+:deep(.video-reset:active) {
+  transform: scale(.96)
+}
+
+:deep(.video-timeline) {
+  grid-column: 1/-1;
+  position: sticky;
+  z-index: 3;
+  bottom: var(--space);
+  display: grid;
+  grid-template-columns: 44px auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: calc(var(--space)/1);
+  min-height: 0;
+  padding: calc(var(--space)/2);
+  border-radius: var(--video-panel-radius);
+  color: var(--filter-overlay-panel-color);
+  background: var(--filter-overlay-panel-background);
+  backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation));
+  -webkit-backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation))
+}
+
+:deep(.video-timeline-play) {
+  width: 44px;
+  min-height: 44px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: var(--filter-overlay-primary-color);
+  background: var(--filter-overlay-primary-background)
+}
+
+:deep(.video-timeline-time) {
+  min-width: 9ch;
+  font-size: var(--video-type-body);
+  font-weight: var(--video-weight-strong);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap
+}
+
+:deep(.video-timeline-time span:last-child) {
+  color: var(--video-text-muted)
+}
+
+:deep(.video-timeline-ruler) {
+  position: relative;
+  min-width: 0;
+  height: 44px
+}
+
+:deep(.video-timeline-scale) {
+  position: absolute;
+  inset: 0 6px;
+  color: var(--video-text-muted);
+  font-size: var(--video-type-caption);
+  font-weight: var(--video-weight-regular);
+  pointer-events: none
+}
+
+:deep(.video-timeline-scale>span) {
+  position: absolute;
+  display: block
+}
+
+:deep(.video-timeline-dot) {
+  top: 22px;
+  width: 2px;
+  height: 2px;
+  translate: -50% 0;
+  border-radius: 50%;
+  background: currentColor
+}
+
+:deep(.video-timeline-label) {
+  top: 50%;
+  translate: 0 -50%;
+  font-size: var(--video-type-body);
+  white-space: nowrap
+}
+
+:deep(.video-timeline-playhead) {
+  position: absolute;
+  z-index: 1;
+  top: 19px;
+  bottom: -14px;
+  left: var(--timeline-progress);
+  width: 1px;
+  background: currentColor;
+  pointer-events: none
+}
+
+:deep(.video-timeline input) {
+  display: block;
+  width: 100%;
+  height: 20px;
+  margin: 20px 0 0;
+  padding: 0;
+  appearance: none;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer
+}
+
+:deep(.video-timeline input:focus),
+:deep(.video-timeline input:focus-visible) {
+  border: 0;
+  outline: 0;
+  box-shadow: none
+}
+
+:deep(.video-timeline input::-webkit-slider-runnable-track) {
+  height: 5px;
+  border-radius: 3px;
+  background: transparent
+}
+
+:deep(.video-timeline input::-webkit-slider-thumb) {
+  width: 12px;
+  height: 12px;
+  margin-top: -3.5px;
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  background: transparent
+}
+
+:deep(.video-timeline input::-moz-range-track) {
+  height: 5px;
+  border-radius: 3px;
+  background: transparent
+}
+
+:deep(.video-timeline input::-moz-range-progress) {
+  height: 5px;
+  background: transparent
+}
+
+:deep(.video-timeline input::-moz-range-thumb) {
+  width: 12px;
+  height: 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent
+}
+
+:deep(.video-timeline-actions) {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  gap: calc(var(--space)/2)
+}
+
+:deep(.video-timeline-actions::before) {
+  content: '';
+  width: 1px;
+  height: 28px;
+  background: rgb(255 255 255/.18)
+}
+
+:deep(.video-timeline-actions p) {
+  margin: 0;
+  color: var(--video-text-muted);
+  font-size: var(--video-type-body);
+  font-weight: var(--video-weight-regular)
+}
+
+:deep(.video-timeline-actions button) {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap
+}
+
+:deep(.video-timeline-actions button:disabled) {
+  cursor: wait;
+  opacity: .5
+}
+
+:deep(.video-template-preset),
+:deep(.video-template-preset:hover),
+:deep(.video-template-preset:focus-visible),
+:deep(.video-template-preset:active) {
+  transform: none !important
+}
+
+@media(max-width:1180px) {
+  .board-video-composer {
+    height: auto;
+    min-height: calc(100dvh - var(--space)*2);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: auto;
+    align-items: start
+  }
+
+  :deep(.video-panel) {
+    height: auto;
+    max-height: calc(100dvh - 180px)
+  }
+
+  :deep(.video-panel-scroll) {
+    height: auto;
+    max-height: inherit
+  }
+
+  .video-composer-center {
+    grid-column: 1/-1;
+    grid-row: 1
+  }
+
+  .board-video-composer > :deep(.video-template-browser) {
+    grid-column: 1;
+    grid-row: 2
+  }
+
+  .board-video-composer > :deep(.video-inspector) {
+    grid-column: 2;
+    grid-row: 2
+  }
+
+  .video-composer-right {
+    display: contents
+  }
+
+}
+
+@media(max-width:640px) {
+  :global(.selection-panel--filter-overlay:has(.board-video-composer)) {
+    display: block;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    
+  }
+
+  .board-video-composer {
+    grid-template-columns: 1fr;
+    gap: calc(var(--space)/2);
+    padding: var(--space) calc(var(--space)/2) calc(var(--space)/2);
+    border-radius: var(--radius-mobile);
+    
+  }
+
+  .board-video-composer > *,
+  .video-composer-center,
+  .video-composer-right,
+  :deep(.video-panel),
+  :deep(.video-panel-scroll),
+  :deep(.video-template-list),
+  :deep(.video-timeline) {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    
+  }
+
+  .video-composer-center {
+    order: 1
+  }
+
+  :deep(.video-timeline) {
+    order: 2
+  }
+
+  .board-video-composer > :deep(.video-template-browser) {
+    grid-column: auto;
+    grid-row: auto;
+    order: 3;
+  
+  }
+
+  .board-video-composer > :deep(.video-inspector) {
+    grid-column: auto;
+    grid-row: auto;
+    order: 4
+  }
+
+  .video-composer-right {
+    grid-column: auto;
+    grid-row: auto;
+    order: 5
+  }
+
+  .video-composer-heading {
+    grid-column: auto;
+    display: block
+  }
+
+  .video-composer-heading>p {
+    margin-top: calc(var(--space)/3)
+  }
+
+  .video-composer-center {
+    grid-column: auto;
+    grid-row: auto
+  }
+
+  .video-composer-right {
+    display: grid
+  }
+
+  .video-assets-panel {
+    display: block
+  }
+
+  :deep(.video-timeline) {
+    grid-template-columns: 44px auto minmax(48px, 1fr) auto;
+    gap: calc(var(--space)/3)
+  }
+
+  :deep(.video-timeline-actions p) {
+    display: none
+  }
+
+  :deep(.video-panel) {
+    max-height: 58dvh
+  }
+
+  :deep(.video-stage) {
+    min-height: 44dvh
+  }
+
+  .video-assets-panel li {
+    grid-template-columns: 38px minmax(0, 1fr) 88px 44px;
+    min-height: 52px
+  }
+
+  .video-asset-handle {
+    display: none
+  }
+
+  .video-asset-mobile-order {
+    display: grid;
+    grid-template-columns: repeat(2, 44px)
+  }
+
+  .video-asset-mobile-order button,
+  .video-asset-visibility {
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
+    display: grid;
+    place-items: center;
+    padding: 0
+  }
+
+  .video-asset-mobile-order button {
+    border: 0;
+    border-radius: 50%;
+    color: inherit;
+    background: transparent;
+    font-size: 18px
+  }
+
+  .video-asset-mobile-order button:disabled {
+    opacity: .28
+  }
+}
+</style>

@@ -7,7 +7,7 @@ const route = useRoute()
 const router = useRouter()
 
 interface AssetCard {
-  id: string; title: string; description?: string|null; previewUrl: string; preview2xUrl?: string|null; mime_type?: string|null; width: number; height: number; status?: string; figma_url?: string
+  id: string; title: string; description?: string|null; previewUrl: string; preview2xUrl?: string|null; originalUrl?: string|null; mime_type?: string|null; width: number; height: number; status?: string; figma_url?: string
   created_at?: string; updated_at?: string; projects?: { name: string } | null
   asset_tags?: Array<{ tags: { id?: string; name: string; slug?: string } | null }>
   allowed_users?: { figma_handle: string | null; avatar_url: string | null } | null
@@ -69,13 +69,14 @@ const customDateTo = ref(initialFilters.dateTo)
 const sort = ref(initialFilters.sort)
 const filtersExpanded = ref(false)
 const viewExpanded = ref(false)
+const videoExpanded = ref(false)
 const boardSettingsExpanded = ref(false)
 const arrangeExpanded = ref(false)
 const arrangeSelectedIds = ref<string[]>([])
 const arrangeRemoving = ref(false)
 const compactFiltersVisible = ref(true)
 const filtersMorphing = ref(false)
-const morphSource = ref<'filters'|'view'|'settings'|null>(null)
+const morphSource = ref<'filters'|'view'|'video'|'settings'|null>(null)
 const searchExpanded = ref(false)
 const searchClosing = ref(false)
 const page = ref(1)
@@ -320,7 +321,12 @@ const boardAssets = computed(() => {
   const knownById = new Map(locallyKnownBoardAssets.value.map(asset => [asset.id, asset]))
   return selectedBoardData.value.assets.map(asset => {
     const known = knownById.get(asset.id)
-    return known ? { ...asset, previewUrl: known.previewUrl, preview2xUrl: known.preview2xUrl ?? asset.preview2xUrl } : asset
+    return known ? {
+      ...asset,
+      previewUrl: known.previewUrl,
+      preview2xUrl: known.preview2xUrl ?? asset.preview2xUrl,
+      originalUrl: known.originalUrl ?? asset.originalUrl
+    } : asset
   })
 })
 const displayedAssets = computed(() => {
@@ -336,6 +342,7 @@ const selectBoard = async (boardId: string) => {
   if (boardId === selectedBoardId.value) return
   const transition = ++boardTransition
   viewExpanded.value = false
+  videoExpanded.value = false
   boardSettingsExpanded.value = false
   arrangeExpanded.value = false
   filtersExpanded.value = false
@@ -466,7 +473,7 @@ const supportsFilterMorph = () => import.meta.client
   && window.matchMedia('(min-width: 521px)').matches
   && 'startViewTransition' in document
   && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
-const morphPanel = async (panel: 'filters'|'view'|'settings', update: () => void, direction: 'opening'|'closing', keepMorphMode = false) => {
+const morphPanel = async (panel: 'filters'|'view'|'video'|'settings', update: () => void, direction: 'opening'|'closing', keepMorphMode = false) => {
   const viewTransitionDocument = document as Document & { startViewTransition: (callback: () => Promise<void>) => { finished: Promise<void> } }
   filtersMorphing.value = true
   morphSource.value = panel
@@ -480,7 +487,7 @@ const morphPanel = async (panel: 'filters'|'view'|'settings', update: () => void
   }
 }
 const openFilters = () => {
-  const update = () => { compactFiltersVisible.value = false; searchExpanded.value = false; viewExpanded.value = false; boardSettingsExpanded.value = false; filtersExpanded.value = true }
+  const update = () => { compactFiltersVisible.value = false; searchExpanded.value = false; viewExpanded.value = false; videoExpanded.value = false; boardSettingsExpanded.value = false; filtersExpanded.value = true }
   if (supportsFilterMorph()) void morphPanel('filters', update, 'opening', true)
   else update()
 }
@@ -489,7 +496,7 @@ const closeFilters = () => {
   else filtersExpanded.value = false
 }
 const openView = () => {
-  const update = () => { compactFiltersVisible.value = false; searchExpanded.value = false; filtersExpanded.value = false; boardSettingsExpanded.value = false; viewExpanded.value = true }
+  const update = () => { compactFiltersVisible.value = false; searchExpanded.value = false; filtersExpanded.value = false; videoExpanded.value = false; boardSettingsExpanded.value = false; viewExpanded.value = true }
   if (supportsFilterMorph()) void morphPanel('view', update, 'opening', true)
   else update()
 }
@@ -498,10 +505,20 @@ const closeView = () => {
   if (supportsFilterMorph()) void morphPanel('view', update, 'closing')
   else update()
 }
+const openVideo = () => {
+  const update = () => { compactFiltersVisible.value = false; searchExpanded.value = false; filtersExpanded.value = false; viewExpanded.value = false; boardSettingsExpanded.value = false; videoExpanded.value = true }
+  if (supportsFilterMorph()) void morphPanel('video', update, 'opening', true)
+  else update()
+}
+const closeVideo = () => {
+  const update = () => { videoExpanded.value = false }
+  if (supportsFilterMorph()) void morphPanel('video', update, 'closing')
+  else update()
+}
 const openBoardSettings = () => {
   boardSettingsFeedback.text = ''
   boardSettingsFeedback.error = false
-  const update = () => { compactFiltersVisible.value = false; searchExpanded.value = false; filtersExpanded.value = false; viewExpanded.value = false; boardSettingsExpanded.value = true }
+  const update = () => { compactFiltersVisible.value = false; searchExpanded.value = false; filtersExpanded.value = false; viewExpanded.value = false; videoExpanded.value = false; boardSettingsExpanded.value = true }
   if (supportsFilterMorph()) void morphPanel('settings', update, 'opening', true)
   else update()
   void loadSelectedBoardMembers()
@@ -512,7 +529,7 @@ const closeBoardSettings = () => {
   else update()
 }
 const finishExpandedPanelClose = () => {
-  if (!filtersExpanded.value && !viewExpanded.value && !boardSettingsExpanded.value) compactFiltersVisible.value = true
+  if (!filtersExpanded.value && !viewExpanded.value && !videoExpanded.value && !boardSettingsExpanded.value) compactFiltersVisible.value = true
 }
 const toggleSearch = () => {
   if (searchExpanded.value) {
@@ -751,6 +768,11 @@ onBeforeUnmount(() => {
         <button class="filter-panel-toggle is-expanded" type="button" aria-label="Hide view settings" aria-expanded="true" @click="closeView"><Xmark :size="20" :stroke-width="2" aria-hidden="true" /></button>
       </SelectionPanel>
 
+      <SelectionPanel :visible="Boolean(selectedBoard && videoExpanded)" label="Create video" wide overlay raised :instant="filtersMorphing" @close="closeVideo" @after-leave="finishExpandedPanelClose">
+        <BoardVideoComposer v-if="selectedBoard" :assets="displayedAssets" :board-title="selectedBoard.title" />
+        <button class="filter-panel-toggle is-expanded" type="button" aria-label="Close video creator" aria-expanded="true" @click="closeVideo"><Xmark :size="20" :stroke-width="2" aria-hidden="true" /></button>
+      </SelectionPanel>
+
       <SelectionPanel :visible="Boolean(selectedBoard && boardSettingsExpanded)" label="Board settings" wide overlay raised :instant="filtersMorphing" @close="closeBoardSettings" @after-leave="finishExpandedPanelClose">
         <BoardSettingsControls v-if="selectedBoard" :title="selectedBoard.title" :purpose="selectedBoard.purpose" :mode="selectedBoard.mode" :layout="selectedBoard.layout" :publication-enabled="selectedBoard.publication_enabled" :can-edit="canRenameSelectedBoard" :can-manage-members="canManageSelectedBoardMembers" :busy="boardSettingsBusy" :public-url="selectedBoardPublicUrl" :full-settings-url="`/boards/${selectedBoard.id}`" :members="boardMembers" :feedback="boardSettingsFeedback.text" :error="boardSettingsFeedback.error" @set-publication="setSelectedBoardPublication" @set-layout="setSelectedBoardLayout" @copy-link="copySelectedBoardLink" @save-member="saveSelectedBoardMember" @remove-member="removeSelectedBoardMember" @delete-board="deleteSelectedBoard" @dismiss-feedback="dismissBoardSettingsFeedback" />
         <button class="filter-panel-toggle is-expanded" type="button" aria-label="Hide board settings" aria-expanded="true" @click="closeBoardSettings"><Xmark :size="20" :stroke-width="2" aria-hidden="true" /></button>
@@ -764,7 +786,7 @@ onBeforeUnmount(() => {
           </AssetFilterControls>
           <button class="filter-panel-toggle is-expanded" type="button" aria-label="Hide filters" aria-expanded="true" @click="closeFilters"><Xmark :size="20" :stroke-width="2" aria-hidden="true" /></button>
         </SelectionPanel>
-        <SelectionPanel :visible="compactFiltersVisible && !filtersExpanded && !viewExpanded && !boardSettingsExpanded" label="Asset filters" :wide="searchExpanded || searchClosing" bare raised :instant="filtersMorphing">
+        <SelectionPanel :visible="compactFiltersVisible && !filtersExpanded && !viewExpanded && !videoExpanded && !boardSettingsExpanded" label="Asset filters" :wide="searchExpanded || searchClosing" bare raised :instant="filtersMorphing">
           <Transition name="compact-control"><div v-if="!searchExpanded && !searchClosing" class="mobile-control-blur" :class="{ 'is-morph-source': morphSource === 'filters' }"><button class="filter-panel-toggle" :class="{ 'has-filter-count': activeFilterCount }" type="button" aria-label="Show filters" aria-expanded="false" @click="openFilters"><span>Filters</span><span v-if="activeFilterCount" class="filter-count">{{ activeFilterCount }}</span></button></div></Transition>
           <Transition name="compact-control"><div v-if="!searchExpanded && !searchClosing" class="mobile-control-blur" :class="{ 'is-morph-source': morphSource === 'view' }"><button class="filter-panel-toggle" type="button" aria-label="Change library view" :aria-expanded="viewExpanded" @click="openView">View</button></div></Transition>
           <Transition name="compact-control"><div v-if="hasFilters && !searchExpanded && !searchClosing" class="mobile-control-blur"><button class="mobile-filter-search is-expanded filter-clear-compact" type="button" aria-label="Clear filters" title="Clear filters" @click="clearFilters"><span class="search-control-icon search-control-icon--close" aria-hidden="true"><Xmark :size="20" :stroke-width="2" /></span></button></div></Transition>
@@ -789,6 +811,7 @@ onBeforeUnmount(() => {
             <div class="selected-board-actions">
               <button v-if="selectedDynamicBoard" class="button-secondary selected-board-action-button" :class="{ 'is-morph-source': morphSource === 'filters', 'has-filter-count': dynamicBoardFilterCount }" type="button" aria-label="Show board filters" :aria-expanded="filtersExpanded" @click="openFilters"><span>Filters</span><span v-if="dynamicBoardFilterCount" class="filter-count">{{ dynamicBoardFilterCount }}</span></button>
               <button class="button-secondary selected-board-action-button" :class="{ 'is-morph-source': morphSource === 'view' }" type="button" aria-label="Change library view" :aria-expanded="viewExpanded" @click="openView">View</button>
+              <button class="button-secondary selected-board-action-button" :class="{ 'is-morph-source': morphSource === 'video' }" type="button" aria-label="Create a video from this board" :aria-expanded="videoExpanded" @click="openVideo">Video</button>
               <button v-if="canArrangeSelectedBoard" class="button-secondary selected-board-action-button" type="button" :aria-pressed="arrangeExpanded" @click="arrangeExpanded = !arrangeExpanded">{{ arrangeExpanded ? 'Done' : 'Arrange' }}</button>
               <button v-if="arrangeExpanded && arrangeSelectedIds.length" class="selected-board-action-button remove-selected-button" type="button" :disabled="arrangeRemoving" @click="removeArrangeSelection">Remove {{ arrangeSelectedIds.length }}</button>
               <button class="button-secondary selected-board-action-button selected-board-settings-button" :class="{ 'is-morph-source': morphSource === 'settings' }" type="button" aria-label="Board settings" title="Board settings" :aria-expanded="boardSettingsExpanded" @click="openBoardSettings"><Gear2 :size="20" aria-hidden="true" /></button>

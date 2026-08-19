@@ -57,7 +57,8 @@ export default defineEventHandler(async (event) => {
   const assets = await Promise.all(data.map(async (asset: { thumbnail_path: string | null, thumbnail_2x_path: string | null, image_path: string, [key: string]: unknown }) => ({
     ...asset,
     previewUrl: await signedAssetUrl(asset.thumbnail_path ?? asset.image_path),
-    preview2xUrl: asset.thumbnail_2x_path ? await signedAssetUrl(asset.thumbnail_2x_path) : null
+    preview2xUrl: asset.thumbnail_2x_path ? await signedAssetUrl(asset.thumbnail_2x_path) : null,
+    originalUrl: await signedAssetUrl(asset.image_path)
   })))
   return { data: { assets, submitters, total: count ?? 0, page: q.page, pageSize: q.pageSize } }
 })

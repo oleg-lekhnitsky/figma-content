@@ -295,6 +295,7 @@ const gestureStyle = computed(() => ({
   '--swipe-x': `${gestureX.value}px`
 }))
 const assetVisualStyle = computed(() => {
+  if (isMobile.value) return gestureStyle.value
   const thumbnail = thumbnailPreviewUrl.value
   const background = !thumbnail || asset.value?.mime_type.startsWith('video/') ? {} : {
     backgroundImage: `url(${JSON.stringify(thumbnail)})`,
@@ -302,7 +303,7 @@ const assetVisualStyle = computed(() => {
     backgroundRepeat: 'no-repeat',
     backgroundSize: 'contain'
   }
-  return isMobile.value ? { ...gestureStyle.value, ...background } : background
+  return background
 })
 const startGesture = (event: PointerEvent) => {
   if (event.pointerType !== 'touch' || editing.value || gestureSettling.value) return
@@ -994,6 +995,7 @@ h1 {
   display: grid;
   gap: calc(var(--space) / 8);
   padding: calc(var(--space) / 4);
+
   border-radius: var(--radius);
   color: var(--material-tinted-fg);
   background: var(--material-tinted-bg);
