@@ -1512,7 +1512,7 @@ const showAllAssets = () => {
 
   :deep(.video-stage) {
     width: 100%;
-    height: 100%;
+    height: auto;
     min-height: 0;
     padding: 0;
     background: transparent;
