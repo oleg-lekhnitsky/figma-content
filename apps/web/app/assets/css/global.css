@@ -1,3 +1,11 @@
+@font-face {
+  font-family: "ABC Diatype Cyrillic Trial";
+  src: url("/fonts/ABCDiatypeCyrillicTrial-Medium.otf") format("opentype");
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
+
 :root {
   --space: clamp(12px, 1vw, 24px);
   --color-bg: #fafafa;
