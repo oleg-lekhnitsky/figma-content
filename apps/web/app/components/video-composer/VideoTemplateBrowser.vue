@@ -14,6 +14,12 @@ const visibleTemplates = computed(() => openFolder.value ? folderTemplates(openF
 const folderLabel = computed(() => folders.find(folder => folder.id === openFolder.value)?.label || 'Templates')
 const rootItemCount = computed(() => folders.length + props.templates.filter(item => !item.collection).length)
 const previewing = ref<string | null>(null)
+const startPreview = (event: PointerEvent, templateId: string) => {
+  if (event.pointerType === 'mouse') previewing.value = templateId
+}
+const stopPreview = (event: PointerEvent) => {
+  if (event.pointerType === 'mouse') previewing.value = null
+}
 </script>
 
 <template>
@@ -39,8 +45,8 @@ const previewing = ref<string | null>(null)
       </div>
       <div v-else class="video-template-list">
         <button v-for="template in visibleTemplates" :key="template.id" class="video-template-preset" type="button"
-          :aria-pressed="modelValue === template.id" @mouseenter="previewing = template.id"
-          @mouseleave="previewing = null" @click="$emit('update:modelValue', template.id)">
+          :aria-pressed="modelValue === template.id" @pointerenter="startPreview($event, template.id)"
+          @pointerleave="stopPreview" @click="$emit('update:modelValue', template.id)">
           <VideoPresetPreview :template="template" :assets="assets" :previewing="previewing === template.id" />
           <strong>{{ template.name }}</strong>
         </button>

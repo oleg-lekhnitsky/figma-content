@@ -13,6 +13,22 @@ const assetOrder = ref<string[]>([])
 const hiddenAssetIds = ref(new Set<string>())
 const draggedAssetId = ref<string>()
 const assetStatus = ref('')
+type MobilePanel = 'templates' | 'scene' | 'canvas' | 'assets'
+const mobilePanel = ref<MobilePanel | null>(null)
+const mobilePanelTrigger = ref<HTMLElement | null>(null)
+const mobilePanelClose = ref<HTMLButtonElement | null>(null)
+const openMobilePanel = async (panel: MobilePanel, event: MouseEvent) => {
+  mobilePanelTrigger.value = event.currentTarget instanceof HTMLElement ? event.currentTarget : null
+  mobilePanel.value = panel
+  await nextTick()
+  mobilePanelClose.value?.focus()
+}
+const closeMobilePanel = async () => {
+  if (!mobilePanel.value) return
+  mobilePanel.value = null
+  await nextTick()
+  mobilePanelTrigger.value?.focus()
+}
 watch(() => props.assets.map(asset => asset.id), (ids) => {
   const available = new Set(ids)
   assetOrder.value = [...assetOrder.value.filter(id => available.has(id)), ...ids.filter(id => !assetOrder.value.includes(id))]
@@ -27,6 +43,26 @@ const assetRef = computed(() => activeAssets.value)
 const titleRef = computed(() => props.boardTitle)
 const { settings, template, playing, exporting, progress, feedback, totalDuration, setCanvas, togglePlayback, seek, renderVideo } = useVideoComposer(assetRef, titleRef)
 const handlePlaybackShortcut = (event: KeyboardEvent) => {
+  if (event.key === 'Escape' && mobilePanel.value) {
+    event.preventDefault()
+    void closeMobilePanel()
+    return
+  }
+  if (event.key === 'Tab' && mobilePanel.value) {
+    const panel = document.getElementById(`video-mobile-${mobilePanel.value}`)
+    const panelControls = panel ? [...panel.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex="0"]')] : []
+    const controls = [mobilePanelClose.value, ...panelControls].filter((control): control is HTMLElement => Boolean(control))
+    if (!controls.length) return
+    const currentIndex = controls.indexOf(document.activeElement as HTMLElement)
+    if (event.shiftKey && currentIndex <= 0) {
+      event.preventDefault()
+      controls.at(-1)?.focus()
+    } else if (!event.shiftKey && currentIndex === controls.length - 1) {
+      event.preventDefault()
+      controls[0]?.focus()
+    }
+    return
+  }
   if (event.code !== 'Space' || event.repeat || event.defaultPrevented) return
   const target = event.target instanceof Element ? event.target : null
   if (target?.closest('button, input, select, textarea, [contenteditable="true"]')) return
@@ -79,11 +115,18 @@ const showAllAssets = () => {
     <main class="video-composer-center">
       <VideoPreviewStage :key="template.renderer" :safe-area="settings.safeArea" @ready="setCanvas" />
     </main>
-    <VideoTemplateBrowser v-model="settings.templateId" :templates="videoTemplates" :assets="activeAssets" />
-    <VideoSceneInspector v-model="settings" :template="template" />
+    <nav class="video-mobile-toolbar" aria-label="Video editing tools">
+      <button type="button" aria-controls="video-mobile-templates" :aria-expanded="mobilePanel === 'templates'" @click="openMobilePanel('templates', $event)">Templates</button>
+      <button type="button" aria-controls="video-mobile-scene" :aria-expanded="mobilePanel === 'scene'" @click="openMobilePanel('scene', $event)">Scene</button>
+      <button type="button" aria-controls="video-mobile-canvas" :aria-expanded="mobilePanel === 'canvas'" @click="openMobilePanel('canvas', $event)">Canvas</button>
+      <button type="button" aria-controls="video-mobile-assets" :aria-expanded="mobilePanel === 'assets'" @click="openMobilePanel('assets', $event)">Assets</button>
+    </nav>
+    <button v-if="mobilePanel" class="video-mobile-backdrop" type="button" aria-label="Close video settings" @click="closeMobilePanel" />
+    <VideoTemplateBrowser id="video-mobile-templates" v-model="settings.templateId" class="video-mobile-panel" :class="{ 'is-mobile-open': mobilePanel === 'templates' }" :role="mobilePanel === 'templates' ? 'dialog' : undefined" :aria-modal="mobilePanel === 'templates' || undefined" aria-label="Choose a video template" :templates="videoTemplates" :assets="activeAssets" />
+    <VideoSceneInspector id="video-mobile-scene" v-model="settings" class="video-mobile-panel" :class="{ 'is-mobile-open': mobilePanel === 'scene' }" :role="mobilePanel === 'scene' ? 'dialog' : undefined" :aria-modal="mobilePanel === 'scene' || undefined" aria-label="Scene settings" :template="template" />
     <aside class="video-composer-right">
-      <VideoCanvasInspector v-model="settings" />
-      <section class="video-panel video-assets-panel">
+      <VideoCanvasInspector id="video-mobile-canvas" v-model="settings" class="video-mobile-panel" :class="{ 'is-mobile-open': mobilePanel === 'canvas' }" :role="mobilePanel === 'canvas' ? 'dialog' : undefined" :aria-modal="mobilePanel === 'canvas' || undefined" aria-label="Canvas settings" />
+      <section id="video-mobile-assets" class="video-panel video-assets-panel video-mobile-panel" :class="{ 'is-mobile-open': mobilePanel === 'assets' }" :role="mobilePanel === 'assets' ? 'dialog' : undefined" :aria-modal="mobilePanel === 'assets' || undefined" aria-label="Video assets">
         <div class="video-panel-scroll">
         <header>
           <p>Assets</p><span>{{ activeAssets.length }}/{{ assets.length }}</span>
@@ -104,6 +147,7 @@ const showAllAssets = () => {
         </div>
       </section>
     </aside>
+    <button v-if="mobilePanel" ref="mobilePanelClose" class="video-mobile-sheet-handle" type="button" aria-label="Close video settings" @click="closeMobilePanel"><span aria-hidden="true" /></button>
     <VideoTimeline :progress="progress" :duration="totalDuration" :playing="playing" @seek="seek" @toggle="togglePlayback">
       <p role="status" aria-live="polite">{{ feedback }}</p>
       <button class="button-primary" type="button" :disabled="exporting || !activeAssets.length" @click="renderVideo">{{ exporting ? 'Rendering…' : 'Export video' }}</button>
@@ -365,6 +409,7 @@ const showAllAssets = () => {
 :deep(.video-template-list>button) {
   width: 100%;
   min-height: 0;
+  touch-action: manipulation;
   padding: calc(var(--space)/4);
   border: 1px solid transparent;
   border-radius: calc(var(--radius)/2);
@@ -1074,6 +1119,12 @@ const showAllAssets = () => {
   transform: none !important
 }
 
+.video-mobile-toolbar,
+.video-mobile-backdrop,
+.video-mobile-sheet-handle {
+  display: none
+}
+
 @media(max-width:1180px) {
   .board-video-composer {
     height: auto;
@@ -1154,45 +1205,127 @@ const showAllAssets = () => {
     order: 2
   }
 
-  .board-video-composer > :deep(.video-template-browser) {
-    grid-column: auto;
-    grid-row: auto;
+  .video-mobile-toolbar {
+    position: sticky;
+    z-index: 4;
+    bottom: max(calc(var(--space)/2), env(safe-area-inset-bottom));
     order: 3;
-  
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+    padding: 4px;
+    border-radius: var(--filter-pill-radius);
+    background: var(--filter-overlay-panel-background);
+    backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation));
+    -webkit-backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation))
   }
 
-  .board-video-composer > :deep(.video-inspector) {
-    grid-column: auto;
-    grid-row: auto;
-    order: 4
+  .video-mobile-toolbar button {
+    min-width: 0;
+    min-height: 44px;
+    padding: 0 6px;
+    border: 0;
+    border-radius: var(--filter-pill-radius);
+    color: inherit;
+    background: transparent;
+    font-size: var(--video-type-body);
+    font-weight: var(--video-weight-strong);
+    touch-action: manipulation
+  }
+
+  .video-mobile-toolbar button[aria-expanded=true] {
+    color: var(--filter-overlay-primary-color);
+    background: var(--filter-overlay-primary-background)
+  }
+
+  .video-mobile-toolbar button:focus-visible,
+  .video-mobile-sheet-handle:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px
+  }
+
+  .video-mobile-backdrop {
+    position: fixed;
+    z-index: 40;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: rgb(255 255 255/.72);
+    backdrop-filter: blur(var(--filter-overlay-blur));
+    -webkit-backdrop-filter: blur(var(--filter-overlay-blur))
+  }
+
+  .board-video-composer > :deep(.video-mobile-panel),
+  .video-composer-right > :deep(.video-mobile-panel),
+  .video-composer-right > .video-mobile-panel {
+    display: none
+  }
+
+  .board-video-composer > :deep(.video-mobile-panel.is-mobile-open),
+  .video-composer-right > :deep(.video-mobile-panel.is-mobile-open),
+  .video-composer-right > .video-mobile-panel.is-mobile-open {
+    position: fixed;
+    z-index: 41;
+    inset: auto 0 0;
+    width: 100%;
+    height: min(78dvh, 46rem);
+    max-height: min(78dvh, 46rem);
+    display: block;
+    overflow: hidden;
+    border-radius: calc(var(--radius-mobile)*2) calc(var(--radius-mobile)*2) 0 0;
+    background: var(--filter-overlay-panel-background-mobile);
+    backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
+    -webkit-backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
+    animation: filter-sheet-in var(--filter-overlay-enter-duration) var(--filter-overlay-enter-easing) both
   }
 
   .video-composer-right {
-    grid-column: auto;
-    grid-row: auto;
-    order: 5
+    display: contents
   }
 
-  .video-composer-heading {
-    grid-column: auto;
-    display: block
+  .video-composer-right > :deep(.video-inspector.video-mobile-panel.is-mobile-open) {
+    overflow: hidden;
+    isolation: auto
   }
 
-  .video-composer-heading>p {
-    margin-top: calc(var(--space)/3)
+  .video-composer-right > :deep(.video-inspector.video-mobile-panel.is-mobile-open)::before {
+    display: none
   }
 
-  .video-composer-center {
-    grid-column: auto;
-    grid-row: auto
+  .video-composer-right > :deep(.video-inspector.video-mobile-panel.is-mobile-open > .video-panel-scroll) {
+    overflow-x: hidden;
+    overflow-y: auto
   }
 
-  .video-composer-right {
-    display: grid
+  .video-mobile-sheet-handle {
+    position: fixed;
+    z-index: 42;
+    left: 50%;
+    bottom: calc(min(78dvh, 46rem) - 44px);
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
+    display: block;
+    padding: 0;
+    border: 0;
+    color: var(--filter-overlay-panel-color);
+    background: transparent;
+    translate: -50% 0;
+    touch-action: manipulation
   }
 
-  .video-assets-panel {
-    display: block
+  .video-mobile-sheet-handle > span {
+    position: absolute;
+    top: calc(var(--space)/2);
+    left: 0;
+    width: 44px;
+    height: 5px;
+    border-radius: var(--filter-pill-radius);
+    background: color-mix(in srgb, var(--filter-overlay-panel-color) 55%, transparent)
   }
 
   :deep(.video-timeline) {
@@ -1206,6 +1339,12 @@ const showAllAssets = () => {
 
   :deep(.video-panel) {
     max-height: 58dvh
+  }
+
+  :deep(.video-mobile-panel.is-mobile-open .video-panel-scroll),
+  .video-assets-panel.is-mobile-open :deep(.video-panel-scroll) {
+    max-height: min(78dvh, 46rem);
+    padding-top: calc(var(--space)*2)
   }
 
   :deep(.video-stage) {
@@ -1246,6 +1385,14 @@ const showAllAssets = () => {
 
   .video-asset-mobile-order button:disabled {
     opacity: .28
+  }
+}
+
+@media (max-width:640px) and (prefers-reduced-motion: reduce) {
+  .board-video-composer > :deep(.video-mobile-panel.is-mobile-open),
+  .video-composer-right > :deep(.video-mobile-panel.is-mobile-open),
+  .video-composer-right > .video-mobile-panel.is-mobile-open {
+    animation: none
   }
 }
 </style>
