@@ -1260,7 +1260,7 @@ const showAllAssets = () => {
     grid-template-columns: 1fr;
     grid-template-rows: minmax(0, 1fr) auto auto;
     gap: calc(var(--space)/2);
-    padding: var(--space) calc(var(--space)/2) calc(var(--space)/2);
+    padding: var(--space) calc(var(--space)/2) max(calc(var(--space)/2), env(safe-area-inset-bottom));
     overflow: hidden;
     border-radius: var(--radius-mobile);
   }
@@ -1368,7 +1368,7 @@ const showAllAssets = () => {
     height: var(--video-mobile-sheet-height);
     max-height: var(--video-mobile-sheet-height);
     display: block;
-    padding-bottom: env(safe-area-inset-bottom);
+    padding-bottom: 0;
     overflow: hidden;
     border-radius: calc(var(--radius-mobile)*2) calc(var(--radius-mobile)*2) 0 0;
     background: var(--filter-overlay-panel-background-mobile);
@@ -1482,8 +1482,8 @@ const showAllAssets = () => {
     height: 100%;
     max-height: 100%;
     padding-top: calc(var(--space)*2);
-    padding-bottom: calc(var(--space)*3);
-    scroll-padding-bottom: calc(var(--space)*3)
+    padding-bottom: calc(var(--space)*3 + env(safe-area-inset-bottom));
+    scroll-padding-bottom: calc(var(--space)*3 + env(safe-area-inset-bottom))
   }
 
   :deep(.video-inspector label:has(> .video-range-input)),
