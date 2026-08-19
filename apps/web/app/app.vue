@@ -1,6 +1,7 @@
 <script setup lang="ts">
 const splashVisible = ref(true)
 const splashLeaving = ref(false)
+const splashLetters = [...'Specials']
 let splashTimer: ReturnType<typeof setTimeout> | undefined
 let splashRemoveTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -9,7 +10,7 @@ onMounted(() => {
   splashTimer = setTimeout(() => {
     splashLeaving.value = true
     splashRemoveTimer = setTimeout(() => { splashVisible.value = false }, reducedMotion ? 0 : 220)
-  }, reducedMotion ? 350 : 1450)
+  }, reducedMotion ? 350 : 1100)
 })
 
 onBeforeUnmount(() => {
@@ -21,7 +22,7 @@ onBeforeUnmount(() => {
 <template>
   <NuxtRouteAnnouncer />
   <div v-if="splashVisible" class="app-splash" :class="{ 'app-splash--leaving': splashLeaving }" role="status" aria-label="Specials">
-    <span aria-hidden="true">Specials</span>
+    <span class="app-splash-word" aria-hidden="true"><span v-for="(letter, index) in splashLetters" :key="index" class="app-splash-letter" :style="{ '--letter-stagger': `${120 + index * 35}ms` }">{{ letter }}</span></span>
   </div>
   <NuxtPage />
 </template>
@@ -39,17 +40,21 @@ onBeforeUnmount(() => {
   transition: opacity 220ms ease-out
 }
 
-.app-splash span {
-  width: 0;
-  overflow: hidden;
-  border-right: 2px solid currentColor;
+.app-splash-word {
+  display: flex;
   font-family: var(--font-family-ui);
   font-size: clamp(2rem, 10vw, 4rem);
   font-weight: 500;
   letter-spacing: -.055em;
   line-height: 1;
-  white-space: nowrap;
-  animation: splash-type 800ms steps(8, end) 180ms forwards, splash-caret 500ms step-end 3
+  white-space: nowrap
+}
+
+.app-splash-letter {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(16px);
+  animation: splash-letter-in 220ms cubic-bezier(.2, 0, 0, 1) var(--letter-stagger) forwards
 }
 
 .app-splash--leaving {
@@ -62,12 +67,11 @@ onBeforeUnmount(() => {
   }
 }
 
-@keyframes splash-type {
-  to { width: 8ch }
-}
-
-@keyframes splash-caret {
-  50% { border-color: transparent }
+@keyframes splash-letter-in {
+  to {
+    opacity: 1;
+    transform: translateY(0)
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -75,9 +79,9 @@ onBeforeUnmount(() => {
     transition: none
   }
 
-  .app-splash span {
-    width: auto;
-    border-right: 0;
+  .app-splash-letter {
+    opacity: 1;
+    transform: none;
     animation: none
   }
 }
