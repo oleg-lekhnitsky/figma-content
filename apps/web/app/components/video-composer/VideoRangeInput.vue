@@ -16,63 +16,12 @@ const style = computed<CSSProperties>(() => ({
   '--video-range-start': `${Math.min(position.value, zero.value)}%`,
   '--video-range-end': `${Math.max(position.value, zero.value)}%`
 } as CSSProperties))
-
-let touchPointerId: number | undefined
-let touchStartX = 0
-let touchStartY = 0
-let touchAxis: 'pending' | 'horizontal' | 'vertical' = 'pending'
-
-const setTouchValue = (input: HTMLInputElement, clientX: number) => {
-  if (input.disabled) return
-  const bounds = input.getBoundingClientRect()
-  const ratio = Math.max(0, Math.min(1, (clientX - bounds.left) / Math.max(1, bounds.width)))
-  const rawValue = minimum.value + ratio * (maximum.value - minimum.value)
-  const numericStep = props.step === 'any' ? 0 : Number(props.step)
-  const value = numericStep > 0
-    ? minimum.value + Math.round((rawValue - minimum.value) / numericStep) * numericStep
-    : rawValue
-  input.value = String(Math.max(minimum.value, Math.min(maximum.value, value)))
-  input.dispatchEvent(new Event('input', { bubbles: true }))
-}
-
-const startTouch = (event: PointerEvent) => {
-  if (event.pointerType !== 'touch') return
-  touchPointerId = event.pointerId
-  touchStartX = event.clientX
-  touchStartY = event.clientY
-  touchAxis = 'pending'
-}
-
-const moveTouch = (event: PointerEvent) => {
-  if (event.pointerId !== touchPointerId) return
-  const deltaX = event.clientX - touchStartX
-  const deltaY = event.clientY - touchStartY
-  if (touchAxis === 'pending' && Math.max(Math.abs(deltaX), Math.abs(deltaY)) >= 6) {
-    touchAxis = Math.abs(deltaX) > Math.abs(deltaY) ? 'horizontal' : 'vertical'
-    if (touchAxis === 'horizontal') (event.currentTarget as HTMLInputElement).setPointerCapture(event.pointerId)
-  }
-  if (touchAxis !== 'horizontal') return
-  event.preventDefault()
-  setTouchValue(event.currentTarget as HTMLInputElement, event.clientX)
-}
-
-const finishTouch = (event: PointerEvent) => {
-  if (event.pointerId !== touchPointerId) return
-  if (touchAxis !== 'vertical') setTouchValue(event.currentTarget as HTMLInputElement, event.clientX)
-  touchPointerId = undefined
-  touchAxis = 'pending'
-}
-
-const cancelTouch = (event: PointerEvent) => {
-  if (event.pointerId === touchPointerId) touchPointerId = undefined
-}
 </script>
 
 <template>
   <input
     class="video-range-input" type="range" :min="min" :max="max" :step="step" :value="value"
-    :style="style" @pointerdown="startTouch" @pointermove="moveTouch" @pointerup="finishTouch"
-    @pointercancel="cancelTouch">
+    :style="style">
 </template>
 
 <style scoped>

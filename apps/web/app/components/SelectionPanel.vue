@@ -66,6 +66,9 @@ const finishOverlayClose = () => {
   if (!overlayClosing.value) return
   renderedOverlay.value = false
   overlayClosing.value = false
+  sheetDragY.value = 0
+  sheetDragging.value = false
+  sheetPointerId = undefined
 }
 
 const handleOverlayAnimationEnd = (event: AnimationEvent) => {
@@ -85,6 +88,9 @@ watch(() => [props.visible, props.overlay] as const, async ([visible, overlay]) 
   if (document.documentElement.dataset.filterTransition === 'closing') {
     renderedOverlay.value = false
     overlayClosing.value = false
+    sheetDragY.value = 0
+    sheetDragging.value = false
+    sheetPointerId = undefined
     return
   }
   overlayClosing.value = true
@@ -115,7 +121,7 @@ const startSheetDrag = (event: PointerEvent) => {
   sheetStartY = event.clientY
   sheetStartTime = performance.now()
   sheetDragging.value = true
-  panelRoot.value?.setPointerCapture(event.pointerId)
+  handle.setPointerCapture(event.pointerId)
 }
 
 const moveSheetDrag = (event: PointerEvent) => {
@@ -136,13 +142,12 @@ const finishSheetDrag = (event: PointerEvent) => {
   sheetDragY.value = 0
 }
 
-watch(() => props.visible, visible => {
-  if (!visible) {
-    sheetDragY.value = 0
-    sheetDragging.value = false
-    sheetPointerId = undefined
-  }
-})
+const cancelSheetDrag = (event: PointerEvent) => {
+  if (!sheetDragging.value || event.pointerId !== sheetPointerId) return
+  sheetDragging.value = false
+  sheetPointerId = undefined
+  sheetDragY.value = 0
+}
 
 onMounted(() => {
   window.addEventListener('keydown', handleKeydown)
@@ -165,7 +170,7 @@ onBeforeUnmount(() => {
         :style="renderedOverlay ? { '--sheet-drag-y': `${sheetDragY}px` } : undefined"
         :aria-label="label" @click="handlePanelClick" @click.self="handleBackdropClick" @animationend.self="handleOverlayAnimationEnd"
         @pointerdown="startSheetDrag" @pointermove="moveSheetDrag" @pointerup="finishSheetDrag"
-        @pointercancel="finishSheetDrag">
+        @pointercancel="cancelSheetDrag">
         <slot />
         <button
           v-if="closeLabel" class="selection-panel-close" type="button" :disabled="closeDisabled"
