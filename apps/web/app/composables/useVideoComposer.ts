@@ -249,10 +249,15 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     const visibleContext=target.getContext('2d');if(!visibleContext)return
     visibleContext.clearRect(0,0,width,height);visibleContext.drawImage(frame,0,0);feedback.value=''
   }
-  const drawWebgl = async (time:number) => {
+  const drawWebgl = async (time:number,revision:number) => {
     const target=canvas.value;if(!target||!assets.value.length)return
-    const THREE=await import('three'),{width,height}=sizeCanvas(target)
+    const templateId=template.value.id
+    const isCurrent=()=>revision===renderRevision&&target===canvas.value&&template.value.id===templateId&&template.value.renderer==='webgl'
+    const THREE=await import('three')
+    if(!isCurrent())return
+    const {width,height}=sizeCanvas(target)
     if(!threeRenderer||threeRenderer.domElement!==target){disposeRenderer();threeRenderer=new THREE.WebGLRenderer({canvas:target,antialias:true,preserveDrawingBuffer:runtimeOptions.preserveDrawingBuffer===true});threeRenderer.setPixelRatio(1)}
+    const renderer=threeRenderer
     threeRenderer.setSize(width,height,false);threeRenderer.setClearColor(settings.value.backgroundColor,1)
     const isCarousel3d=template.value.collection==='carousel-3d'
     const isGlobe=template.value.collection==='globe'
@@ -356,6 +361,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
       if(!texture){
         if(isVideo){
           const video=await loadVideo(asset)
+          if(!isCurrent())return
           const videoCanvas=document.createElement('canvas'),maxSide=1024
           const sourceWidth=video.videoWidth||asset.width,sourceHeight=video.videoHeight||asset.height
           const textureScale=Math.min(1,maxSide/Math.max(sourceWidth,sourceHeight))
@@ -364,6 +370,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
         }else{
           let source:HTMLImageElement|HTMLCanvasElement
           try{source=await loadImage(asset)}catch{source=missingAssetSource(asset)}
+          if(!isCurrent())return
           const sourceWidth=source instanceof HTMLImageElement?source.naturalWidth:source.width
           const sourceHeight=source instanceof HTMLImageElement?source.naturalHeight:source.height
           const rounded=document.createElement('canvas'),maxSide=1024,textureScale=Math.min(1,maxSide/Math.max(sourceWidth,sourceHeight))
@@ -373,6 +380,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
           texture=new THREE.CanvasTexture(rounded);texture.colorSpace=THREE.SRGBColorSpace;texture.generateMipmaps=false;texture.minFilter=THREE.LinearFilter;textures.set(textureKey,texture)
         }
       }
+      if(!isCurrent())return
       if(isVideo){
         const video=videos.get(asset.id)
         const videoCanvas=texture.image as HTMLCanvasElement
@@ -471,6 +479,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
       }
       if(isCarousel3d){carouselRing.add(mesh);carouselMeshes.push(mesh)}else if(!isGlobe){scene.add(mesh);rendered++}
     }))
+    if(!isCurrent())return
     if(!rendered&&!carouselMeshes.length&&!globeMeshes.length)throw new Error('No previews could be loaded')
     if(isCarousel3d){
       scene.updateMatrixWorld(true)
@@ -501,15 +510,16 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
         ;(mesh.material as import('three').MeshBasicMaterial).opacity=Math.max(0,1-(1-depth)*(settings.value.fade/100))
       })
     }
+    if(!isCurrent()||renderer!==threeRenderer)return
     feedback.value=''
-    threeRenderer.render(scene,camera)
+    renderer.render(scene,camera)
   }
   const drawAt=async(time:number)=>{
     const revision=++renderRevision
     try {
       if(template.value.collection==='scale')await drawScale(time,revision)
       else if(template.value.collection==='flicker')await drawFlicker(time,revision)
-      else if(template.value.renderer==='webgl')await drawWebgl(time)
+      else if(template.value.renderer==='webgl')await drawWebgl(time,revision)
       else await draw2d(time,revision)
     } catch {
       if(revision===renderRevision)feedback.value='Preview unavailable. Check that this board still has accessible image previews.'
@@ -537,6 +547,15 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
   const togglePlayback=()=>{if(playing.value){stop();return}startPlayback()}
   const seek=(value:number)=>{progress.value=value;if(playing.value)playbackStartedAt=performance.now()-value*1000;void drawAt(value)}
   const setCanvas=(value:HTMLCanvasElement)=>{canvas.value=value;void drawAt(progress.value)}
+  const waitForReplacementCanvas=(previousCanvas:HTMLCanvasElement|undefined,changeRevision:number)=>new Promise<void>(resolve=>{
+    let attempts=0
+    const check=()=>{
+      if(changeRevision!==templateChangeRevision||canvas.value!==previousCanvas||attempts>=12){resolve();return}
+      attempts+=1
+      requestAnimationFrame(check)
+    }
+    check()
+  })
   const supportedMimeType=()=>['video/mp4;codecs=avc1.42E01E','video/mp4','video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'].find(type=>MediaRecorder.isTypeSupported(type))||''
   const renderVideo=async()=>{
     const target=canvas.value,mimeType=supportedMimeType();if(!target||!mimeType||!('captureStream'in target)){feedback.value='Local video export is not supported by this browser.';return}
@@ -545,14 +564,18 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
   }
   watch(()=>settings.value.templateId,(templateId,previousTemplateId)=>{
     const changeRevision=++templateChangeRevision
+    const previousCanvas=canvas.value
     stop()
     const previousRenderer=videoTemplates.find(item=>item.id===previousTemplateId)?.renderer
-    if(previousRenderer===template.value.renderer)disposeTextures()
+    const rendererChanged=previousRenderer!==template.value.renderer
+    if(!rendererChanged)disposeTextures()
     else disposeRenderer()
     progress.value=0
     if(template.value.preset)Object.assign(settings.value,template.value.preset)
     settings.value.visibleCount=countForAssets()
     void nextTick(async()=>{
+      if(rendererChanged)await waitForReplacementCanvas(previousCanvas,changeRevision)
+      if(changeRevision!==templateChangeRevision)return
       if(template.value.collection==='flicker')await preloadFlickerAssets()
       if(changeRevision!==templateChangeRevision)return
       await drawAt(0)
