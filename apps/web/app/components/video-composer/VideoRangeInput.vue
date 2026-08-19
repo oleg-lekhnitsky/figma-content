@@ -100,4 +100,26 @@ const style = computed<CSSProperties>(() => ({
   cursor: not-allowed;
   opacity: .4
 }
+
+@media (hover: none), (pointer: coarse) {
+  .video-range-input {
+    height: 44px;
+    touch-action: pan-y
+  }
+
+  .video-range-input::-webkit-slider-thumb {
+    width: 4px;
+    height: 24px;
+    margin-top: 10px;
+    border-radius: 2px;
+    opacity: 1
+  }
+
+  .video-range-input::-moz-range-thumb {
+    width: 4px;
+    height: 24px;
+    border-radius: 2px;
+    opacity: 1
+  }
+}
 </style>

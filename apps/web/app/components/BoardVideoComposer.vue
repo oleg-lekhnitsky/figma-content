@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { AssetMasonryItem } from '~/types/asset-masonry'
-import { Eye, EyeOff, Menu4 } from 'reicon-vue'
+import { Download3, Eye, EyeOff, Menu4 } from 'reicon-vue'
 import { videoTemplates } from '~/utils/video-templates'
 import VideoCanvasInspector from '~/components/video-composer/VideoCanvasInspector.vue'
 import VideoPreviewStage from '~/components/video-composer/VideoPreviewStage.vue'
@@ -150,7 +150,7 @@ const showAllAssets = () => {
     <button v-if="mobilePanel" ref="mobilePanelClose" class="video-mobile-sheet-handle" type="button" aria-label="Close video settings" @click="closeMobilePanel"><span aria-hidden="true" /></button>
     <VideoTimeline :progress="progress" :duration="totalDuration" :playing="playing" @seek="seek" @toggle="togglePlayback">
       <p role="status" aria-live="polite">{{ feedback }}</p>
-      <button class="button-primary" type="button" :disabled="exporting || !activeAssets.length" @click="renderVideo">{{ exporting ? 'Rendering…' : 'Export video' }}</button>
+      <button class="button-primary video-export-button" type="button" :disabled="exporting || !activeAssets.length" :aria-label="exporting ? 'Rendering video' : 'Download video'" :title="exporting ? 'Rendering video' : 'Download video'" @click="renderVideo"><Download3 class="video-export-icon" :size="20" weight="Outline" aria-hidden="true" /><span class="video-export-label">{{ exporting ? 'Rendering…' : 'Export video' }}</span></button>
     </VideoTimeline>
   </div>
 </template>
@@ -1112,6 +1112,10 @@ const showAllAssets = () => {
   opacity: .5
 }
 
+.video-export-icon {
+  display: none
+}
+
 :deep(.video-template-preset),
 :deep(.video-template-preset:hover),
 :deep(.video-template-preset:focus-visible),
@@ -1176,8 +1180,9 @@ const showAllAssets = () => {
   }
 
   .board-video-composer {
+    min-height: 0;
     grid-template-columns: 1fr;
-    gap: calc(var(--space)/2);
+    gap: calc(var(--space)/3);
     padding: var(--space) calc(var(--space)/2) calc(var(--space)/2);
     border-radius: var(--radius-mobile);
     
@@ -1198,6 +1203,7 @@ const showAllAssets = () => {
   }
 
   .video-composer-center {
+    height: auto;
     order: 1
   }
 
@@ -1214,7 +1220,7 @@ const showAllAssets = () => {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 4px;
     padding: 4px;
-    border-radius: var(--filter-pill-radius);
+    border-radius: var(--radius-mobile);
     background: var(--filter-overlay-panel-background);
     backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation));
     -webkit-backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation))
@@ -1225,7 +1231,7 @@ const showAllAssets = () => {
     min-height: 44px;
     padding: 0 6px;
     border: 0;
-    border-radius: var(--filter-pill-radius);
+    border-radius: calc(var(--radius-mobile) - 4px);
     color: inherit;
     background: transparent;
     font-size: var(--video-type-body);
@@ -1330,10 +1336,27 @@ const showAllAssets = () => {
 
   :deep(.video-timeline) {
     grid-template-columns: 44px auto minmax(48px, 1fr) auto;
-    gap: calc(var(--space)/3)
+    gap: calc(var(--space)/3);
+    border-radius: var(--radius-mobile)
   }
 
   :deep(.video-timeline-actions p) {
+    display: none
+  }
+
+  .video-export-button {
+    width: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    justify-content: center;
+    padding: 0
+  }
+
+  .video-export-icon {
+    display: block
+  }
+
+  .video-export-label {
     display: none
   }
 
@@ -1344,11 +1367,45 @@ const showAllAssets = () => {
   :deep(.video-mobile-panel.is-mobile-open .video-panel-scroll),
   .video-assets-panel.is-mobile-open :deep(.video-panel-scroll) {
     max-height: min(78dvh, 46rem);
-    padding-top: calc(var(--space)*2)
+    padding-top: calc(var(--space)*2);
+    padding-bottom: calc(var(--space)*3 + env(safe-area-inset-bottom));
+    scroll-padding-bottom: calc(var(--space)*3 + env(safe-area-inset-bottom))
+  }
+
+  :deep(.video-inspector label:has(> .video-range-input)),
+  :deep(.video-inspector label:has(> .video-range-input)>span) {
+    min-height: 44px
+  }
+
+  :deep(.video-control-pair) {
+    grid-template-columns: minmax(0, 1fr)
+  }
+
+  :deep(.video-color-hue) {
+    min-height: 44px;
+    display: grid;
+    align-items: center
+  }
+
+  :deep(.video-color-hue input[type=range]) {
+    height: 44px;
+    background-size: 100% 14px;
+    background-position: center;
+    background-repeat: no-repeat;
+    touch-action: pan-y
   }
 
   :deep(.video-stage) {
-    min-height: 44dvh
+    height: auto;
+    min-height: 0;
+    padding: 0;
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none
+  }
+
+  :deep(.video-canvas-wrap) {
+    border-radius: var(--radius-mobile)
   }
 
   .video-assets-panel li {

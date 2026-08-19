@@ -15,7 +15,9 @@ const fitPreview = () => {
   const availableWidth = Math.max(0,host.clientWidth-horizontalPadding)
   const availableHeight = Math.max(0,host.clientHeight-verticalPadding)
   const aspectRatio = target.width / Math.max(1, target.height)
-  const width = Math.min(availableWidth, availableHeight * aspectRatio)
+  const width = window.matchMedia('(max-width: 640px)').matches
+    ? availableWidth
+    : Math.min(availableWidth, availableHeight * aspectRatio)
   previewSize.value = { width, height: width / aspectRatio }
 }
 
