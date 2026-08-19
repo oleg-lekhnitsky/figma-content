@@ -290,6 +290,10 @@ onBeforeUnmount(() => {
     transition: transform 260ms var(--filter-overlay-exit-easing);
   }
 
+  .selection-panel--filter-overlay.selection-panel--filter-closing:not(.selection-panel--sheet-dismissing) :deep(.asset-filter-controls) {
+    animation: selection-sheet-out 260ms var(--filter-overlay-exit-easing) both;
+  }
+
   .selection-panel--wide {
     width: calc(100vw - var(--space)*2);
     box-sizing: border-box;
@@ -316,6 +320,11 @@ onBeforeUnmount(() => {
 @keyframes selection-sheet-in {
   from { translate: 0 2rem; opacity: 0; }
   to { translate: 0 0; opacity: 1; }
+}
+
+@keyframes selection-sheet-out {
+  from { translate: 0 0; opacity: 1; }
+  to { translate: 0 1rem; opacity: 0; }
 }
 
 </style>
