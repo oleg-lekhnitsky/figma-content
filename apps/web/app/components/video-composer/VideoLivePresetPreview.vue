@@ -7,7 +7,7 @@ const emit = defineEmits<{ ready: [] }>()
 const canvas = ref<HTMLCanvasElement>()
 const assetRef = computed(() => props.assets)
 const previewTitle = ref('Preset preview')
-const { settings, setCanvas, drawAt, seek, togglePlayback } = useVideoComposer(assetRef, previewTitle, props.template.id)
+const { settings, setCanvas, drawAt, seek, togglePlayback } = useVideoComposer(assetRef, previewTitle, props.template.id, { maxPreviewDimension:360 })
 
 onMounted(async() => {
   if (props.template.preset) Object.assign(settings.value, props.template.preset)

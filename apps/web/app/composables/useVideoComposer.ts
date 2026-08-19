@@ -24,7 +24,12 @@ const cubicBezierProgress = (progress: number, [x1, y1, x2, y2]: readonly [numbe
   return sample(time, y1, y2)
 }
 
-export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Ref<string>, initialTemplateId='flicker-01') => {
+interface VideoComposerRuntimeOptions {
+  maxPreviewDimension?: number
+  preserveDrawingBuffer?: boolean
+}
+
+export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Ref<string>, initialTemplateId='flicker-01', runtimeOptions:VideoComposerRuntimeOptions={}) => {
   const settings = ref<VideoComposerSettings>({ templateId:initialTemplateId,format:'portrait',fit:'contain',transition:'fade',secondsPerSlide:6,showTitles:false,direction:'up',gap:40,tilt:0,scaleCenter:false,tiltMode:'off',easing:'glide',cornerRadius:0,distance:100,centerScale:1.4,fade:0,offsetX:0,offsetY:0,scaleFocus:'center',solo:false,visibleCount:6,planeSize:100,cycles:1,staggerFrames:2,delayFrames:0,cycleDegrees:360,orbitRadius:280,perspective:140,rotationX:0,rotationY:0,rotationZ:0,reverse:false,spin:0,spread:0,staggerSeconds:.4,scaleStyle:'bloom',growFrom:'center',imageFit:'fit',flickerEffect:'off',flickerPacing:'equal',scaleDirection:'forward',driftDirection:'up',scaleAmount:30,driftAmount:30,delaySeconds:0,fps:30,safeArea:false,backgroundColor:'#f1efed',globeMinScale:10,globeMaxScale:20,globeAxis:'y',globeMotion:'continuous',globeStops:8,globeFaceCamera:true,globeShowBackfaces:true,globeFlipImage:false })
   const canvas = shallowRef<HTMLCanvasElement>()
   const playing = ref(false)
@@ -34,12 +39,24 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
   const images = new Map<string, HTMLImageElement>()
   const videos = new Map<string, HTMLVideoElement>()
   const textures = new Map<string, unknown>()
+  const webglMeshes = new Map<string, import('three').Mesh>()
   let animationFrame = 0
   let playbackStartedAt = 0
+  let lastPreviewFrameAt = 0
   let renderRevision = 0
   let threeRenderer: import('three').WebGLRenderer | undefined
 
+  const disposeWebglMeshes = () => {
+    webglMeshes.forEach(mesh=>{
+      mesh.removeFromParent()
+      mesh.geometry.dispose()
+      const materials=Array.isArray(mesh.material)?mesh.material:[mesh.material]
+      materials.forEach(material=>material.dispose())
+    })
+    webglMeshes.clear()
+  }
   const disposeTextures = () => {
+    disposeWebglMeshes()
     textures.forEach(texture=>(texture as import('three').Texture).dispose())
     textures.clear()
   }
@@ -111,7 +128,11 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
   }
 
   const sizeCanvas = (target: HTMLCanvasElement) => {
-    const [width,height]=dimensions.value
+    const [formatWidth,formatHeight]=dimensions.value
+    const previewScale=runtimeOptions.maxPreviewDimension
+      ? Math.min(1,runtimeOptions.maxPreviewDimension/Math.max(formatWidth,formatHeight))
+      : 1
+    const width=Math.max(1,Math.round(formatWidth*previewScale)),height=Math.max(1,Math.round(formatHeight*previewScale))
     if(target.width!==width||target.height!==height){target.width=width;target.height=height}
     return {width,height}
   }
@@ -230,7 +251,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
   const drawWebgl = async (time:number) => {
     const target=canvas.value;if(!target||!assets.value.length)return
     const THREE=await import('three'),{width,height}=sizeCanvas(target)
-    if(!threeRenderer||threeRenderer.domElement!==target){disposeRenderer();threeRenderer=new THREE.WebGLRenderer({canvas:target,antialias:true,preserveDrawingBuffer:true});threeRenderer.setPixelRatio(1)}
+    if(!threeRenderer||threeRenderer.domElement!==target){disposeRenderer();threeRenderer=new THREE.WebGLRenderer({canvas:target,antialias:true,preserveDrawingBuffer:runtimeOptions.preserveDrawingBuffer===true});threeRenderer.setPixelRatio(1)}
     threeRenderer.setSize(width,height,false);threeRenderer.setClearColor(settings.value.backgroundColor,1)
     const isCarousel3d=template.value.collection==='carousel-3d'
     const isGlobe=template.value.collection==='globe'
@@ -314,7 +335,20 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     let rendered=0
     const carouselMeshes: import('three').Mesh[]=[]
     const globeMeshes: import('three').Mesh[]=[]
-    await Promise.all(sceneAssets.map(async(asset,index)=>{
+    // Flat carousels only need nearby cards. Cull before loading images, decoding
+    // videos, or touching textures; large boards otherwise process every asset.
+    const renderEntries=sceneAssets.map((asset,index)=>({asset,index})).filter(({index})=>{
+      if(isCarousel3d||isGlobe||isScale)return true
+      let offset=(centers[index]||0)-focusCenter
+      if(sceneAssets.length>1){
+        if(offset>circumference/2)offset-=circumference
+        if(offset < -circumference/2)offset+=circumference
+      }
+      const centered=offset/Math.max(.01,averagePitch)+(index-baseIndex)*settings.value.staggerFrames/Math.max(1,30*settings.value.secondsPerSlide)
+      const visibleRadius=settings.value.solo?.5:Math.max(.5,(settings.value.visibleCount-1)/2)
+      return Math.abs(centered)<=visibleRadius
+    })
+    await Promise.all(renderEntries.map(async({asset,index})=>{
       const isVideo=asset.mime_type?.startsWith('video/')===true
       const textureKey=isVideo?`${asset.id}:video`:`${asset.id}:${settings.value.cornerRadius}:${settings.value.planeSize}`
       let texture=textures.get(textureKey) as import('three').Texture|undefined
@@ -325,7 +359,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
           const sourceWidth=video.videoWidth||asset.width,sourceHeight=video.videoHeight||asset.height
           const textureScale=Math.min(1,maxSide/Math.max(sourceWidth,sourceHeight))
           videoCanvas.width=Math.max(1,Math.round(sourceWidth*textureScale));videoCanvas.height=Math.max(1,Math.round(sourceHeight*textureScale))
-          texture=new THREE.CanvasTexture(videoCanvas);texture.colorSpace=THREE.SRGBColorSpace;textures.set(textureKey,texture)
+          texture=new THREE.CanvasTexture(videoCanvas);texture.colorSpace=THREE.SRGBColorSpace;texture.generateMipmaps=false;texture.minFilter=THREE.LinearFilter;textures.set(textureKey,texture)
         }else{
           let source:HTMLImageElement|HTMLCanvasElement
           try{source=await loadImage(asset)}catch{source=missingAssetSource(asset)}
@@ -335,7 +369,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
           rounded.width=Math.max(1,Math.round(sourceWidth*textureScale));rounded.height=Math.max(1,Math.round(sourceHeight*textureScale))
           const roundedContext=rounded.getContext('2d')
           if(roundedContext){const radius=Math.min(rounded.width,rounded.height)/2,scaledRadius=Math.min(radius,rounded.width*settings.value.cornerRadius/Math.max(1,settings.value.planeSize));roundedContext.beginPath();roundedContext.roundRect(0,0,rounded.width,rounded.height,scaledRadius);roundedContext.clip();roundedContext.drawImage(source,0,0,rounded.width,rounded.height)}
-          texture=new THREE.CanvasTexture(rounded);texture.colorSpace=THREE.SRGBColorSpace;textures.set(textureKey,texture)
+          texture=new THREE.CanvasTexture(rounded);texture.colorSpace=THREE.SRGBColorSpace;texture.generateMipmaps=false;texture.minFilter=THREE.LinearFilter;textures.set(textureKey,texture)
         }
       }
       if(isVideo){
@@ -343,7 +377,9 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
         const videoCanvas=texture.image as HTMLCanvasElement
         if(video?.duration&&Number.isFinite(video.duration)){
           const videoTime=time%video.duration
-          if(Math.abs(video.currentTime-videoTime)>.12)video.currentTime=videoTime
+          // Let a playing video advance naturally. Repeated currentTime writes
+          // force expensive decoder seeks; explicit draws still synchronize it.
+          if(!playing.value&&Math.abs(video.currentTime-videoTime)>.12)video.currentTime=videoTime
           if(playing.value&&video.paused)void video.play().catch(()=>{})
           const videoContext=videoCanvas.getContext('2d')
           if(videoContext){
@@ -365,8 +401,15 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
       const visibleRadius=settings.value.solo?.5:Math.max(.5,(settings.value.visibleCount-1)/2)
       if(!isCarousel3d&&!isScale&&Math.abs(centered)>visibleRadius)return
       const {width:planeWidth,height:planeHeight}=planeSizes[index]!
-      const geometry=new THREE.PlaneGeometry(planeWidth,planeHeight),material=new THREE.MeshBasicMaterial({map:texture,transparent:true,side:isGlobe&&!settings.value.globeShowBackfaces?THREE.FrontSide:THREE.DoubleSide})
-      const mesh=new THREE.Mesh(geometry,material)
+      const side=isGlobe&&!settings.value.globeShowBackfaces?THREE.FrontSide:THREE.DoubleSide
+      const meshKey=`${template.value.collection}:${index}:${textureKey}:${planeWidth.toFixed(5)}:${planeHeight.toFixed(5)}:${side}`
+      let mesh=webglMeshes.get(meshKey)
+      if(!mesh){
+        mesh=new THREE.Mesh(new THREE.PlaneGeometry(planeWidth,planeHeight),new THREE.MeshBasicMaterial({map:texture,transparent:true,side}))
+        webglMeshes.set(meshKey,mesh)
+      }else mesh.removeFromParent()
+      const material=mesh.material as import('three').MeshBasicMaterial
+      mesh.position.set(0,0,0);mesh.rotation.set(0,0,0);mesh.scale.set(1,1,1);material.opacity=1
       if(isScale){
         const start=index*settings.value.staggerSeconds
         const local=Math.max(0,Math.min(1,(delayedTime-start)/Math.max(.01,settings.value.secondsPerSlide)))
@@ -459,7 +502,6 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     }
     feedback.value=''
     threeRenderer.render(scene,camera)
-    scene.traverse(object=>{if(object instanceof THREE.Mesh){object.geometry.dispose();(object.material as import('three').Material).dispose()}})
   }
   const drawAt=async(time:number)=>{
     const revision=++renderRevision
@@ -472,9 +514,12 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
       if(revision===renderRevision)feedback.value='Preview unavailable. Check that this board still has accessible image previews.'
     }
   }
-  const stop=()=>{playing.value=false;cancelAnimationFrame(animationFrame);videos.forEach(video=>video.pause())}
-  const tick=()=>{
+  const stop=()=>{playing.value=false;lastPreviewFrameAt=0;cancelAnimationFrame(animationFrame);videos.forEach(video=>video.pause())}
+  const tick=(frameTime:number)=>{
     if(!playing.value)return
+    const frameInterval=1000/Math.max(1,settings.value.fps)
+    if(lastPreviewFrameAt&&frameTime-lastPreviewFrameAt<frameInterval){animationFrame=requestAnimationFrame(tick);return}
+    lastPreviewFrameAt=frameTime
     const duration=totalDuration.value
     progress.value=(performance.now()-playbackStartedAt)/1000
     if(progress.value>=duration){
@@ -487,7 +532,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     }
     void drawAt(progress.value).finally(()=>{if(playing.value)animationFrame=requestAnimationFrame(tick)})
   }
-  const togglePlayback=()=>{if(playing.value){stop();return}playbackStartedAt=performance.now()-progress.value*1000;playing.value=true;videos.forEach(video=>void video.play().catch(()=>{}));animationFrame=requestAnimationFrame(tick)}
+  const togglePlayback=()=>{if(playing.value){stop();return}playbackStartedAt=performance.now()-progress.value*1000;lastPreviewFrameAt=0;playing.value=true;videos.forEach(video=>void video.play().catch(()=>{}));animationFrame=requestAnimationFrame(tick)}
   const seek=(value:number)=>{progress.value=value;if(playing.value)playbackStartedAt=performance.now()-value*1000;void drawAt(value)}
   const setCanvas=(value:HTMLCanvasElement)=>{canvas.value=value;void drawAt(progress.value)}
   const supportedMimeType=()=>['video/mp4;codecs=avc1.42E01E','video/mp4','video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'].find(type=>MediaRecorder.isTypeSupported(type))||''

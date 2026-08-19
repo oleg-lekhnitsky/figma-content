@@ -7,7 +7,7 @@ const emit = defineEmits<{ ready: [value: string] }>()
 const canvas = ref<HTMLCanvasElement>()
 const assetRef = computed(() => props.assets)
 const previewTitle = ref('Preset frame')
-const { settings, setCanvas, drawAt, stop } = useVideoComposer(assetRef,previewTitle,props.template.id)
+const { settings, setCanvas, drawAt, stop } = useVideoComposer(assetRef,previewTitle,props.template.id,{ maxPreviewDimension:360,preserveDrawingBuffer:true })
 let cancelled=false
 const queueHost=globalThis as typeof globalThis & { __videoPreviewQueue?: Promise<void> }
 
