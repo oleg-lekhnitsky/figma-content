@@ -1300,7 +1300,6 @@ const showAllAssets = () => {
   }
 
   .video-mobile-toolbar {
-    position: sticky;
     z-index: 4;
     bottom: max(calc(var(--space)/2), env(safe-area-inset-bottom));
     order: 3;

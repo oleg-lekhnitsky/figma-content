@@ -44,6 +44,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
   let playbackStartedAt = 0
   let lastPreviewFrameAt = 0
   let renderRevision = 0
+  let templateChangeRevision = 0
   let threeRenderer: import('three').WebGLRenderer | undefined
 
   const disposeWebglMeshes = () => {
@@ -532,7 +533,8 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     }
     void drawAt(progress.value).finally(()=>{if(playing.value)animationFrame=requestAnimationFrame(tick)})
   }
-  const togglePlayback=()=>{if(playing.value){stop();return}playbackStartedAt=performance.now()-progress.value*1000;lastPreviewFrameAt=0;playing.value=true;videos.forEach(video=>void video.play().catch(()=>{}));animationFrame=requestAnimationFrame(tick)}
+  const startPlayback=()=>{if(playing.value)return;playbackStartedAt=performance.now()-progress.value*1000;lastPreviewFrameAt=0;playing.value=true;videos.forEach(video=>void video.play().catch(()=>{}));animationFrame=requestAnimationFrame(tick)}
+  const togglePlayback=()=>{if(playing.value){stop();return}startPlayback()}
   const seek=(value:number)=>{progress.value=value;if(playing.value)playbackStartedAt=performance.now()-value*1000;void drawAt(value)}
   const setCanvas=(value:HTMLCanvasElement)=>{canvas.value=value;void drawAt(progress.value)}
   const supportedMimeType=()=>['video/mp4;codecs=avc1.42E01E','video/mp4','video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'].find(type=>MediaRecorder.isTypeSupported(type))||''
@@ -542,6 +544,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     try{const stream=target.captureStream(settings.value.fps),chunks:BlobPart[]=[],recorder=new MediaRecorder(stream,{mimeType,videoBitsPerSecond:8_000_000});recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};const done=new Promise<void>((resolve,reject)=>{recorder.onstop=()=>resolve();recorder.onerror=()=>reject(new Error())});recorder.start(250);const started=performance.now();await new Promise<void>(resolve=>{const frame=async()=>{progress.value=Math.min(totalDuration.value,(performance.now()-started)/1000);await drawAt(Math.min(progress.value,totalDuration.value-.001));if(progress.value<totalDuration.value)requestAnimationFrame(frame);else resolve()};requestAnimationFrame(frame)});recorder.stop();await done;stream.getTracks().forEach(track=>track.stop());const blob=new Blob(chunks,{type:mimeType}),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`${boardTitle.value.trim().replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'').toLowerCase()||'board'}.${mimeType.includes('mp4')?'mp4':'webm'}`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);feedback.value='Video exported.'}catch{feedback.value='Video export failed. Try another browser or a smaller board.'}finally{exporting.value=false;progress.value=0;void drawAt(0)}
   }
   watch(()=>settings.value.templateId,(templateId,previousTemplateId)=>{
+    const changeRevision=++templateChangeRevision
     stop()
     const previousRenderer=videoTemplates.find(item=>item.id===previousTemplateId)?.renderer
     if(previousRenderer===template.value.renderer)disposeTextures()
@@ -551,8 +554,10 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     settings.value.visibleCount=countForAssets()
     void nextTick(async()=>{
       if(template.value.collection==='flicker')await preloadFlickerAssets()
+      if(changeRevision!==templateChangeRevision)return
       await drawAt(0)
-      if(template.value.renderer==='webgl'||template.value.collection==='flicker')togglePlayback()
+      if(changeRevision!==templateChangeRevision)return
+      if(template.value.renderer==='webgl'||template.value.collection==='flicker')startPlayback()
     })
   })
   watch(
