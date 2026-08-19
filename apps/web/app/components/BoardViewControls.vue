@@ -70,4 +70,12 @@ const columnOptions: Array<{ value: BoardViewSettings['columns']; label: string 
   line-height: 1;
 }
 
+@media (max-width: 520px) {
+  /* Filters naturally reach the shared 90dvh cap because they contain more
+     rows. Give the shorter View content that same resolved sheet height. */
+  .board-view-controls {
+    height: 90dvh;
+  }
+}
+
 </style>
