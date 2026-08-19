@@ -887,7 +887,7 @@ onBeforeUnmount(() => {
 }
 .selected-board-title{width:85%}.selected-board-title,.selected-board-title-display{white-space:pre-wrap;overflow-wrap:break-word;word-break:normal;text-wrap:pretty}.selected-board-title-input{white-space:pre-wrap;overflow-wrap:break-word;word-break:normal;text-wrap:wrap}@media(max-width:720px){.selected-board-title{width:100%}}
 .preview{background:transparent}.preview.is-loading{background:var(--color-surface)}.preview img{opacity:0;transition:opacity .22s ease-out}.preview img.is-loaded{opacity:1}
-.asset-card{opacity:1;transform:translateY(0);transition-property:opacity,transform;transition-duration:.18s,.22s;transition-delay:var(--card-stagger,0ms);transition-timing-function:ease-out,cubic-bezier(.2,0,0,1);animation:card-fade-in .42s cubic-bezier(.2,0,0,1) backwards;animation-delay:var(--card-stagger,0ms)}.masonry.cards-hidden .asset-card{opacity:0;transform:translateY(16px);transition-delay:0ms}@keyframes card-fade-in{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+.asset-card{opacity:1}.masonry.cards-hidden .asset-card{visibility:hidden}
 .result-swap-enter-active,.result-swap-leave-active{transition-property:opacity,transform;transition-duration:180ms;transition-timing-function:cubic-bezier(.2,0,0,1)}.result-swap-enter-from{opacity:0;transform:translateY(8px)}.result-swap-leave-to{opacity:0;transform:translateY(-4px)}
 .filter-panel-toggle.has-filter-count{gap:calc(var(--space)/3);padding-left:calc(var(--space)*1.25);padding-right:calc(var(--space)*.75)}
 .selected-board-action-button.has-filter-count{display:inline-flex;align-items:center;justify-content:center;gap:calc(var(--space)/3);padding-left:var(--space);padding-right:calc(var(--space)/2)}
