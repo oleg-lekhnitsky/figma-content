@@ -37,6 +37,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
   const progress = ref(0)
   const feedback = ref('')
   const images = new Map<string, HTMLImageElement>()
+  const imageRequests = new Map<string, Promise<HTMLImageElement>>()
   const videos = new Map<string, HTMLVideoElement>()
   const textures = new Map<string, unknown>()
   const webglMeshes = new Map<string, import('three').Mesh>()
@@ -45,6 +46,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
   let lastPreviewFrameAt = 0
   let renderRevision = 0
   let templateChangeRevision = 0
+  let textureRefreshFrame = 0
   let threeRenderer: import('three').WebGLRenderer | undefined
 
   const disposeWebglMeshes = () => {
@@ -86,11 +88,16 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
   const loadImageUrl = (url:string) => {
     const cacheKey=url,cached=images.get(cacheKey)
     if(cached?.complete&&cached.naturalWidth)return Promise.resolve(cached)
-    return new Promise<HTMLImageElement>((resolve,reject)=>{
+    const pending=imageRequests.get(cacheKey)
+    if(pending)return pending
+    const request=new Promise<HTMLImageElement>((resolve,reject)=>{
       const image=cached||new Image();image.decoding='async'
       image.onload=()=>{images.set(cacheKey,image);resolve(image)};image.onerror=()=>{images.delete(cacheKey);reject(new Error(`Could not load ${url}`))}
       if(!cached)image.src=url
     })
+    const tracked=request.finally(()=>{if(imageRequests.get(cacheKey)===tracked)imageRequests.delete(cacheKey)})
+    imageRequests.set(cacheKey,tracked)
+    return tracked
   }
   const loadImage = async(asset:AssetMasonryItem) => {
     for(const url of urlsFor(asset)){try{return await loadImageUrl(url)}catch{/* Try the smaller preview. */}}
@@ -126,6 +133,17 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
   const preloadFlickerAssets = async () => {
     const count=Math.min(assets.value.length,Math.max(1,Math.min(30,Math.round(settings.value.visibleCount))))
     await Promise.all(assets.value.slice(0,count).map(asset=>loadRenderable(asset)))
+  }
+  const cachedImageFor = (asset:AssetMasonryItem) => urlsFor(asset)
+    .map(url=>images.get(url))
+    .find((image):image is HTMLImageElement=>Boolean(image?.complete&&image.naturalWidth))
+  const scheduleWebglTextureRefresh = () => {
+    cancelAnimationFrame(textureRefreshFrame)
+    textureRefreshFrame=requestAnimationFrame(()=>{
+      if(template.value.renderer!=='webgl')return
+      disposeTextures()
+      void drawAt(progress.value)
+    })
   }
 
   const sizeCanvas = (target: HTMLCanvasElement) => {
@@ -368,8 +386,10 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
           videoCanvas.width=Math.max(1,Math.round(sourceWidth*textureScale));videoCanvas.height=Math.max(1,Math.round(sourceHeight*textureScale))
           texture=new THREE.CanvasTexture(videoCanvas);texture.colorSpace=THREE.SRGBColorSpace;texture.generateMipmaps=false;texture.minFilter=THREE.LinearFilter;textures.set(textureKey,texture)
         }else{
-          let source:HTMLImageElement|HTMLCanvasElement
-          try{source=await loadImage(asset)}catch{source=missingAssetSource(asset)}
+          let source:HTMLImageElement|HTMLCanvasElement=cachedImageFor(asset)||missingAssetSource(asset)
+          if(source instanceof HTMLCanvasElement){
+            void loadImage(asset).then(scheduleWebglTextureRefresh).catch(()=>{})
+          }
           if(!isCurrent())return
           const sourceWidth=source instanceof HTMLImageElement?source.naturalWidth:source.width
           const sourceHeight=source instanceof HTMLImageElement?source.naturalHeight:source.height
@@ -592,6 +612,6 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
   )
   watch(()=>[settings.value.cornerRadius,settings.value.planeSize],disposeTextures)
   watch(assets,()=>{images.clear();videos.forEach(video=>{video.pause();video.removeAttribute('src');video.load()});videos.clear();disposeTextures();progress.value=0;settings.value.visibleCount=countForAssets();void nextTick(async()=>{if(template.value.collection==='flicker')await preloadFlickerAssets();await drawAt(0)})},{immediate:true})
-  onBeforeUnmount(()=>{stop();disposeRenderer();videos.forEach(video=>{video.removeAttribute('src');video.load()})})
+  onBeforeUnmount(()=>{stop();cancelAnimationFrame(textureRefreshFrame);disposeRenderer();videos.forEach(video=>{video.removeAttribute('src');video.load()})})
   return {settings,template,canvas,playing,exporting,progress,feedback,totalDuration,setCanvas,togglePlayback,seek,renderVideo,drawAt,stop}
 }
