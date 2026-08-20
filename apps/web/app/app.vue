@@ -42,8 +42,9 @@ onBeforeUnmount(() => {
 
 .app-splash-word {
   display: flex;
+  transform: translateY(-2dvh);
   font-family: var(--font-family-ui);
-  font-size: clamp(2rem, 10vw, 4rem);
+  font-size: clamp(3rem, 14vw, 6rem);
   font-weight: 500;
   letter-spacing: -.055em;
   line-height: 1;

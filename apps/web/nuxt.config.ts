@@ -17,7 +17,10 @@ export default defineNuxtConfig({
         { name: 'apple-mobile-web-app-status-bar-style', content: 'default' },
         { name: 'apple-mobile-web-app-title', content: 'Content Library' }
       ],
-      link: [{ rel: 'manifest', href: '/manifest.webmanifest' }]
+      link: [
+        { rel: 'manifest', href: '/manifest.webmanifest' },
+        { rel: 'apple-touch-startup-image', href: '/pwa-launch.png' }
+      ]
     }
   },
   routeRules: {
