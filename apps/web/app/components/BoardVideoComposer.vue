@@ -1256,10 +1256,14 @@ const showAllAssets = () => {
   .board-video-composer.has-mobile-panel > .video-composer-center {
     position: absolute;
     z-index: 1;
-    inset: calc(max(var(--space), env(safe-area-inset-top)) + var(--control-height)) var(--cluster-gap) var(--video-mobile-sheet-height);
+    inset: calc(max(var(--space), env(safe-area-inset-top)) + var(--control-height) - var(--space)*3) var(--cluster-gap) var(--video-mobile-sheet-height);
     width: auto;
     height: auto;
     align-self: auto
+  }
+
+  .board-video-composer.has-mobile-panel > .video-composer-center :deep(.video-stage) {
+    place-items: start center
   }
 
   .board-video-composer.has-mobile-panel > :deep(.video-timeline),
@@ -1292,6 +1296,7 @@ const showAllAssets = () => {
 
   .video-mobile-header {
     position: relative;
+    z-index: 2;
     grid-column: 1;
     grid-row: 1;
     order: 0;

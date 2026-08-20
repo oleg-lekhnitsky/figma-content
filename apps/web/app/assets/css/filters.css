@@ -74,7 +74,7 @@
   --filter-sheet-row-height-mobile: 3.75rem;
   --filter-sheet-group-gap-mobile: 1.375rem;
   --filter-sheet-inline-padding-mobile: calc(var(--space) * 2.5);
-  --filter-sheet-content-padding-mobile: calc(var(--space) * 3) var(--filter-sheet-inline-padding-mobile) max(calc(var(--space) * 3), env(safe-area-inset-bottom));
+  --filter-sheet-content-padding-mobile: calc(var(--space) * 3.5) var(--filter-sheet-inline-padding-mobile) max(calc(var(--space) * 3) , env(safe-area-inset-bottom));
   --filter-sheet-content-bottom-mobile: max(calc(var(--space) * 3), env(safe-area-inset-bottom));
   --filter-sheet-handle-size: var(--control-height);
   --filter-sheet-handle-thickness: .3125rem;
