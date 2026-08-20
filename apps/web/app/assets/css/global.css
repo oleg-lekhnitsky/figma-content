@@ -33,9 +33,13 @@
   --radius: 16px;
   --radius-mobile: calc(var(--radius) * 1.5);
   --control-height: 44px;
+  --range-control-height-mobile: 3.25rem;
   --page-padding: var(--space);
   --page-top: clamp(4rem, 9vw, 9rem);
   --cluster-gap: calc(var(--space) / 2);
+  --masonry-mobile-inline-bleed: calc(var(--space) / 2);
+  --masonry-mobile-column-gap: calc(var(--space) / 2);
+  --masonry-mobile-row-gap: calc(var(--space) / 3);
   --section-gap-compact: clamp(2rem, 4vw, 4rem);
   --section-gap: clamp(3rem, 7vw, 7rem);
   --font-size-h1: clamp(2.75rem, 4vw, 6rem);

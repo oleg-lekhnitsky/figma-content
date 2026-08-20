@@ -576,7 +576,10 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     void nextTick(async()=>{
       if(rendererChanged)await waitForReplacementCanvas(previousCanvas,changeRevision)
       if(changeRevision!==templateChangeRevision)return
-      if(template.value.collection==='flicker')await preloadFlickerAssets()
+      // Warm the remaining Flicker images without blocking the renderer switch.
+      // Waiting for every preview here can leave mobile on a single frame for
+      // several seconds when moving from a WebGL preset to the 2D canvas.
+      if(template.value.collection==='flicker')void preloadFlickerAssets()
       if(changeRevision!==templateChangeRevision)return
       await drawAt(0)
       if(changeRevision!==templateChangeRevision)return

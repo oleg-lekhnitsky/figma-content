@@ -106,19 +106,16 @@ const style = computed<CSSProperties>(() => ({
 
 @media (hover: none), (pointer: coarse) {
   .video-range-input {
-    height: 44px;
+    height: var(--range-control-height-mobile);
     touch-action: none;
     -webkit-user-select: none;
     user-select: none
   }
 
-  .video-range-input::-webkit-slider-thumb {
-    width: 28px;
-    height: 28px;
-    margin-top: 8px;
-    border-radius: 14px;
-    background: linear-gradient(to right, transparent 12px, var(--video-range-handle) 12px 16px, transparent 16px);
-    opacity: 1
+  .video-range-input::-webkit-slider-thumb,
+  .video-range-input:hover::-webkit-slider-thumb {
+    background: transparent;
+    opacity: 0
   }
 
   .video-range-input::-moz-range-thumb {

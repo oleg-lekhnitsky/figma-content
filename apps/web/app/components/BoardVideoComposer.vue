@@ -587,18 +587,22 @@ const showAllAssets = () => {
 :deep(.video-template-folder) {
   display: flex;
   align-items: center;
-  justify-content: flex-start
+  justify-content: center
 }
 
 :deep(.video-template-folder h3) {
   margin: 0;
-  font-size: var(--font-size-h3);
+  font-size: var(--filter-title-size);
+  font-weight: 500;
   line-height: 1;
-  text-align: left
+  text-align: center
 }
 
 :deep(.video-template-browser>.video-panel-scroll>header) {
-  align-items: center
+  grid-template-columns: 32px minmax(0, 1fr) 32px;
+  display: grid;
+  align-items: center;
+  gap: 0
 }
 
 :deep(.video-template-back) {
@@ -613,17 +617,17 @@ const showAllAssets = () => {
   color: inherit;
 }
 
-:deep(.video-template-browser>.video-panel-scroll>header:has(.video-template-back)) {
-  grid-template-columns: 32px minmax(0, 1fr) 32px;
-  display: grid;
-  gap: 0
+:deep(.video-template-browser>.video-panel-scroll>header .video-template-back) {
+  grid-column: 1
 }
 
-:deep(.video-template-browser>.video-panel-scroll>header:has(.video-template-back) h2) {
+:deep(.video-template-browser>.video-panel-scroll>header h2) {
+  grid-column: 2;
   text-align: center
 }
 
-:deep(.video-template-browser>.video-panel-scroll>header:has(.video-template-back) span) {
+:deep(.video-template-browser>.video-panel-scroll>header span) {
+  grid-column: 3;
   justify-self: end
 }
 
@@ -755,9 +759,7 @@ const showAllAssets = () => {
   outline: 0;
   background: transparent;
   color: inherit;
-  font: inherit;
-  font-variant-numeric: tabular-nums;
-  text-transform: uppercase
+  font: inherit
 }
 
 :deep(.video-hex-color-field:has(input:focus-visible)) {
@@ -865,13 +867,8 @@ const showAllAssets = () => {
 }
 
 :deep(.video-color-hue input[type=range]::-webkit-slider-thumb) {
-  width: 16px;
-  height: 16px;
-  border: 2px solid #fff;
-  border-radius: 999px;
-  background: transparent;
-  box-shadow: 0 0 0 1px oklch(0 0 0/.5);
-  appearance: none
+  appearance: none;
+  opacity: 0
 }
 
 :deep(.video-color-hue input[type=range]::-moz-range-thumb) {
@@ -1510,9 +1507,22 @@ const showAllAssets = () => {
     max-height: 58dvh
   }
 
+  :deep(.video-template-list) {
+    --video-template-list-inline-bleed: calc(var(--filter-sheet-inline-padding-mobile) - var(--masonry-mobile-inline-bleed));
+    width: calc(100% + var(--video-template-list-inline-bleed)*2);
+    max-width: none;
+    margin-inline: calc(var(--video-template-list-inline-bleed)*-1);
+    column-gap: var(--masonry-mobile-column-gap);
+    row-gap: var(--masonry-mobile-row-gap)
+  }
+
+  :deep(.video-template-list > button) {
+    padding: 0
+  }
+
   :deep(.video-inspector label:has(> .video-range-input)),
   :deep(.video-inspector label:has(> .video-range-input)>span) {
-    min-height: 44px
+    min-height: var(--range-control-height-mobile)
   }
 
   :deep(.video-control-pair) {
@@ -1520,13 +1530,13 @@ const showAllAssets = () => {
   }
 
   :deep(.video-color-hue) {
-    min-height: 44px;
+    min-height: var(--range-control-height-mobile);
     display: grid;
     align-items: center
   }
 
   :deep(.video-color-hue input[type=range]) {
-    height: 44px;
+    height: var(--range-control-height-mobile);
     background-size: 100% 14px;
     background-position: center;
     background-repeat: no-repeat;
