@@ -11,20 +11,44 @@ const previewClasses = computed(() => [`is-${props.template.collection}`, `is-${
 const frameUrl = ref('')
 const liveReady = ref(false)
 const renderGeneratedFrame = ref(false)
+const renderLightweightPreview = ref(false)
+const previewRoot = ref<HTMLElement>()
+const isVisible = ref(false)
+const placeholderShades = ['d8d8d8', 'b8b8b8', 'eeeeee', '929292', 'c8c8c8', 'a4a4a4']
+const placeholderAssets: AssetMasonryItem[] = placeholderShades.map((shade, index) => ({
+  id: `preset-placeholder-${index}`,
+  title: ' ',
+  previewUrl: `data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="300" height="400"%3E%3Crect width="300" height="400" fill="%23${shade}"/%3E%3C/svg%3E`,
+  mime_type: 'image/svg+xml',
+  width: 300,
+  height: 400
+}))
+const previewAssets = computed(() => placeholderAssets)
+const isLiveActive = computed(() => Boolean(props.previewing) || (renderLightweightPreview.value && isVisible.value))
 watch(() => props.previewing, value => { if (!value) liveReady.value = false })
+watch(isLiveActive, value => { if (!value) liveReady.value = false })
+let visibilityObserver: IntersectionObserver | undefined
 onMounted(() => {
-  renderGeneratedFrame.value = !window.matchMedia('(max-width: 640px), (pointer: coarse)').matches
+  const lightweight = window.matchMedia('(max-width: 640px), (pointer: coarse)').matches
+  renderLightweightPreview.value = lightweight
+  renderGeneratedFrame.value = !lightweight
+  if (lightweight && previewRoot.value) {
+    visibilityObserver = new IntersectionObserver(([entry]) => { isVisible.value = Boolean(entry?.isIntersecting) }, { rootMargin: '80px 0px', threshold: .01 })
+    visibilityObserver.observe(previewRoot.value)
+  }
 })
+onBeforeUnmount(() => visibilityObserver?.disconnect())
 </script>
 
 <template>
-  <span class="video-template-thumb video-preset-preview" :class="[previewClasses, { 'is-live-active': previewing }]"
+  <span ref="previewRoot" class="video-template-thumb video-preset-preview" :class="[previewClasses, { 'is-live-active': isLiveActive, 'is-live-ready': liveReady }]"
     :style="previewStyle" aria-hidden="true"><img v-if="frameUrl" class="video-preset-first-frame" :src="frameUrl"
       alt=""><template v-else>
-      <VideoPresetFrame v-if="renderGeneratedFrame && assets.length" :template="template" :assets="assets" @ready="frameUrl = $event" />
+      <VideoPresetFrame v-if="renderGeneratedFrame && previewAssets.length" :template="template" :assets="previewAssets" @ready="frameUrl = $event" />
     </template>
-    <VideoLivePresetPreview v-if="previewing && assets.length" class="video-live-layer"
-      :class="{ 'is-ready': liveReady }" :template="template" :assets="assets" @ready="liveReady = true" />
+    <VideoLivePresetPreview v-if="isLiveActive && previewAssets.length" class="video-live-layer"
+      :class="{ 'is-ready': liveReady }" :template="template" :assets="previewAssets"
+      :transparent-background="renderLightweightPreview" @ready="liveReady = true" />
   </span>
 </template>
 
@@ -42,6 +66,10 @@ onMounted(() => {
   width: 100%;
   height: 100%;
   object-fit: cover
+}
+
+.is-live-ready .video-preset-first-frame {
+  visibility: hidden
 }
 
 .video-live-layer {
@@ -140,7 +168,6 @@ onMounted(() => {
 }
 
 @media (prefers-reduced-motion:no-preference) {
-
   :global(.video-template-preset:hover) .is-carousel .video-preset-preview-track,
   :global(.video-template-preset:focus-visible) .is-carousel .video-preset-preview-track {
     animation: preview-carousel var(--preview-duration) linear infinite

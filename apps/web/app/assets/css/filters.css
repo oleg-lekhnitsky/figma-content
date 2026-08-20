@@ -15,7 +15,7 @@
   --filter-clear-icon-stroke: 2.1;
   --filter-clear-divider-color: rgb(255 255 255 / .25);
   --filter-caption-size: 1.0rem;
-  --filter-title-size: clamp(2.5rem, 3vw, 2.75rem);
+  --filter-title-size: clamp(2.0rem, 2vw, 2.75rem);
   --filter-pill-radius: 999rem;
   --filter-focus-width: .125rem;
   --filter-chevron-size: .4375rem;

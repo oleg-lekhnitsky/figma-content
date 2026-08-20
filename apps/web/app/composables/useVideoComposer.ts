@@ -27,10 +27,11 @@ const cubicBezierProgress = (progress: number, [x1, y1, x2, y2]: readonly [numbe
 interface VideoComposerRuntimeOptions {
   maxPreviewDimension?: number
   preserveDrawingBuffer?: boolean
+  transparentBackground?: boolean
 }
 
 export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Ref<string>, initialTemplateId='flicker-01', runtimeOptions:VideoComposerRuntimeOptions={}) => {
-  const settings = ref<VideoComposerSettings>({ templateId:initialTemplateId,format:'portrait',fit:'contain',transition:'fade',secondsPerSlide:6,showTitles:false,direction:'up',gap:40,tilt:0,scaleCenter:false,tiltMode:'off',easing:'glide',cornerRadius:0,distance:100,centerScale:1.4,fade:0,offsetX:0,offsetY:0,scaleFocus:'center',solo:false,visibleCount:6,planeSize:100,cycles:1,staggerFrames:2,delayFrames:0,cycleDegrees:360,orbitRadius:280,perspective:140,rotationX:0,rotationY:0,rotationZ:0,reverse:false,spin:0,spread:0,staggerSeconds:.4,scaleStyle:'bloom',growFrom:'center',imageFit:'fit',flickerEffect:'off',flickerPacing:'equal',scaleDirection:'forward',driftDirection:'up',scaleAmount:30,driftAmount:30,delaySeconds:0,fps:30,safeArea:false,backgroundColor:'#f1efed',globeMinScale:10,globeMaxScale:20,globeAxis:'y',globeMotion:'continuous',globeStops:8,globeFaceCamera:true,globeShowBackfaces:true,globeFlipImage:false })
+  const settings = ref<VideoComposerSettings>({ templateId:initialTemplateId,format:'portrait',fit:'contain',transition:'fade',secondsPerSlide:6,showTitles:false,direction:'up',gap:40,tilt:0,scaleCenter:false,tiltMode:'off',easing:'glide',cornerRadius:0,distance:100,centerScale:1.4,fade:0,offsetX:0,offsetY:0,scaleFocus:'center',solo:false,visibleCount:6,planeSize:100,cycles:1,loop:true,staggerFrames:2,delayFrames:0,cycleDegrees:360,orbitRadius:280,perspective:140,rotationX:0,rotationY:0,rotationZ:0,reverse:false,spin:0,spread:0,staggerSeconds:.4,scaleStyle:'bloom',growFrom:'center',imageFit:'fit',flickerEffect:'off',flipMaterial:'lit',flipLightIntensity:100,flipRoughness:72,flipGridColumns:1,flipGridRows:1,flipGridGap:4,flipStagger:0,flickerPacing:'equal',scaleDirection:'forward',driftDirection:'up',scaleAmount:30,driftAmount:30,delaySeconds:0,fps:30,safeArea:false,exportMotionBlur:false,backgroundColor:'#f1efed',globeMinScale:10,globeMaxScale:20,globeAxis:'y',globeMotion:'continuous',globeStops:8,globeShuffle:false,globeFaceCamera:true,globeShowBackfaces:true,globeFlipImage:false,storiesBigScale:115,storiesBigDrift:40,storiesThumbSize:85,storiesThumbAspect:'1:1',storiesContainerOpacity:40,storiesContainerBlur:60,storiesSelectorPad:5,storiesSelectorStroke:2,storiesDimAmount:20 })
   const canvas = shallowRef<HTMLCanvasElement>()
   const playing = ref(false)
   const exporting = ref(false)
@@ -80,11 +81,17 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
   const dimensions = computed(() => videoFormatDimensions[settings.value.format])
   const totalDuration = computed(() => template.value.collection==='scale'
     ? Math.max(1,settings.value.visibleCount)*settings.value.staggerSeconds
+    : template.value.collection==='globe'&&settings.value.globeMotion==='stepped'
+      ? settings.value.secondsPerSlide+Math.max(1,Math.round(settings.value.cycles*Math.min(settings.value.visibleCount,settings.value.globeStops)))*settings.value.delaySeconds
+    : template.value.collection==='orbit' ? Math.max(.5,settings.value.secondsPerSlide)+Math.max(0,settings.value.delaySeconds)*Math.max(1,settings.value.cycles*Math.max(1,Math.round(settings.value.visibleCount)))
     : template.value.collection==='carousel-3d'||template.value.collection==='globe' ? settings.value.secondsPerSlide*settings.value.cycles
-    : template.value.collection==='flicker' ? settings.value.secondsPerSlide*settings.value.cycles
+    : template.value.collection==='flicker'||template.value.collection==='test' ? settings.value.secondsPerSlide*settings.value.cycles
+    : template.value.collection==='stories' ? settings.value.secondsPerSlide*settings.value.cycles
     : Math.max(1, assets.value.length) * settings.value.secondsPerSlide)
-  const urlsFor = (asset: AssetMasonryItem) => ['preview2x','preview','original']
-    .map(variant => `/api/assets/${encodeURIComponent(asset.id)}/media?variant=${variant}`)
+  const urlsFor = (asset: AssetMasonryItem) => {
+    if (/^(data|blob):/.test(asset.previewUrl)) return [asset.previewUrl]
+    return ['preview2x','preview','original'].map(variant => `/api/assets/${encodeURIComponent(asset.id)}/media?variant=${variant}`)
+  }
   const loadImageUrl = (url:string) => {
     const cacheKey=url,cached=images.get(cacheKey)
     if(cached?.complete&&cached.naturalWidth)return Promise.resolve(cached)
@@ -162,12 +169,16 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     const drawWidth=sourceWidth*scale,drawHeight=sourceHeight*scale
     context.save();context.globalAlpha=opacity;context.drawImage(image,(width-drawWidth)/2,(height-drawHeight)/2,drawWidth,drawHeight);context.restore()
   }
+  const paintBackground = (context:CanvasRenderingContext2D,width:number,height:number) => {
+    if(runtimeOptions.transparentBackground)return
+    context.fillStyle=settings.value.backgroundColor;context.fillRect(0,0,width,height)
+  }
   const draw2d = async (time:number,revision:number) => {
     const target=canvas.value;if(!target||!assets.value.length)return
     const {width,height}=sizeCanvas(target)
     const frame=document.createElement('canvas');frame.width=width;frame.height=height
     const context=frame.getContext('2d');if(!context)return
-    context.fillStyle=settings.value.backgroundColor;context.fillRect(0,0,width,height)
+    paintBackground(context,width,height)
     const index=Math.min(assets.value.length-1,Math.floor(time/settings.value.secondsPerSlide)),local=(time%settings.value.secondsPerSlide)/settings.value.secondsPerSlide,next=Math.min(assets.value.length-1,index+1)
     const current=await loadRenderable(assets.value[index]!);paintImage(context,current,width,height)
     if(settings.value.transition==='fade'&&next!==index&&local>.78)paintImage(context,await loadRenderable(assets.value[next]!),width,height,(local-.78)/.22)
@@ -181,7 +192,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     const target=canvas.value;if(!target||!assets.value.length)return
     const {width,height}=sizeCanvas(target),frame=document.createElement('canvas');frame.width=width;frame.height=height
     const context=frame.getContext('2d');if(!context)return
-    context.fillStyle=settings.value.backgroundColor;context.fillRect(0,0,width,height)
+    paintBackground(context,width,height)
     const count=Math.max(1,Math.min(20,Math.floor(settings.value.visibleCount)))
     const duration=Math.max(.05,settings.value.secondsPerSlide),stagger=Math.max(.02,settings.value.staggerSeconds)
     const transitionSpan=Math.min(duration,Math.max(1,count-1)*stagger)
@@ -222,10 +233,13 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     const target=canvas.value;if(!target||!assets.value.length)return
     const {width,height}=sizeCanvas(target),frame=document.createElement('canvas');frame.width=width;frame.height=height
     const context=frame.getContext('2d');if(!context)return
-    context.fillStyle=settings.value.backgroundColor;context.fillRect(0,0,width,height)
+    paintBackground(context,width,height)
     const count=Math.max(1,Math.min(30,Math.round(settings.value.visibleCount))),duration=Math.max(.1,settings.value.secondsPerSlide)
     const slotDuration=duration/count,delay=Math.min(slotDuration*.95,Math.max(0,settings.value.delaySeconds)),activeDuration=slotDuration-delay
-    const curve=template.value.bezier||[.76,0,.24,1] as const,phase=((time/duration)%1+1)%1
+    const curve=settings.value.flickerEffect==='flip'
+      ? easingCurves[settings.value.easing]
+      : template.value.bezier||easingCurves[settings.value.easing]
+    const phase=((time/duration)%1+1)%1
     let slotIndex:number,localProgress:number,pulse:(value:number)=>number
     if(settings.value.flickerPacing==='eased'){
       const inverse=(targetValue:number)=>{let low=0,high=1;for(let index=0;index<25;index++){const midpoint=(low+high)/2;if(cubicBezierProgress(midpoint,curve)<targetValue)low=midpoint;else high=midpoint}return(low+high)/2}
@@ -240,7 +254,12 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
       const activeFraction=activeDuration/slotDuration,start=.5*activeFraction,end=start+delay/slotDuration
       pulse=value=>value<start?.5*cubicBezierProgress(.5+.5*value/Math.max(.001,start),curve):value<end?.5:.5+.5*cubicBezierProgress(.5*(value-end)/Math.max(.001,1-end),curve)/.5
     }
-    const asset=assets.value[slotIndex%assets.value.length]!,image=await loadRenderable(asset)
+    const flipActiveFraction=activeDuration/slotDuration
+    const flipProgress=settings.value.flickerEffect==='flip'
+      ? (localProgress<flipActiveFraction?cubicBezierProgress(localProgress/Math.max(.001,flipActiveFraction),curve):1)
+      : 0
+    const faceOffset=settings.value.flickerEffect==='flip'&&flipProgress>=.5?1:0
+    const asset=assets.value[(slotIndex+faceOffset)%assets.value.length]!,image=await loadRenderable(asset)
     const sourceWidth=image instanceof HTMLImageElement?image.naturalWidth:image.width,sourceHeight=image instanceof HTMLImageElement?image.naturalHeight:image.height
     const sourceAspect=sourceWidth/sourceHeight,canvasAspect=width/height,planeScale=Math.max(.01,settings.value.planeSize/100)
     let drawWidth:number,drawHeight:number
@@ -251,7 +270,14 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     if(settings.value.flickerEffect==='scale'){
       const from=settings.value.scaleDirection==='forward'?1-amount/2:1+amount/2,to=settings.value.scaleDirection==='forward'?1+amount/2:1-amount/2
       const scale=from+(to-from)*effectProgress;drawWidth*=planeScale*scale;drawHeight*=planeScale*scale
-    }else{drawWidth*=planeScale;drawHeight*=planeScale}
+    }else{
+      drawWidth*=planeScale;drawHeight*=planeScale
+      if(settings.value.flickerEffect==='flip'){
+        const edgeAmount=Math.sin(Math.PI*flipProgress)
+        drawWidth*=Math.max(.001,Math.abs(Math.cos(Math.PI*flipProgress)))
+        drawHeight*=1-edgeAmount*.06
+      }
+    }
     let driftX=0,driftY=0
     if(settings.value.flickerEffect==='drift'){
       const drift=(effectProgress-.5)*settings.value.driftAmount/100
@@ -262,8 +288,165 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     }
     const centerX=width/2+settings.value.offsetX*width/100+driftX,centerY=height/2+settings.value.offsetY*height/100+driftY
     context.save();if(settings.value.cornerRadius>0){const radius=Math.min(settings.value.cornerRadius,drawWidth/2,drawHeight/2);context.beginPath();context.roundRect(centerX-drawWidth/2,centerY-drawHeight/2,drawWidth,drawHeight,radius);context.clip()}
-    context.drawImage(image,centerX-drawWidth/2,centerY-drawHeight/2,drawWidth,drawHeight);context.restore()
+    context.drawImage(image,centerX-drawWidth/2,centerY-drawHeight/2,drawWidth,drawHeight)
+    if(settings.value.flickerEffect==='flip'){
+      context.fillStyle=`rgb(0 0 0 / ${Math.sin(Math.PI*flipProgress)*.18})`
+      context.fillRect(centerX-drawWidth/2,centerY-drawHeight/2,drawWidth,drawHeight)
+    }
+    context.restore()
     if(revision!==renderRevision||target!==canvas.value)return
+    const visibleContext=target.getContext('2d');if(!visibleContext)return
+    visibleContext.clearRect(0,0,width,height);visibleContext.drawImage(frame,0,0);feedback.value=''
+  }
+  const drawTestFlip = async (time:number,revision:number) => {
+    const target=canvas.value;if(!target||assets.value.length<2)return
+    const templateId=template.value.id
+    const isCurrent=()=>revision===renderRevision&&target===canvas.value&&template.value.id===templateId&&template.value.collection==='test'
+    const THREE=await import('three');if(!isCurrent())return
+    const {width,height}=sizeCanvas(target)
+    if(!threeRenderer||threeRenderer.domElement!==target){disposeRenderer();threeRenderer=new THREE.WebGLRenderer({canvas:target,antialias:true,alpha:runtimeOptions.transparentBackground===true,preserveDrawingBuffer:runtimeOptions.preserveDrawingBuffer===true});threeRenderer.setPixelRatio(1)}
+    const renderer=threeRenderer;renderer.setSize(width,height,false)
+    if(runtimeOptions.transparentBackground)renderer.setClearColor(0x000000,0)
+    else renderer.setClearColor(settings.value.backgroundColor,1)
+    const count=Math.max(2,Math.min(30,Math.round(settings.value.visibleCount),assets.value.length))
+    const duration=Math.max(.1,settings.value.secondsPerSlide),slotDuration=duration/count
+    const delay=Math.min(slotDuration*.95,Math.max(0,settings.value.delaySeconds)),activeDuration=Math.max(.001,slotDuration-delay)
+    const columns=Math.max(1,Math.min(6,Math.round(settings.value.flipGridColumns))),rows=Math.max(1,Math.min(6,Math.round(settings.value.flipGridRows))),gridCount=columns*rows
+    const assetOrder=Array.from({length:count},(_,index)=>index)
+    if(settings.value.flipShuffle){
+      let seed=assets.value.slice(0,count).reduce((value,asset)=>{for(let index=0;index<asset.id.length;index++)value=Math.imul(value^asset.id.charCodeAt(index),16777619);return value},gridCount|0)>>>0
+      const random=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296}
+      for(let index=assetOrder.length-1;index>0;index--){const target=Math.floor(random()*(index+1));[assetOrder[index],assetOrder[target]]=[assetOrder[target]!,assetOrder[index]!]}
+    }
+    const assetAt=(sequenceIndex:number)=>assets.value[assetOrder[((sequenceIndex%count)+count)%count]!]!
+    const textureFor=async(asset:AssetMasonryItem) => {
+      const key=`test-flip:${asset.id}:${settings.value.fit}:${settings.value.cornerRadius}`
+      const cached=textures.get(key) as import('three').Texture|undefined;if(cached)return cached
+      const source=await loadRenderable(asset);if(!isCurrent())return
+      const sourceWidth=source instanceof HTMLImageElement?source.naturalWidth:source.width,sourceHeight=source instanceof HTMLImageElement?source.naturalHeight:source.height
+      const maxSide=1024,targetAspect=width*rows/(height*columns)
+      let canvasWidth:number,canvasHeight:number,sourceX=0,sourceY=0,cropWidth=sourceWidth,cropHeight=sourceHeight
+      if(settings.value.fit==='cover'){
+        if(sourceWidth/sourceHeight>targetAspect){cropWidth=sourceHeight*targetAspect;sourceX=(sourceWidth-cropWidth)/2}else{cropHeight=sourceWidth/targetAspect;sourceY=(sourceHeight-cropHeight)/2}
+        canvasWidth=Math.round(maxSide*Math.min(1,targetAspect));canvasHeight=Math.round(canvasWidth/targetAspect)
+      }else{
+        const scale=Math.min(1,maxSide/Math.max(sourceWidth,sourceHeight));canvasWidth=Math.max(1,Math.round(sourceWidth*scale));canvasHeight=Math.max(1,Math.round(sourceHeight*scale))
+      }
+      const textureCanvas=document.createElement('canvas');textureCanvas.width=Math.max(1,canvasWidth);textureCanvas.height=Math.max(1,canvasHeight)
+      const context=textureCanvas.getContext('2d')
+      if(context){const radius=Math.min(textureCanvas.width,textureCanvas.height)/2;const scaledRadius=Math.min(radius,textureCanvas.width*settings.value.cornerRadius/Math.max(1,settings.value.planeSize));context.beginPath();context.roundRect(0,0,textureCanvas.width,textureCanvas.height,scaledRadius);context.clip();context.drawImage(source,sourceX,sourceY,cropWidth,cropHeight,0,0,textureCanvas.width,textureCanvas.height)}
+      const texture=new THREE.CanvasTexture(textureCanvas);texture.colorSpace=THREE.SRGBColorSpace;texture.generateMipmaps=false;texture.minFilter=THREE.LinearFilter;textures.set(key,texture);return texture
+    }
+    const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(Math.max(18,Math.min(70,36/(Math.max(50,settings.value.perspective)/100))),width/height,.1,100);camera.position.z=5
+    if(settings.value.flipMaterial==='lit'){
+      const intensity=Math.max(0,settings.value.flipLightIntensity)/100
+      scene.add(new THREE.HemisphereLight(0xffffff,0x555555,1.05*intensity));const keyLight=new THREE.DirectionalLight(0xffffff,1.2*intensity);keyLight.position.set(-3,4,5);scene.add(keyLight)
+    }
+    const viewportHeight=2*camera.position.z*Math.tan(THREE.MathUtils.degToRad(camera.fov/2)),viewportWidth=viewportHeight*camera.aspect
+    const totalWidth=viewportWidth*.82*settings.value.planeSize/100,totalHeight=viewportHeight*.82*settings.value.planeSize/100
+    const gap=Math.min(totalWidth/Math.max(1,columns),totalHeight/Math.max(1,rows))*settings.value.flipGridGap/100
+    const maxWidth=Math.max(.001,(totalWidth-gap*(columns-1))/columns),maxHeight=Math.max(.001,(totalHeight-gap*(rows-1))/rows)
+    const planeSize=(texture:import('three').Texture)=>{const image=texture.image as HTMLCanvasElement,aspect=image.width/Math.max(1,image.height);return aspect>maxWidth/maxHeight?{width:maxWidth,height:maxWidth/aspect}:{width:maxHeight*aspect,height:maxHeight}}
+    const makeFace=(group:import('three').Group,texture:import('three').Texture,isBack:boolean)=>{const size=planeSize(texture),geometry=new THREE.PlaneGeometry(size.width,size.height);const material=settings.value.flipMaterial==='lit'?new THREE.MeshStandardMaterial({map:texture,side:THREE.FrontSide,roughness:Math.max(0,Math.min(1,settings.value.flipRoughness/100)),metalness:0,transparent:true}):new THREE.MeshBasicMaterial({map:texture,side:THREE.FrontSide,transparent:true});const mesh=new THREE.Mesh(geometry,material);if(isBack){if(settings.value.direction==='up'||settings.value.direction==='down')mesh.rotation.x=Math.PI;else mesh.rotation.y=Math.PI}mesh.position.z=isBack?-.001:.001;group.add(mesh);return mesh}
+    const meshes:import('three').Mesh[]=[]
+    await Promise.all(Array.from({length:gridCount},async(_,cellIndex)=>{
+      const sequencePosition=time/slotDuration-cellIndex*settings.value.flipStagger/slotDuration
+      const step=Math.floor(sequencePosition),local=sequencePosition-step,slotTime=local*slotDuration
+      const rawProgress=Math.min(1,slotTime/activeDuration),flipProgress=cubicBezierProgress(rawProgress,easingCurves[settings.value.easing])
+      const sequenceIndex=step*gridCount+cellIndex
+      const [frontTexture,backTexture]=await Promise.all([textureFor(assetAt(sequenceIndex)),textureFor(assetAt(sequenceIndex+gridCount))])
+      if(!frontTexture||!backTexture||!isCurrent())return
+      const column=cellIndex%columns,row=Math.floor(cellIndex/columns),group=new THREE.Group()
+      group.position.set((column-(columns-1)/2)*(maxWidth+gap)+settings.value.offsetX/100*viewportWidth,((rows-1)/2-row)*(maxHeight+gap)+settings.value.offsetY/100*viewportHeight,0)
+      const rotation=flipProgress*Math.PI
+      if(settings.value.direction==='up')group.rotation.x=-rotation
+      else if(settings.value.direction==='down')group.rotation.x=rotation
+      else if(settings.value.direction==='right')group.rotation.y=-rotation
+      else group.rotation.y=rotation
+      scene.add(group);meshes.push(makeFace(group,frontTexture,false),makeFace(group,backTexture,true))
+    }))
+    if(!isCurrent()||renderer!==threeRenderer)return
+    renderer.render(scene,camera);meshes.forEach(mesh=>{mesh.geometry.dispose();(mesh.material as import('three').Material).dispose()});feedback.value=''
+  }
+  const drawStories = async (time:number,revision:number) => {
+    const target=canvas.value;if(!target||!assets.value.length)return
+    const {width,height}=sizeCanvas(target),frame=document.createElement('canvas');frame.width=width;frame.height=height
+    const context=frame.getContext('2d');if(!context)return
+    const [formatWidth]=dimensions.value,previewScale=width/formatWidth
+    paintBackground(context,width,height)
+    const count=Math.max(3,Math.min(12,Math.round(settings.value.visibleCount||8))),duration=Math.max(.5,settings.value.secondsPerSlide||13.3)
+    const slotDuration=duration/count,delay=Math.min(slotDuration*.95,Math.max(0,settings.value.delaySeconds)),activeDuration=slotDuration-delay
+    const shiftedTime=(((time+activeDuration)/duration)%1+1)%1*duration,currentIndex=Math.min(count-1,Math.floor(shiftedTime/slotDuration))
+    const slotTime=shiftedTime-currentIndex*slotDuration,rawProgress=activeDuration>0?Math.max(0,Math.min(1,slotTime/activeDuration)):1
+    const holding=slotTime>=activeDuration,curve=template.value.bezier||[.76,0,.24,1] as const,eased=holding?1:cubicBezierProgress(rawProgress,curve)
+    let breakpoint=.5,lastSlope=0,slopeChanged=false
+    for(let step=1;step<200;step++){
+      const parameter=step/200,inverse=1-parameter
+      const slopeX=3*inverse*inverse*curve[0]+6*inverse*parameter*(curve[2]-curve[0])+3*parameter*parameter*(1-curve[2])
+      const slopeY=3*inverse*inverse*curve[1]+6*inverse*parameter*(curve[3]-curve[1])+3*parameter*parameter*(1-curve[3])
+      if(slopeX<.000001)continue
+      const slope=slopeY/slopeX
+      if(lastSlope>0&&Math.abs(slope-lastSlope)>.01)slopeChanged=true
+      if(slope>lastSlope+.01){
+        lastSlope=slope
+        breakpoint=3*inverse*inverse*parameter*curve[0]+3*inverse*parameter*parameter*curve[2]+parameter*parameter*parameter
+      }else if(lastSlope===0)lastSlope=slope
+    }
+    breakpoint=slopeChanged?Math.max(.05,Math.min(.95,breakpoint)):.5
+    const previousIndex=(currentIndex-1+count)%count,activeIndex=(holding||rawProgress>=breakpoint?currentIndex:previousIndex)%assets.value.length
+    const images=await Promise.all(Array.from({length:count},(_,index)=>loadRenderable(assets.value[index%assets.value.length]!)))
+    if(revision!==renderRevision||target!==canvas.value)return
+    const activeImage=images[activeIndex]!,sourceWidth=activeImage instanceof HTMLImageElement?activeImage.naturalWidth:activeImage.width,sourceHeight=activeImage instanceof HTMLImageElement?activeImage.naturalHeight:activeImage.height
+    const coverScale=Math.max(width/sourceWidth,height/sourceHeight)*Math.max(.5,settings.value.storiesBigScale/100)
+    const bigWidth=sourceWidth*coverScale,bigHeight=sourceHeight*coverScale,direction=settings.value.direction
+    const vertical=direction==='down'||direction==='up',reverse=direction==='left'||direction==='up',directionSign=reverse?-1:1
+    const switchOffset=breakpoint*activeDuration
+    const timeSinceSwitch=holding||rawProgress>=breakpoint?slotTime-switchOffset:slotDuration-switchOffset+slotTime
+    const backgroundProgress=Math.max(0,Math.min(1,timeSinceSwitch/slotDuration))
+    const enterEnd=(1-breakpoint)*activeDuration/slotDuration,holdEnd=enterEnd+delay/slotDuration
+    const easedBreakpoint=cubicBezierProgress(breakpoint,curve)
+    let driftProgress:number
+    if(backgroundProgress<enterEnd){
+      const input=breakpoint+(1-breakpoint)*(enterEnd>0?backgroundProgress/enterEnd:0)
+      driftProgress=.5*Math.max(0,Math.min(1,(cubicBezierProgress(input,curve)-easedBreakpoint)/Math.max(.001,1-easedBreakpoint)))
+    }else if(backgroundProgress<holdEnd)driftProgress=.5
+    else{
+      const input=breakpoint*((backgroundProgress-holdEnd)/Math.max(.001,1-holdEnd))
+      driftProgress=.5+.5*Math.max(0,Math.min(1,cubicBezierProgress(input,curve)/Math.max(.001,easedBreakpoint)))
+    }
+    const drift=(driftProgress-.5)*settings.value.storiesBigDrift*previewScale*directionSign
+    context.drawImage(activeImage,(width-bigWidth)/2+(vertical?0:drift),(height-bigHeight)/2+(vertical?drift:0),bigWidth,bigHeight)
+    const thumbSize=Math.max(5,settings.value.storiesThumbSize*previewScale),thumbAspect=settings.value.storiesThumbAspect
+    const thumbWidth=thumbAspect==='4:3'?thumbSize*4/3:thumbSize,thumbHeight=thumbAspect==='3:4'?thumbSize*4/3:thumbSize
+    const gap=thumbSize*14/85,padding=thumbSize*10/85,selectorInset=thumbSize*10/85
+    const itemPrimary=vertical?thumbHeight:thumbWidth,itemCross=vertical?thumbWidth:thumbHeight
+    const containerPrimary=padding*2+count*itemPrimary+(count-1)*gap,containerCross=selectorInset*2+itemCross
+    const containerWidth=vertical?containerCross:containerPrimary,containerHeight=vertical?containerPrimary:containerCross
+    const offsetX=settings.value.offsetX*width/100,offsetY=settings.value.offsetY*height/100
+    const cornerRadius=settings.value.cornerRadius*previewScale
+    const containerX=width/2+offsetX-containerWidth/2,containerY=height/2+offsetY-containerHeight/2,containerRadius=cornerRadius+2*previewScale
+    const blur=Math.max(0,settings.value.storiesContainerBlur*previewScale)
+    if(blur>0){const blurred=document.createElement('canvas');blurred.width=width;blurred.height=height;blurred.getContext('2d')?.drawImage(frame,0,0);context.save();context.beginPath();context.roundRect(containerX,containerY,containerWidth,containerHeight,containerRadius);context.clip();context.filter=`blur(${blur}px)`;context.drawImage(blurred,0,0);context.restore()}
+    context.save();context.fillStyle=`rgb(53 53 53 / ${Math.max(0,Math.min(1,settings.value.storiesContainerOpacity/100))})`;context.beginPath();context.roundRect(containerX,containerY,containerWidth,containerHeight,containerRadius);context.fill();context.restore()
+    const startPrimary=(vertical?containerY:containerX)+padding+itemPrimary/2
+    const positionFor=(index:number)=>{const sequenceIndex=reverse?count-1-index:index,primary=startPrimary+sequenceIndex*(itemPrimary+gap);return vertical?{x:width/2+offsetX,y:primary}:{x:primary,y:height/2+offsetY}}
+    for(let index=0;index<count;index++){
+      const image=images[index]!,imageWidth=image instanceof HTMLImageElement?image.naturalWidth:image.width,imageHeight=image instanceof HTMLImageElement?image.naturalHeight:image.height
+      const position=positionFor(index),left=position.x-thumbWidth/2,top=position.y-thumbHeight/2,radius=Math.min(cornerRadius,thumbWidth/2,thumbHeight/2)
+      context.save();context.beginPath();context.roundRect(left,top,thumbWidth,thumbHeight,radius);context.clip()
+      const imageAspect=imageWidth/imageHeight,targetAspect=thumbWidth/thumbHeight
+      let cropX=0,cropY=0,cropWidth=imageWidth,cropHeight=imageHeight
+      if(imageAspect>targetAspect){cropWidth=imageHeight*targetAspect;cropX=(imageWidth-cropWidth)/2}else{cropHeight=imageWidth/targetAspect;cropY=(imageHeight-cropHeight)/2}
+      context.drawImage(image,cropX,cropY,cropWidth,cropHeight,left,top,thumbWidth,thumbHeight);context.restore()
+      const dim=index===currentIndex?settings.value.storiesDimAmount/100*(1-eased):index===previousIndex?settings.value.storiesDimAmount/100*eased:settings.value.storiesDimAmount/100
+      if(dim>0){context.save();context.fillStyle=`rgb(0 0 0 / ${dim})`;context.beginPath();context.roundRect(left,top,thumbWidth,thumbHeight,radius);context.fill();context.restore()}
+    }
+    if(settings.value.storiesSelectorStroke>0){
+      const from=positionFor(previousIndex),to=positionFor(currentIndex),selectorX=from.x+(to.x-from.x)*eased,selectorY=from.y+(to.y-from.y)*eased
+      const selectorPad=settings.value.storiesSelectorPad*previewScale
+      const selectorWidth=thumbWidth+2*selectorPad,selectorHeight=thumbHeight+2*selectorPad
+      context.save();context.strokeStyle='#fff';context.lineWidth=settings.value.storiesSelectorStroke*previewScale;context.beginPath();context.roundRect(selectorX-selectorWidth/2,selectorY-selectorHeight/2,selectorWidth,selectorHeight,Math.min(containerRadius,selectorWidth/2,selectorHeight/2));context.stroke();context.restore()
+    }
     const visibleContext=target.getContext('2d');if(!visibleContext)return
     visibleContext.clearRect(0,0,width,height);visibleContext.drawImage(frame,0,0);feedback.value=''
   }
@@ -274,28 +457,53 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     const THREE=await import('three')
     if(!isCurrent())return
     const {width,height}=sizeCanvas(target)
-    if(!threeRenderer||threeRenderer.domElement!==target){disposeRenderer();threeRenderer=new THREE.WebGLRenderer({canvas:target,antialias:true,preserveDrawingBuffer:runtimeOptions.preserveDrawingBuffer===true});threeRenderer.setPixelRatio(1)}
+    if(!threeRenderer||threeRenderer.domElement!==target){disposeRenderer();threeRenderer=new THREE.WebGLRenderer({canvas:target,antialias:true,alpha:runtimeOptions.transparentBackground===true,preserveDrawingBuffer:runtimeOptions.preserveDrawingBuffer===true});threeRenderer.setPixelRatio(1)}
     const renderer=threeRenderer
-    threeRenderer.setSize(width,height,false);threeRenderer.setClearColor(settings.value.backgroundColor,1)
+    threeRenderer.setSize(width,height,false)
+    if(runtimeOptions.transparentBackground)threeRenderer.setClearColor(0x000000,0)
+    else threeRenderer.setClearColor(settings.value.backgroundColor,1)
     const isCarousel3d=template.value.collection==='carousel-3d'
+    const isOrbit=template.value.collection==='orbit'
     const isGlobe=template.value.collection==='globe'
     const isScale=template.value.collection==='scale'
-    const usesPlaneCount=isCarousel3d||isGlobe||isScale
+    const usesPlaneCount=isCarousel3d||isOrbit||isGlobe||isScale
     const planeCount=usesPlaneCount?Math.max(1,Math.round(settings.value.visibleCount)):assets.value.length
+    const shuffledGlobeIndices=()=>{
+      const assetCount=assets.value.length,indices=Array.from({length:planeCount},(_,index)=>index%assetCount)
+      let seed=assets.value.reduce((value,asset)=>{for(let index=0;index<asset.id.length;index++)value=Math.imul(value^asset.id.charCodeAt(index),16777619);return value},planeCount|0)>>>0
+      const random=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296}
+      for(let index=indices.length-1;index>0;index--){const target=Math.floor(random()*(index+1));[indices[index],indices[target]]=[indices[target]!,indices[index]!]}
+      if(assetCount>1)for(let index=1;index<indices.length;index++)if(indices[index]===indices[index-1]){
+        const swapIndex=indices.findIndex((value,candidate)=>candidate>index&&value!==indices[index-1]&&value!==indices[index+1])
+        if(swapIndex>index)[indices[index],indices[swapIndex]]=[indices[swapIndex]!,indices[index]!]
+      }
+      return indices
+    }
+    const globeIndices=isGlobe&&settings.value.globeShuffle?shuffledGlobeIndices():undefined
     const sceneAssets=usesPlaneCount
-      ? Array.from({length:planeCount},(_,index)=>assets.value[index%assets.value.length]!)
+      ? Array.from({length:planeCount},(_,index)=>assets.value[globeIndices?.[index]??((isOrbit&&settings.value.reverse?(planeCount-index)%planeCount:index)%assets.value.length)]!)
       : assets.value
-    const cameraFov=isCarousel3d||isGlobe?THREE.MathUtils.radToDeg(2*Math.atan(1.125/Math.max(.01,settings.value.perspective/100))):36
-    const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(cameraFov,width/height,.1,100);camera.position.z=8
+    const orbitSceneUnit=Math.min(width,height)/1080
+    const orbitCameraDistance=1200*orbitSceneUnit/Math.max(.001,settings.value.perspective/100)
+    const cameraFov=isOrbit
+      ? THREE.MathUtils.radToDeg(2*Math.atan(height/2/orbitCameraDistance))
+      : isCarousel3d||isGlobe?THREE.MathUtils.radToDeg(2*Math.atan(1.125/Math.max(.01,settings.value.perspective/100))):36
+    const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(cameraFov,width/height,.1,isOrbit?500000:100);camera.position.z=isOrbit?orbitCameraDistance:8
+    if(isOrbit&&(settings.value.offsetX||settings.value.offsetY))camera.setViewOffset(width,height,-settings.value.offsetX/100*width,-settings.value.offsetY/100*height,width,height)
     const carouselRotator=new THREE.Group(),carouselRing=new THREE.Group()
-    if(isCarousel3d){carouselRotator.rotation.order='ZYX';carouselRotator.rotation.set(THREE.MathUtils.degToRad(settings.value.rotationX),THREE.MathUtils.degToRad(settings.value.rotationY),THREE.MathUtils.degToRad(settings.value.rotationZ));carouselRotator.position.set(settings.value.offsetX/100,settings.value.offsetY/100,0);carouselRotator.add(carouselRing);scene.add(carouselRotator)}
-    const globeGroup=new THREE.Group()
-    if(isGlobe){globeGroup.rotation.order='ZYX';globeGroup.rotation.set(THREE.MathUtils.degToRad(settings.value.rotationX),THREE.MathUtils.degToRad(settings.value.rotationY),THREE.MathUtils.degToRad(settings.value.rotationZ));globeGroup.position.set(settings.value.offsetX/100,settings.value.offsetY/100,0);scene.add(globeGroup)}
+    if(isCarousel3d||isOrbit){carouselRotator.rotation.order=isCarousel3d?'ZYX':'XYZ';carouselRotator.rotation.set(THREE.MathUtils.degToRad(settings.value.rotationX)*(isOrbit?-1:1),THREE.MathUtils.degToRad(settings.value.rotationY),THREE.MathUtils.degToRad(settings.value.rotationZ)*(isOrbit?-1:1));carouselRotator.position.set(isOrbit?0:settings.value.offsetX/100,isOrbit?0:settings.value.offsetY/100,0);carouselRotator.add(carouselRing);scene.add(carouselRotator)}
+    const globeRotator=new THREE.Group(),globeGroup=new THREE.Group()
+    if(isGlobe){globeRotator.rotation.order='XYZ';globeRotator.rotation.set(THREE.MathUtils.degToRad(settings.value.rotationX),THREE.MathUtils.degToRad(settings.value.rotationY),THREE.MathUtils.degToRad(settings.value.rotationZ));globeRotator.position.set(settings.value.offsetX/100,settings.value.offsetY/100,0);globeRotator.add(globeGroup);scene.add(globeRotator)}
     const delayedTime=Math.max(0,time-(isGlobe?settings.value.delaySeconds:settings.value.delayFrames/30))
-    const rawCycle=delayedTime/settings.value.secondsPerSlide*(isCarousel3d||isGlobe?1:settings.value.cycles),direction=settings.value.direction
+    const rawCycle=delayedTime/settings.value.secondsPerSlide*(isCarousel3d||isOrbit||isGlobe?1:settings.value.cycles),direction=settings.value.direction
     const wholeCycle=Math.floor(rawCycle),rawPhase=rawCycle-wholeCycle
     const easedPhase=cubicBezierProgress(rawPhase,template.value.bezier||easingCurves[settings.value.easing])
     const cycle=wholeCycle+easedPhase
+    const orbitStepCount=Math.max(1,settings.value.cycles*Math.max(1,planeCount))
+    const orbitStepDuration=Math.max(.5,settings.value.secondsPerSlide)/orbitStepCount,orbitDelay=Math.max(0,settings.value.delaySeconds),orbitStepSpan=orbitStepDuration+orbitDelay
+    const orbitStep=Math.floor(time/orbitStepSpan),orbitStepTime=time-orbitStep*orbitStepSpan
+    const orbitPhase=cubicBezierProgress(Math.min(1,Math.max(0,orbitStepTime/orbitStepDuration)),template.value.bezier||easingCurves[settings.value.easing])
+    const orbitCycle=(orbitStep+orbitPhase)/Math.max(1,planeCount)
     const vertical=direction==='up'||direction==='down'
     const viewportHeight=2*camera.position.z*Math.tan(THREE.MathUtils.degToRad(camera.fov/2))
     const viewportWidth=viewportHeight*camera.aspect
@@ -304,6 +512,9 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     const largestAssetSide=Math.max(1,...sceneAssets.map(asset=>Math.max(asset.width,asset.height)))
     const planeSizes=sceneAssets.map(asset=>{
       const aspect=Math.max(.01,asset.width/Math.max(1,asset.height))
+      if(isOrbit){
+        return {width:settings.value.planeSize*orbitSceneUnit,height:settings.value.planeSize/aspect*orbitSceneUnit}
+      }
       if(isCarousel3d||isGlobe){
         return {width:maxPlaneWidth,height:maxPlaneWidth/aspect}
       }
@@ -314,8 +525,9 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
       if(aspect>maxPlaneWidth/maxPlaneHeight)return {width:maxPlaneWidth,height:maxPlaneWidth/aspect}
       return {width:maxPlaneHeight*aspect,height:maxPlaneHeight}
     })
-    const carouselPlaneUnit=isCarousel3d||isGlobe
-      ? Math.max(.0001,maxPlaneWidth)/Math.max(1,settings.value.planeSize)
+    const carouselPlaneUnit=isOrbit
+      ? orbitSceneUnit
+      : isCarousel3d||isGlobe ? Math.max(.0001,maxPlaneWidth)/Math.max(1,settings.value.planeSize)
       : 0
     const carouselRadius=settings.value.orbitRadius*carouselPlaneUnit
     if(isCarousel3d){camera.position.z=-settings.value.distance*carouselPlaneUnit;camera.lookAt(0,0,0)}
@@ -347,22 +559,18 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     const nextCenter=nextIndex===0?circumference:(centers[nextIndex]||0)
     const focusCenter=sceneAssets.length===1?0:THREE.MathUtils.lerp(baseCenter,nextCenter,phase)
     const averagePitch=circumference/Math.max(1,sceneAssets.length)
-    const carouselTravel=THREE.MathUtils.degToRad(settings.value.cycleDegrees)*cycle*(settings.value.reverse?-1:1)
+    const carouselTravel=(isOrbit?Math.PI*2*orbitCycle:THREE.MathUtils.degToRad(settings.value.cycleDegrees)*cycle)*(settings.value.reverse?-1:1)
     if(isCarousel3d)carouselRing.rotation.y=carouselTravel
-    if(isGlobe){
-      const stepped=settings.value.globeMotion==='stepped'
-      const stopCount=Math.max(2,Math.round(settings.value.globeStops))
-      const travel=stepped?Math.round(cycle*stopCount)/stopCount*THREE.MathUtils.degToRad(settings.value.cycleDegrees)*(settings.value.reverse?-1:1):carouselTravel
-      const baseRotation=settings.value.globeAxis==='x'?settings.value.rotationX:settings.value.globeAxis==='y'?settings.value.rotationY:settings.value.rotationZ
-      globeGroup.rotation[settings.value.globeAxis]=travel+THREE.MathUtils.degToRad(baseRotation)
-    }
+    if(isOrbit)carouselRing.rotation.x=-carouselTravel
+    if(isGlobe&&settings.value.globeMotion!=='stepped')globeGroup.rotation[settings.value.globeAxis]=carouselTravel
     let rendered=0
     const carouselMeshes: import('three').Mesh[]=[]
-    const globeMeshes: import('three').Mesh[]=[]
+    const globeMeshes: Array<import('three').Mesh|undefined>=[]
+    const globeDirections: Array<import('three').Vector3|undefined>=[]
     // Flat carousels only need nearby cards. Cull before loading images, decoding
     // videos, or touching textures; large boards otherwise process every asset.
     const renderEntries=sceneAssets.map((asset,index)=>({asset,index})).filter(({index})=>{
-      if(isCarousel3d||isGlobe||isScale)return true
+      if(isCarousel3d||isOrbit||isGlobe||isScale)return true
       let offset=(centers[index]||0)-focusCenter
       if(sceneAssets.length>1){
         if(offset>circumference/2)offset-=circumference
@@ -428,13 +636,13 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
       let centered=offset/Math.max(.01,averagePitch)
       centered+=(index-baseIndex)*settings.value.staggerFrames/Math.max(1,30*settings.value.secondsPerSlide)
       const visibleRadius=settings.value.solo?.5:Math.max(.5,(settings.value.visibleCount-1)/2)
-      if(!isCarousel3d&&!isScale&&Math.abs(centered)>visibleRadius)return
+      if(!isCarousel3d&&!isOrbit&&!isScale&&Math.abs(centered)>visibleRadius)return
       const {width:planeWidth,height:planeHeight}=planeSizes[index]!
-      const side=isGlobe&&!settings.value.globeShowBackfaces?THREE.FrontSide:THREE.DoubleSide
+      const side=THREE.DoubleSide
       const meshKey=`${template.value.collection}:${index}:${textureKey}:${planeWidth.toFixed(5)}:${planeHeight.toFixed(5)}:${side}`
       let mesh=webglMeshes.get(meshKey)
       if(!mesh){
-        mesh=new THREE.Mesh(new THREE.PlaneGeometry(planeWidth,planeHeight),new THREE.MeshBasicMaterial({map:texture,transparent:true,side}))
+        mesh=new THREE.Mesh(new THREE.PlaneGeometry(planeWidth,planeHeight),new THREE.MeshBasicMaterial({map:texture,transparent:!isGlobe,alphaTest:isGlobe ? .5 : 0,side}))
         webglMeshes.set(meshKey,mesh)
       }else mesh.removeFromParent()
       const material=mesh.material as import('three').MeshBasicMaterial
@@ -458,7 +666,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
         mesh.position.copy(normal).multiplyScalar(carouselRadius)
         if(!settings.value.globeFaceCamera)mesh.lookAt(mesh.position.clone().multiplyScalar(2))
         if(settings.value.globeFlipImage)mesh.scale.x=-1
-        globeGroup.add(mesh);globeMeshes.push(mesh)
+        globeGroup.add(mesh);globeMeshes[index]=mesh;globeDirections[index]=normal
       }else if(isCarousel3d){
         const slotAngle=carousel3dAngles[index]||0
         const slotDegrees=THREE.MathUtils.radToDeg(slotAngle)
@@ -472,6 +680,10 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
         const radialZ=Math.sin(slotAngle)
         const anchoredRadius=carouselRadius+planeWidth/2
         mesh.position.set(radialX*anchoredRadius,0,radialZ*anchoredRadius)
+      }else if(isOrbit){
+        const angle=index/Math.max(1,sceneAssets.length)*Math.PI*2
+        mesh.position.set(0,-Math.sin(angle)*carouselRadius,Math.cos(angle)*carouselRadius)
+        mesh.rotation.x=angle
       }else{
         const sign=direction==='left'||direction==='up'?-1:1
         if(vertical)mesh.position.y=offset*sign
@@ -482,8 +694,8 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
         mesh.rotation.z=rotation*(settings.value.tilt/100)
         mesh.position.z=-Math.abs(centered)*.48
       }
-      if(!isCarousel3d&&!isGlobe){mesh.position.x+=settings.value.offsetX/100;mesh.position.y+=settings.value.offsetY/100}
-      if(!isCarousel3d&&settings.value.scaleCenter){
+      if(!isCarousel3d&&!isOrbit&&!isGlobe){mesh.position.x+=settings.value.offsetX/100;mesh.position.y+=settings.value.offsetY/100}
+      if(!isCarousel3d&&!isOrbit&&settings.value.scaleCenter){
         const focus=Math.max(0,1-Math.abs(centered)),scale=1+(settings.value.centerScale-1)*focus
         mesh.scale.setScalar(scale)
         if(settings.value.scaleFocus!=='center'){
@@ -493,14 +705,29 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
         }
       }
       if(!isScale&&!isGlobe){
-        const depthPosition=isCarousel3d?mesh.position.clone().applyEuler(carouselRing.rotation).applyEuler(carouselRotator.rotation).add(carouselRotator.position):mesh.position
-        const depth=isCarousel3d?Math.max(0,Math.min(1,(depthPosition.z+carouselRadius)/Math.max(.01,carouselRadius*2))):Math.abs(centered)
-        material.opacity=Math.max(0,1-depth*(settings.value.fade/100))
+        const isRadialRing=isCarousel3d||isOrbit
+        const depthPosition=isRadialRing?mesh.position.clone().applyEuler(carouselRing.rotation).applyEuler(carouselRotator.rotation).add(carouselRotator.position):mesh.position
+        const depth=isRadialRing?Math.max(0,Math.min(1,(depthPosition.z+carouselRadius)/Math.max(.01,carouselRadius*2))):Math.abs(centered)
+        material.opacity=isOrbit?1:Math.max(0,1-depth*(settings.value.fade/100))
       }
-      if(isCarousel3d){carouselRing.add(mesh);carouselMeshes.push(mesh)}else if(!isGlobe){scene.add(mesh);rendered++}
+      if(isCarousel3d||isOrbit){carouselRing.add(mesh);carouselMeshes.push(mesh)}else if(!isGlobe){scene.add(mesh);rendered++}
     }))
     if(!isCurrent())return
-    if(!rendered&&!carouselMeshes.length&&!globeMeshes.length)throw new Error('No previews could be loaded')
+    if(!rendered&&!carouselMeshes.length&&!globeMeshes.some(Boolean))throw new Error('No previews could be loaded')
+    if(isOrbit){
+      scene.updateMatrixWorld(true)
+      const parentWorldQuaternion=new THREE.Quaternion(),cameraFacingQuaternion=new THREE.Quaternion()
+      carouselRing.getWorldQuaternion(parentWorldQuaternion)
+      cameraFacingQuaternion.copy(parentWorldQuaternion).invert().multiply(camera.quaternion)
+      carouselMeshes.forEach(mesh=>mesh.quaternion.copy(cameraFacingQuaternion))
+    }
+    if(isOrbit&&settings.value.fade>0){
+      scene.updateMatrixWorld(true)
+      const fadeAmount=Math.max(0,Math.min(1,settings.value.fade/100)),fadeRangeMultiplier=1+fadeAmount*fadeAmount*20
+      const worldPosition=new THREE.Vector3(),depths=carouselMeshes.map(mesh=>{mesh.getWorldPosition(worldPosition);return Math.abs(camera.position.z-worldPosition.z)})
+      const minDepth=Math.min(...depths),maxDepth=Math.max(...depths),depthRange=Math.max(1,maxDepth-minDepth)
+      carouselMeshes.forEach((mesh,index)=>{const material=mesh.material as import('three').MeshBasicMaterial;const normalizedDepth=(depths[index]!-minDepth)/depthRange;material.opacity=Math.max(0,Math.min(1,1-Math.min(normalizedDepth*fadeRangeMultiplier,1)*fadeAmount))})
+    }
     if(isCarousel3d){
       scene.updateMatrixWorld(true)
       const worldPosition=new THREE.Vector3(),worldQuaternion=new THREE.Quaternion()
@@ -514,15 +741,59 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
       })
     }
     if(isGlobe){
+      if(settings.value.globeMotion==='stepped'){
+        const cardCount=Math.max(1,globeDirections.length)
+        const stopCount=Math.max(1,Math.min(cardCount,Math.round(settings.value.globeStops)))
+        const totalSteps=Math.max(1,Math.round(settings.value.cycles*stopCount))
+        const transitionDuration=Math.max(.0001,settings.value.secondsPerSlide/totalSteps)
+        const delay=Math.max(0,settings.value.delaySeconds),stepSpan=transitionDuration+delay
+        const step=Math.floor(time/stepSpan),stepTime=time-step*stepSpan
+        const rawProgress=stepTime<=delay?0:THREE.MathUtils.clamp((stepTime-delay)/transitionDuration,0,1)
+        const easedProgress=cubicBezierProgress(rawProgress,template.value.bezier||easingCurves[settings.value.easing])
+        const gcd=(left:number,right:number)=>{let a=Math.abs(left),b=Math.abs(right);while(b){const remainder=a%b;a=b;b=remainder}return a}
+        const goldenStep=(count:number)=>{if(count<=2)return 1;const preferred=Math.max(1,Math.round(count*.618033988749895));for(let offset=0;offset<count;offset++){for(const candidate of[preferred-offset,preferred+offset])if(candidate>=1&&candidate<count&&gcd(candidate,count)===1)return candidate}return 1}
+        const cardAt=(value:number)=>((value*goldenStep(cardCount))%cardCount+cardCount)%cardCount
+        const frontQuaternion=(direction:import('three').Vector3,target:import('three').Quaternion)=>{
+          const axisZ=direction.clone(),axisX=new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0),axisZ)
+          if(axisX.lengthSq()<1e-8)axisX.crossVectors(new THREE.Vector3(0,0,1),axisZ)
+          axisX.normalize()
+          const axisY=new THREE.Vector3().crossVectors(axisZ,axisX)
+          const basis=new THREE.Matrix4().makeBasis(axisX,axisY,axisZ)
+          target.setFromRotationMatrix(basis).invert()
+          if(camera.position.length()<carouselRadius)target.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),Math.PI))
+          return target
+        }
+        // A stepped cycle is a closed tour of `stopCount` positions. Wrapping
+        // by the card count left the final pose on a different card whenever
+        // stops and cards differed, producing a visible jump at the loop seam.
+        const sequenceStep=((step%stopCount)+stopCount)%stopCount
+        const directionSign=settings.value.reverse?-1:1
+        const directionAt=(position:number)=>globeDirections[cardAt(position*directionSign)]
+        const currentDirection=directionAt(sequenceStep),nextDirection=directionAt((sequenceStep+1)%stopCount)
+        if(currentDirection&&nextDirection){
+          const currentQuaternion=frontQuaternion(currentDirection,new THREE.Quaternion())
+          const nextQuaternion=frontQuaternion(nextDirection,new THREE.Quaternion())
+          globeGroup.quaternion.copy(currentQuaternion).slerp(nextQuaternion,easedProgress)
+        }
+      }
       scene.updateMatrixWorld(true)
       const worldPosition=new THREE.Vector3(),depthPosition=new THREE.Vector3()
+      const parentWorldQuaternion=new THREE.Quaternion(),cameraFacingQuaternion=new THREE.Quaternion()
+      globeGroup.getWorldQuaternion(parentWorldQuaternion)
+      cameraFacingQuaternion.copy(parentWorldQuaternion).invert().multiply(camera.quaternion)
+      const perspectiveDistance=1000/Math.max(.001,settings.value.perspective/100)*carouselPlaneUnit
+      const hideRadialBackfaces=!settings.value.globeShowBackfaces&&!settings.value.globeFaceCamera
+      const horizonThreshold=hideRadialBackfaces?carouselRadius/Math.max(.001,perspectiveDistance+camera.position.z):Number.NEGATIVE_INFINITY
       globeMeshes.forEach(mesh=>{
+        if(!mesh)return
         mesh.getWorldPosition(worldPosition)
-        if(settings.value.globeFaceCamera)mesh.lookAt(globeGroup.worldToLocal(camera.position.clone()))
+        if(settings.value.globeFaceCamera)mesh.quaternion.copy(cameraFacingQuaternion)
         depthPosition.copy(worldPosition)
+        const normalizedDepth=depthPosition.z/Math.max(.001,carouselRadius)
+        if(hideRadialBackfaces&&normalizedDepth<=horizonThreshold){mesh.visible=false;return}
+        mesh.visible=true
         const depth=THREE.MathUtils.clamp((depthPosition.z+carouselRadius)/(carouselRadius*2),0,1)
         const depthScale=THREE.MathUtils.lerp(settings.value.globeMinScale/100,settings.value.globeMaxScale/100,depth)
-        const perspectiveDistance=1000/Math.max(.001,settings.value.perspective/100)*carouselPlaneUnit
         const perspectiveScale=Math.max(carouselPlaneUnit,camera.position.z-depthPosition.z)/Math.max(.001,perspectiveDistance)
         const scale=depthScale*perspectiveScale
         const flip=settings.value.globeFlipImage?-1:1
@@ -538,7 +809,9 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     const revision=++renderRevision
     try {
       if(template.value.collection==='scale')await drawScale(time,revision)
+      else if(template.value.collection==='test')await drawTestFlip(time,revision)
       else if(template.value.collection==='flicker')await drawFlicker(time,revision)
+      else if(template.value.collection==='stories')await drawStories(time,revision)
       else if(template.value.renderer==='webgl')await drawWebgl(time,revision)
       else await draw2d(time,revision)
     } catch {
@@ -554,7 +827,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     const duration=totalDuration.value
     progress.value=(performance.now()-playbackStartedAt)/1000
     if(progress.value>=duration){
-      if(template.value.renderer==='webgl'||template.value.collection==='flicker'){
+      if(settings.value.loop){
         progress.value=progress.value%duration
         playbackStartedAt=performance.now()-progress.value*1000
       }else{
@@ -580,7 +853,54 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
   const renderVideo=async()=>{
     const target=canvas.value,mimeType=supportedMimeType();if(!target||!mimeType||!('captureStream'in target)){feedback.value='Local video export is not supported by this browser.';return}
     stop();exporting.value=true;feedback.value='Rendering locally…';progress.value=0
-    try{const stream=target.captureStream(settings.value.fps),chunks:BlobPart[]=[],recorder=new MediaRecorder(stream,{mimeType,videoBitsPerSecond:8_000_000});recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};const done=new Promise<void>((resolve,reject)=>{recorder.onstop=()=>resolve();recorder.onerror=()=>reject(new Error())});recorder.start(250);const started=performance.now();await new Promise<void>(resolve=>{const frame=async()=>{progress.value=Math.min(totalDuration.value,(performance.now()-started)/1000);await drawAt(Math.min(progress.value,totalDuration.value-.001));if(progress.value<totalDuration.value)requestAnimationFrame(frame);else resolve()};requestAnimationFrame(frame)});recorder.stop();await done;stream.getTracks().forEach(track=>track.stop());const blob=new Blob(chunks,{type:mimeType}),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`${boardTitle.value.trim().replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'').toLowerCase()||'board'}.${mimeType.includes('mp4')?'mp4':'webm'}`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);feedback.value='Video exported.'}catch{feedback.value='Video export failed. Try another browser or a smaller board.'}finally{exporting.value=false;progress.value=0;void drawAt(0)}
+    try{
+      const useMotionBlur=settings.value.exportMotionBlur
+      const exportCanvas=useMotionBlur?document.createElement('canvas'):target
+      if(useMotionBlur){exportCanvas.width=target.width;exportCanvas.height=target.height}
+      const exportContext=useMotionBlur?exportCanvas.getContext('2d'):null
+      if(useMotionBlur&&!exportContext)throw new Error('Motion blur canvas unavailable')
+      let stream=exportCanvas.captureStream(useMotionBlur?0:settings.value.fps)
+      let captureTrack=stream.getVideoTracks()[0] as CanvasCaptureMediaStreamTrack|undefined
+      if(useMotionBlur&&typeof captureTrack?.requestFrame!=='function'){
+        stream.getTracks().forEach(track=>track.stop())
+        stream=exportCanvas.captureStream(settings.value.fps)
+        captureTrack=undefined
+      }
+      const chunks:BlobPart[]=[]
+      const recorder=new MediaRecorder(stream,{mimeType,videoBitsPerSecond:8_000_000})
+      recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)}
+      const done=new Promise<void>((resolve,reject)=>{recorder.onstop=()=>resolve();recorder.onerror=()=>reject(new Error())})
+      recorder.start(250)
+      const started=performance.now(),sampleCount=useMotionBlur?(window.matchMedia('(pointer: coarse)').matches?3:5):1
+      await new Promise<void>(resolve=>{
+        const frame=async()=>{
+          progress.value=Math.min(totalDuration.value,(performance.now()-started)/1000)
+          if(exportContext){
+            exportContext.clearRect(0,0,exportCanvas.width,exportCanvas.height)
+            const shutter=1/Math.max(1,settings.value.fps)
+            for(let sample=0;sample<sampleCount;sample++){
+              const offset=sampleCount===1?0:(sample/(sampleCount-1)-.5)*shutter
+              const rawTime=progress.value+offset
+              const sampleTime=settings.value.loop
+                ? ((rawTime%totalDuration.value)+totalDuration.value)%totalDuration.value
+                : Math.max(0,Math.min(totalDuration.value-.001,rawTime))
+              await drawAt(sampleTime)
+              exportContext.globalCompositeOperation=sample===0?'copy':'source-over'
+              exportContext.globalAlpha=sample===0?1:1/(sample+1)
+              exportContext.drawImage(target,0,0)
+            }
+            exportContext.globalAlpha=1;exportContext.globalCompositeOperation='source-over'
+            captureTrack?.requestFrame()
+          }else await drawAt(Math.min(progress.value,totalDuration.value-.001))
+          if(progress.value<totalDuration.value)requestAnimationFrame(frame);else resolve()
+        }
+        requestAnimationFrame(frame)
+      })
+      recorder.stop();await done;stream.getTracks().forEach(track=>track.stop())
+      const blob=new Blob(chunks,{type:mimeType}),url=URL.createObjectURL(blob),link=document.createElement('a')
+      link.href=url;link.download=`${boardTitle.value.trim().replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'').toLowerCase()||'board'}.${mimeType.includes('mp4')?'mp4':'webm'}`;link.click()
+      setTimeout(()=>URL.revokeObjectURL(url),1000);feedback.value='Video exported.'
+    }catch{feedback.value='Video export failed. Try another browser or a smaller board.'}finally{exporting.value=false;progress.value=0;void drawAt(0)}
   }
   watch(()=>settings.value.templateId,(templateId,previousTemplateId)=>{
     const changeRevision=++templateChangeRevision
@@ -603,14 +923,18 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
       if(changeRevision!==templateChangeRevision)return
       await drawAt(0)
       if(changeRevision!==templateChangeRevision)return
-      if(template.value.renderer==='webgl'||template.value.collection==='flicker')startPlayback()
+      if(template.value.renderer==='webgl'||template.value.collection==='flicker'||template.value.collection==='stories')startPlayback()
     })
   })
   watch(
-    ()=>[settings.value.format,settings.value.fit,settings.value.transition,settings.value.secondsPerSlide,settings.value.showTitles,settings.value.direction,settings.value.gap,settings.value.tilt,settings.value.scaleCenter,settings.value.tiltMode,settings.value.easing,settings.value.cornerRadius,settings.value.distance,settings.value.centerScale,settings.value.fade,settings.value.offsetX,settings.value.offsetY,settings.value.scaleFocus,settings.value.solo,settings.value.visibleCount,settings.value.planeSize,settings.value.cycles,settings.value.staggerFrames,settings.value.delayFrames,settings.value.cycleDegrees,settings.value.orbitRadius,settings.value.perspective,settings.value.rotationX,settings.value.rotationY,settings.value.rotationZ,settings.value.reverse,settings.value.spin,settings.value.spread,settings.value.staggerSeconds,settings.value.scaleStyle,settings.value.growFrom,settings.value.imageFit,settings.value.flickerEffect,settings.value.flickerPacing,settings.value.scaleDirection,settings.value.driftDirection,settings.value.scaleAmount,settings.value.driftAmount,settings.value.delaySeconds,settings.value.backgroundColor,settings.value.globeMinScale,settings.value.globeMaxScale,settings.value.globeAxis,settings.value.globeMotion,settings.value.globeStops,settings.value.globeFaceCamera,settings.value.globeShowBackfaces,settings.value.globeFlipImage],
+    ()=>[settings.value.format,settings.value.fit,settings.value.transition,settings.value.secondsPerSlide,settings.value.showTitles,settings.value.direction,settings.value.gap,settings.value.tilt,settings.value.scaleCenter,settings.value.tiltMode,settings.value.easing,settings.value.cornerRadius,settings.value.distance,settings.value.centerScale,settings.value.fade,settings.value.offsetX,settings.value.offsetY,settings.value.scaleFocus,settings.value.solo,settings.value.visibleCount,settings.value.planeSize,settings.value.cycles,settings.value.loop,settings.value.staggerFrames,settings.value.delayFrames,settings.value.cycleDegrees,settings.value.orbitRadius,settings.value.perspective,settings.value.rotationX,settings.value.rotationY,settings.value.rotationZ,settings.value.reverse,settings.value.spin,settings.value.spread,settings.value.staggerSeconds,settings.value.scaleStyle,settings.value.growFrom,settings.value.imageFit,settings.value.flickerEffect,settings.value.flipMaterial,settings.value.flipLightIntensity,settings.value.flipRoughness,settings.value.flickerPacing,settings.value.scaleDirection,settings.value.driftDirection,settings.value.scaleAmount,settings.value.driftAmount,settings.value.delaySeconds,settings.value.backgroundColor,settings.value.globeMinScale,settings.value.globeMaxScale,settings.value.globeAxis,settings.value.globeMotion,settings.value.globeStops,settings.value.globeShuffle,settings.value.globeFaceCamera,settings.value.globeShowBackfaces,settings.value.globeFlipImage,settings.value.storiesBigScale,settings.value.storiesBigDrift,settings.value.storiesThumbSize,settings.value.storiesThumbAspect,settings.value.storiesContainerOpacity,settings.value.storiesContainerBlur,settings.value.storiesSelectorPad,settings.value.storiesSelectorStroke,settings.value.storiesDimAmount],
     ()=>{if(!playing.value)void nextTick(()=>drawAt(progress.value))}
   )
   watch(()=>[settings.value.cornerRadius,settings.value.planeSize],disposeTextures)
+  watch(
+    ()=>[settings.value.flipGridColumns,settings.value.flipGridRows,settings.value.flipGridGap,settings.value.flipStagger,settings.value.flipShuffle],
+    ()=>{if(!playing.value)void nextTick(()=>drawAt(progress.value))}
+  )
   watch(assets,()=>{images.clear();videos.forEach(video=>{video.pause();video.removeAttribute('src');video.load()});videos.clear();disposeTextures();progress.value=0;settings.value.visibleCount=countForAssets();void nextTick(async()=>{if(template.value.collection==='flicker')await preloadFlickerAssets();await drawAt(0)})},{immediate:true})
   onBeforeUnmount(()=>{stop();cancelAnimationFrame(textureRefreshFrame);disposeRenderer();videos.forEach(video=>{video.removeAttribute('src');video.load()})})
   return {settings,template,canvas,playing,exporting,progress,feedback,totalDuration,setCanvas,togglePlayback,seek,renderVideo,drawAt,stop}

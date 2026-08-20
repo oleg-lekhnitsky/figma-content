@@ -7,7 +7,7 @@ const emit = defineEmits<{ ready: [value: string] }>()
 const canvas = ref<HTMLCanvasElement>()
 const assetRef = computed(() => props.assets)
 const previewTitle = ref('Preset frame')
-const { settings, setCanvas, drawAt, stop } = useVideoComposer(assetRef,previewTitle,props.template.id,{ maxPreviewDimension:360,preserveDrawingBuffer:true })
+const { settings, setCanvas, drawAt, stop } = useVideoComposer(assetRef,previewTitle,props.template.id,{ maxPreviewDimension:360,preserveDrawingBuffer:true,transparentBackground:true })
 let cancelled=false
 const queueHost=globalThis as typeof globalThis & { __videoPreviewQueue?: Promise<void> }
 
@@ -17,7 +17,7 @@ const firstVisibleTime=()=>{
     settings.value.visibleCount*settings.value.staggerSeconds-.001,
     settings.value.secondsPerSlide*.6+settings.value.staggerSeconds
   ))
-  if(props.template.collection==='flicker')return Math.max(.01,settings.value.secondsPerSlide/Math.max(1,settings.value.visibleCount)*.5)
+  if(props.template.collection==='flicker')return Math.max(.01,settings.value.secondsPerSlide/Math.max(1,settings.value.visibleCount)*(props.template.preset?.flickerEffect==='flip' ? .85 : .5))
   return .001
 }
 
@@ -25,7 +25,7 @@ onMounted(() => {
   const previewQueue=(queueHost.__videoPreviewQueue||Promise.resolve()).then(async()=>{
     if(cancelled||!canvas.value)return
     if(props.template.preset)Object.assign(settings.value,props.template.preset)
-    settings.value.format='portrait-3-4';settings.value.visibleCount=Math.max(2,Math.min(40,props.assets.length||2))
+    settings.value.format='portrait-3-4'
     setCanvas(canvas.value);stop()
     // Let the settings and asset watchers finish their initial draw before the
     // snapshot draw becomes the final render revision.

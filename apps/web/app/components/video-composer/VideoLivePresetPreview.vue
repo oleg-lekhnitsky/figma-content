@@ -2,16 +2,17 @@
 import type { AssetMasonryItem } from '~/types/asset-masonry'
 import type { VideoTemplate } from '~/types/video-composer'
 
-const props = defineProps<{ template: VideoTemplate; assets: AssetMasonryItem[] }>()
+const props = defineProps<{ template: VideoTemplate; assets: AssetMasonryItem[]; transparentBackground?: boolean }>()
 const emit = defineEmits<{ ready: [] }>()
 const canvas = ref<HTMLCanvasElement>()
 const assetRef = computed(() => props.assets)
 const previewTitle = ref('Preset preview')
-const { settings, setCanvas, drawAt, seek, togglePlayback } = useVideoComposer(assetRef, previewTitle, props.template.id, { maxPreviewDimension:360 })
+const { settings, setCanvas, drawAt, seek, togglePlayback } = useVideoComposer(assetRef, previewTitle, props.template.id, { maxPreviewDimension:360, transparentBackground:props.transparentBackground === true })
 
 onMounted(async() => {
   if (props.template.preset) Object.assign(settings.value, props.template.preset)
   settings.value.format = 'portrait-3-4'
+  settings.value.backgroundColor = '#090909'
   if (canvas.value) setCanvas(canvas.value)
   await nextTick()
   const startTime=props.template.collection === 'scale' ? Math.max(.05,Math.min(

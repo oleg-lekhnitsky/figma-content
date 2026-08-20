@@ -5,7 +5,7 @@ export type VideoRendererKind = 'canvas-2d' | 'webgl'
 export type VideoTiltMode = 'off' | 'fan' | 'uniform' | 'alternate'
 export type VideoEasing = 'flow' | 'glide' | 'linear' | 'ease' | 'sweep' | 'smooth'
 export type VideoScaleFocus = 'center' | 'start' | 'end'
-export type VideoTemplateCollection = 'carousel' | 'carousel-3d' | 'globe' | 'scale' | 'flicker'
+export type VideoTemplateCollection = 'carousel' | 'carousel-3d' | 'orbit' | 'globe' | 'scale' | 'stories' | 'flicker' | 'test'
 export type VideoScaleStyle = 'bloom' | 'recede'
 export type VideoGrowFrom = 'center' | 'top' | 'bottom' | 'left' | 'right'
 
@@ -44,6 +44,7 @@ export interface VideoComposerSettings {
   visibleCount: number
   planeSize: number
   cycles: number
+  loop: boolean
   staggerFrames: number
   delayFrames: number
   cycleDegrees: number
@@ -59,7 +60,15 @@ export interface VideoComposerSettings {
   scaleStyle: VideoScaleStyle
   growFrom: VideoGrowFrom
   imageFit: 'fit' | 'fill'
-  flickerEffect: 'off' | 'scale' | 'drift'
+  flickerEffect: 'off' | 'scale' | 'drift' | 'flip'
+  flipMaterial: 'flat' | 'lit'
+  flipLightIntensity: number
+  flipRoughness: number
+  flipGridColumns: number
+  flipGridRows: number
+  flipGridGap: number
+  flipStagger: number
+  flipShuffle?: boolean
   flickerPacing: 'equal' | 'eased'
   scaleDirection: 'forward' | 'reverse'
   driftDirection: 'up' | 'down' | 'left' | 'right'
@@ -68,15 +77,26 @@ export interface VideoComposerSettings {
   delaySeconds: number
   fps: 15 | 25 | 30 | 60
   safeArea: boolean
+  exportMotionBlur: boolean
   backgroundColor: string
   globeMinScale: number
   globeMaxScale: number
   globeAxis: 'x' | 'y' | 'z'
   globeMotion: 'continuous' | 'stepped'
   globeStops: number
+  globeShuffle: boolean
   globeFaceCamera: boolean
   globeShowBackfaces: boolean
   globeFlipImage: boolean
+  storiesBigScale: number
+  storiesBigDrift: number
+  storiesThumbSize: number
+  storiesThumbAspect: '1:1' | '3:4' | '4:3'
+  storiesContainerOpacity: number
+  storiesContainerBlur: number
+  storiesSelectorPad: number
+  storiesSelectorStroke: number
+  storiesDimAmount: number
 }
 
 export const videoFormatDimensions: Record<VideoFormat, readonly [number, number]> = {

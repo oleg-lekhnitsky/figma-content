@@ -1,6 +1,6 @@
 import type { VideoComposerSettings, VideoTemplate } from '~/types/video-composer'
 
-const carouselDefaults: Partial<VideoComposerSettings> = { direction:'up',scaleCenter:false,scaleFocus:'center',centerScale:1.4,tiltMode:'off',tilt:0,solo:false,visibleCount:6,planeSize:600,gap:40,distance:100,cornerRadius:0,offsetX:0,offsetY:0,fade:0,cycles:1,secondsPerSlide:1.6,staggerFrames:2,delayFrames:0,easing:'glide' }
+const carouselDefaults: Partial<VideoComposerSettings> = { direction:'up',scaleCenter:false,scaleFocus:'center',centerScale:1.4,tiltMode:'off',tilt:0,solo:false,visibleCount:6,planeSize:600,gap:40,distance:100,cornerRadius:0,offsetX:0,offsetY:0,fade:0,cycles:1,loop:true,secondsPerSlide:1.6,staggerFrames:2,delayFrames:0,easing:'glide' }
 const preset = (overrides: Partial<VideoComposerSettings>) => ({ ...carouselDefaults, ...overrides })
 const verticalThumb = 'linear-gradient(90deg,transparent 28%,#d8d8d8 28% 72%,transparent 72%),#090909'
 const horizontalThumb = 'linear-gradient(0deg,transparent 28%,#d8d8d8 28% 72%,transparent 72%),#090909'
@@ -29,7 +29,7 @@ const carouselPresetDefinitions: Array<readonly [string, string, Partial<VideoCo
 ]
 const carouselPresets: VideoTemplate[] = carouselPresetDefinitions.map(([number,thumbnail,settings]) => ({ id:`carousel-${number}`,name:`Carousel ${number}`,description:'Editable carousel preset.',renderer:'webgl',collection:'carousel',thumbnail,preset:preset(settings) }))
 
-const carousel3dDefaults: Partial<VideoComposerSettings> = { visibleCount:12,cycles:1,cycleDegrees:360,distance:1300,secondsPerSlide:8,reverse:false,planeSize:400,rotationX:30,rotationY:38,rotationZ:0,orbitRadius:280,perspective:140,cornerRadius:0,fade:0,offsetX:0,offsetY:0,easing:'linear' }
+const carousel3dDefaults: Partial<VideoComposerSettings> = { visibleCount:12,cycles:1,loop:true,cycleDegrees:360,distance:1300,secondsPerSlide:8,reverse:false,planeSize:400,rotationX:30,rotationY:38,rotationZ:0,orbitRadius:280,perspective:140,cornerRadius:0,fade:0,offsetX:0,offsetY:0,easing:'linear' }
 const carousel3dThumb = 'linear-gradient(145deg,transparent 20%,#d8d8d8 21% 47%,transparent 48% 55%,#aaa 56% 78%,transparent 79%),#090909'
 const carousel3dPresetDefinitions: Array<readonly [string, Partial<VideoComposerSettings>]> = [
   ['01',{}],
@@ -43,7 +43,26 @@ const carousel3dPresets: VideoTemplate[] = carousel3dPresetDefinitions.map(([num
   return { id:`carousel-3d-${number}`,name:`Carousel 3D ${number}`,description:'Editable 3D carousel preset.',renderer:'webgl',collection:'carousel-3d',thumbnail:carousel3dThumb,preset:values }
 })
 
-const globeDefaults: Partial<VideoComposerSettings> = { visibleCount:40,orbitRadius:355,globeMinScale:10,globeMaxScale:20,distance:1000,perspective:100,fade:0,cornerRadius:0,offsetX:0,offsetY:0,rotationX:0,rotationY:0,rotationZ:0,cycles:1,secondsPerSlide:7,cycleDegrees:360,delaySeconds:0,globeStops:8,reverse:false,globeAxis:'y',globeMotion:'continuous',globeFaceCamera:true,globeShowBackfaces:true,globeFlipImage:false,planeSize:1000,easing:'linear' }
+const orbitDefaults: Partial<VideoComposerSettings> = { visibleCount:7,cycles:1,loop:true,cycleDegrees:360,secondsPerSlide:8,delaySeconds:0,reverse:false,planeSize:370,rotationX:0,rotationY:0,rotationZ:0,orbitRadius:420,perspective:100,cornerRadius:0,fade:0,offsetX:0,offsetY:0,easing:'sweep' }
+const orbitPresetDefinitions: Array<readonly [string, string, Partial<VideoComposerSettings>, readonly [number,number,number,number]]> = [
+  ['01','Orbit 01',{},[.86,.14,.14,.86]],
+  ['02','Orbit 02',{ planeSize:370,rotationZ:270,orbitRadius:450 },[.86,.14,.14,.86]],
+  ['03','Orbit 03',{ planeSize:230,orbitRadius:485,perspective:140,fade:45 },[.86,.14,.14,.86]],
+  ['04-alt','Orbit 04',{ planeSize:205,rotationZ:270,orbitRadius:515,perspective:140,fade:45 },[.86,.14,.14,.86]],
+  ['04','Orbit 04',{ planeSize:512,orbitRadius:216 },[.86,.14,.14,.86]],
+  ['05','Orbit 05',{ planeSize:512,rotationZ:90,orbitRadius:216 },[.86,.14,.14,.86]],
+  ['07','Orbit 07',{ planeSize:257,rotationZ:306,orbitRadius:518 },[.86,.14,.14,.86]],
+  ['08','Orbit 08',{ planeSize:257,rotationZ:234,orbitRadius:518,reverse:true },[.86,.14,.14,.86]],
+  ['09','Orbit 09',{ secondsPerSlide:16,planeSize:235,rotationX:90,orbitRadius:511,easing:'linear' },[.25,.25,.75,.75]],
+  ['10','Orbit 10',{ planeSize:512,orbitRadius:216 },[.86,.14,.14,.86]],
+  ['11','Orbit 11',{ planeSize:512,rotationZ:270,orbitRadius:216 },[.86,.14,.14,.86]],
+  ['12','Orbit 12',{ visibleCount:20,secondsPerSlide:14,planeSize:372,rotationZ:90,orbitRadius:407,fade:40 },[.86,.14,.14,.86]],
+  ['13','Orbit 13',{ visibleCount:20,secondsPerSlide:14,planeSize:372,orbitRadius:407,fade:40 },[.86,.14,.14,.86]],
+  ['15','Orbit 15',{ visibleCount:20,secondsPerSlide:14,planeSize:372,orbitRadius:407,fade:40 },[.86,.14,.14,.86]]
+]
+const orbitPresets: VideoTemplate[] = orbitPresetDefinitions.map(([id,name,settings,bezier]) => ({ id:`orbit-${id}`,name,description:'Editable radial orbit preset.',renderer:'webgl',collection:'orbit',thumbnail:'radial-gradient(ellipse at 50% 50%,transparent 0 30%,#aaa 31% 37%,transparent 38%),#090909',bezier,preset:{...orbitDefaults,...settings} }))
+
+const globeDefaults: Partial<VideoComposerSettings> = { visibleCount:40,orbitRadius:355,globeMinScale:10,globeMaxScale:20,distance:1000,perspective:100,fade:0,cornerRadius:0,offsetX:0,offsetY:0,rotationX:0,rotationY:0,rotationZ:0,cycles:1,loop:true,secondsPerSlide:7,cycleDegrees:360,delaySeconds:0,globeStops:8,reverse:false,globeAxis:'y',globeMotion:'continuous',globeShuffle:false,globeFaceCamera:true,globeShowBackfaces:true,globeFlipImage:false,planeSize:1000,easing:'linear' }
 const globeThumb = 'radial-gradient(circle at 50% 50%,transparent 0 17%,#d8d8d8 18% 22%,transparent 23% 31%,#aaa 32% 36%,transparent 37%),#090909'
 const globePresetDefinitions: Array<readonly [string, Partial<VideoComposerSettings>, readonly [number,number,number,number]]> = [
   ['01',{},[.25,.25,.75,.75]],
@@ -65,7 +84,7 @@ const globePresetDefinitions: Array<readonly [string, Partial<VideoComposerSetti
 ]
 const globePresets: VideoTemplate[] = globePresetDefinitions.map(([number,settings,bezier]) => ({ id:`globe-${number}`,name:`Globe ${number}`,description:'Editable spherical image globe.',renderer:'webgl',collection:'globe',thumbnail:globeThumb,bezier,preset:{...globeDefaults,...settings} }))
 
-const scaleDefaults: Partial<VideoComposerSettings> = { visibleCount:10,secondsPerSlide:2,planeSize:100,cornerRadius:0,spin:0,staggerSeconds:.4,scaleStyle:'bloom',growFrom:'center',imageFit:'fit',offsetX:0,offsetY:0 }
+const scaleDefaults: Partial<VideoComposerSettings> = { visibleCount:10,loop:true,secondsPerSlide:2,planeSize:100,cornerRadius:0,spin:0,staggerSeconds:.4,scaleStyle:'bloom',growFrom:'center',imageFit:'fit',offsetX:0,offsetY:0 }
 const scaleThumbs = [
   'radial-gradient(circle at 50% 50%,#d8d8d8 0 18%,#aaa 19% 31%,#777 32% 42%,transparent 43%),#090909',
   'radial-gradient(circle at 50% 50%,transparent 0 18%,#777 19% 31%,#aaa 32% 42%,#d8d8d8 43% 55%,transparent 56%),#090909',
@@ -75,12 +94,21 @@ const scaleThumbs = [
 const scalePresetDefinitions: Array<readonly [string, Partial<VideoComposerSettings>, readonly [number,number,number,number]]> = [
   ['01',{},[0,0,0,.99]],
   ['02',{ scaleStyle:'recede' },[0,0,0,.99]],
-  ['03',{ spin:-45,scaleStyle:'bloom' },[.16,1,.3,1]],
+  ['03',{ spin:-45,scaleStyle:'bloom',planeSize:70 },[.16,1,.3,1]],
   ['04',{ staggerSeconds:.6,secondsPerSlide:4,growFrom:'bottom',scaleStyle:'bloom' },[.87,0,.13,1]]
 ]
 const scalePresets: VideoTemplate[] = scalePresetDefinitions.map(([number,settings,bezier],index) => ({ id:`scale-${number}`,name:`Scale ${number}`,description:'Editable scale preset.',renderer:'webgl',collection:'scale',thumbnail:scaleThumbs[index]!,bezier,preset:{...scaleDefaults,...settings} }))
 
-const flickerDefaults: Partial<VideoComposerSettings> = { visibleCount:6,delaySeconds:0,cycles:1,flickerEffect:'off',flickerPacing:'equal',offsetX:0,offsetY:0,driftDirection:'up',secondsPerSlide:6,scaleDirection:'forward',planeSize:100,driftAmount:30,scaleAmount:30,cornerRadius:0,fit:'cover' }
+const storiesDefaults: Partial<VideoComposerSettings> = { visibleCount:8,cycles:1,loop:true,secondsPerSlide:13.3,delaySeconds:.33,direction:'right',cornerRadius:6,offsetX:0,offsetY:0,storiesBigScale:115,storiesBigDrift:40,storiesThumbSize:85,storiesThumbAspect:'1:1',storiesContainerOpacity:40,storiesContainerBlur:60,storiesSelectorPad:5,storiesSelectorStroke:2,storiesDimAmount:20,easing:'smooth' }
+const storiesPresetDefinitions: Array<readonly [string, Partial<VideoComposerSettings>, readonly [number,number,number,number]]> = [
+  ['01',{},[.76,0,.24,1]],
+  ['02',{ visibleCount:7,storiesThumbSize:100,storiesThumbAspect:'3:4',storiesDimAmount:38 },[.76,0,.24,1]],
+  ['03',{ visibleCount:9,delaySeconds:0,direction:'down',cornerRadius:0,storiesDimAmount:40,storiesContainerOpacity:0,storiesContainerBlur:0,storiesSelectorPad:5.5,storiesSelectorStroke:1.5 },[.76,0,.24,1]],
+  ['04',{ visibleCount:5,delaySeconds:0,direction:'right',cornerRadius:0,storiesThumbAspect:'3:4',storiesDimAmount:50,storiesContainerOpacity:0,storiesContainerBlur:0,storiesSelectorPad:0,storiesSelectorStroke:0,easing:'flow' },[.33,0,0,1]]
+]
+const storiesPresets: VideoTemplate[] = storiesPresetDefinitions.map(([number,settings,bezier]) => ({ id:`stories-${number}`,name:`Stories ${number}`,description:'Editable stories selector preset.',renderer:'canvas-2d',collection:'stories',thumbnail:'linear-gradient(90deg,transparent 8%,#777 8% 92%,transparent 92%),linear-gradient(90deg,#d8d8d8 0 18%,transparent 18% 22%,#aaa 22% 40%,transparent 40% 44%,#777 44% 62%,transparent 62%),#090909',bezier,preset:{...storiesDefaults,...settings} }))
+
+const flickerDefaults: Partial<VideoComposerSettings> = { visibleCount:6,delaySeconds:0,cycles:1,loop:true,flickerEffect:'off',flickerPacing:'equal',offsetX:0,offsetY:0,driftDirection:'up',secondsPerSlide:6,scaleDirection:'forward',planeSize:100,driftAmount:30,scaleAmount:30,cornerRadius:0,fit:'cover',easing:'smooth' }
 const flickerPresetDefinitions: Array<readonly [string, Partial<VideoComposerSettings>, readonly [number,number,number,number]]> = [
   ['01',{},[.25,.25,.75,.75]],
   ['02',{ visibleCount:12,cycles:2,flickerPacing:'eased',secondsPerSlide:4,planeSize:73 },[.7,.101,.3,.899]],
@@ -93,12 +121,21 @@ const flickerPresetDefinitions: Array<readonly [string, Partial<VideoComposerSet
   ['09',{ flickerEffect:'scale',driftDirection:'left',secondsPerSlide:8,planeSize:63,driftAmount:40,scaleAmount:40 },[.86,.14,.14,.86]],
   ['10',{ flickerEffect:'scale',driftDirection:'left',secondsPerSlide:3,scaleDirection:'reverse',planeSize:63,driftAmount:40,scaleAmount:5 },[.86,.14,.14,.86]]
 ]
-const flickerPresets: VideoTemplate[] = flickerPresetDefinitions.map(([number,settings,bezier]) => ({ id:`flicker-${number}`,name:`Flicker ${number}`,description:'Editable flicker preset.',renderer:'canvas-2d',collection:'flicker',thumbnail:'linear-gradient(135deg,transparent 12%,#d8d8d8 13% 87%,transparent 88%),#090909',bezier,preset:{...flickerDefaults,...settings} }))
+const flickerPresets: VideoTemplate[] = flickerPresetDefinitions.map(([number,settings,bezier]) => ({ id:`flicker-${number}`,name:`One Shot ${number}`,description:'Editable one-shot preset.',renderer:'canvas-2d',collection:'flicker',thumbnail:'linear-gradient(135deg,transparent 12%,#d8d8d8 13% 87%,transparent 88%),#090909',bezier,preset:{...flickerDefaults,...settings} }))
+
+const testDefaults: Partial<VideoComposerSettings> = {...flickerDefaults,flickerEffect:'flip',direction:'left',visibleCount:6,secondsPerSlide:6,planeSize:80,perspective:100,easing:'sweep',flipMaterial:'lit',flipLightIntensity:200,flipRoughness:72,flipGridColumns:1,flipGridRows:1,flipGridGap:4,flipStagger:0,flipShuffle:false}
+const testPresets: VideoTemplate[] = [
+  { id:'test-01',name:'Flip 01',description:'Experimental two-sided WebGL flip.',renderer:'webgl',collection:'test',thumbnail:'linear-gradient(90deg,transparent 18%,#d8d8d8 19% 48%,#aaa 49% 78%,transparent 79%),#090909',preset:testDefaults },
+  { id:'test-02',name:'Grid Flip 01',description:'Staggered WebGL flip grid.',renderer:'webgl',collection:'test',thumbnail:'linear-gradient(90deg,transparent 7%,#d8d8d8 8% 47%,transparent 48% 52%,#aaa 53% 92%,transparent 93%),linear-gradient(0deg,transparent 49%,#090909 50% 52%,transparent 53%),#090909',preset:{...testDefaults,visibleCount:12,flipGridColumns:2,flipGridRows:2,flipGridGap:5,flipStagger:.12,easing:'sweep'} }
+]
 
 export const videoTemplates: VideoTemplate[] = [
   ...flickerPresets,
   ...carouselPresets,
   ...carousel3dPresets,
+  ...orbitPresets,
   ...globePresets,
-  ...scalePresets
+  ...scalePresets,
+  ...storiesPresets,
+  ...testPresets
 ]

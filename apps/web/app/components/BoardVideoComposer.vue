@@ -14,6 +14,7 @@ const assetOrder = ref<string[]>([])
 const hiddenAssetIds = ref(new Set<string>())
 const draggedAssetId = ref<string>()
 const assetStatus = ref('')
+const assetPreviewAttempts = ref<Record<string, number>>({})
 type MobilePanel = 'templates' | 'scene' | 'canvas' | 'assets'
 const mobilePanel = ref<MobilePanel | null>(null)
 const mobilePanelTrigger = ref<HTMLElement | null>(null)
@@ -106,6 +107,20 @@ watch(() => props.assets.map(asset => asset.id), (ids) => {
   assetOrder.value = [...assetOrder.value.filter(id => available.has(id)), ...ids.filter(id => !assetOrder.value.includes(id))]
   hiddenAssetIds.value = new Set([...hiddenAssetIds.value].filter(id => available.has(id)))
 }, { immediate: true })
+watch(() => props.assets.map(asset => `${asset.id}:${asset.previewUrl}:${asset.originalUrl ?? ''}`), () => {
+  assetPreviewAttempts.value = {}
+})
+const assetPreviewCandidates = (asset: AssetMasonryItem) => [...new Set([
+  asset.previewUrl,
+  `/api/assets/${encodeURIComponent(asset.id)}/media?variant=preview`,
+  `/api/assets/${encodeURIComponent(asset.id)}/media?variant=original`,
+  asset.originalUrl
+].filter((url): url is string => Boolean(url)))]
+const assetPreviewSrc = (asset: AssetMasonryItem) => assetPreviewCandidates(asset)[assetPreviewAttempts.value[asset.id] ?? 0]
+const tryNextAssetPreview = (asset: AssetMasonryItem) => {
+  const nextAttempt = (assetPreviewAttempts.value[asset.id] ?? 0) + 1
+  assetPreviewAttempts.value = { ...assetPreviewAttempts.value, [asset.id]: nextAttempt }
+}
 const orderedAssets = computed(() => {
   const byId = new Map(props.assets.map(asset => [asset.id, asset]))
   return assetOrder.value.map(id => byId.get(id)).filter((asset): asset is AssetMasonryItem => Boolean(asset))
@@ -223,7 +238,10 @@ const showAllAssets = () => {
         <ol>
           <li v-for="asset in orderedAssets" :key="asset.id" :class="{ 'is-hidden': hiddenAssetIds.has(asset.id), 'is-dragging': draggedAssetId === asset.id }" @dragenter.prevent="previewAssetDrop(asset.id)" @dragover.prevent="$event.dataTransfer && ($event.dataTransfer.dropEffect = 'move')" @drop.prevent="draggedAssetId = undefined">
             <button class="video-asset-handle" type="button" draggable="true" :aria-label="`Reorder ${asset.title}. Use Alt and arrow keys to move.`" @dragstart="beginAssetDrag($event, asset)" @dragend="draggedAssetId = undefined" @keydown.alt.up.prevent="moveAssetBy(asset.id, -1)" @keydown.alt.down.prevent="moveAssetBy(asset.id, 1)"><Menu4 :size="16" aria-hidden="true" /></button>
-            <img :src="asset.previewUrl" alt=""><span>{{ asset.title }}</span>
+            <span class="video-asset-thumbnail" aria-hidden="true">
+              <img v-if="assetPreviewSrc(asset)" :key="assetPreviewSrc(asset)" :src="assetPreviewSrc(asset)" alt="" @error="tryNextAssetPreview(asset)">
+              <span v-else>{{ asset.title.trim().charAt(0) || '·' }}</span>
+            </span><span>{{ asset.title }}</span>
             <span class="video-asset-mobile-order">
               <button type="button" :disabled="assetOrder[0] === asset.id" :aria-label="`Move ${asset.title} earlier`" @click="moveAssetBy(asset.id, -1)">↑</button>
               <button type="button" :disabled="assetOrder[assetOrder.length - 1] === asset.id" :aria-label="`Move ${asset.title} later`" @click="moveAssetBy(asset.id, 1)">↓</button>
@@ -334,12 +352,12 @@ const showAllAssets = () => {
   display: grid;
   align-content: start;
   gap: calc(var(--space)/4);
-  height: 100%;
+  height: auto;
   min-height: 0;
   max-height: none;
   margin: 0;
   padding: 0;
-  overflow: auto;
+  overflow: visible;
   scrollbar-width: none;
   list-style: none
 }
@@ -350,8 +368,9 @@ const showAllAssets = () => {
 
 .video-assets-panel :deep(.video-panel-scroll) {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto auto;
-  overflow: hidden
+  grid-template-rows: auto auto auto auto;
+  overflow-x: hidden;
+  overflow-y: auto
 }
 
 .video-assets-panel li {
@@ -383,11 +402,26 @@ const showAllAssets = () => {
   background: rgb(255 255 255/.1)
 }
 
-.video-assets-panel img {
+.video-asset-thumbnail {
   width: 38px;
   height: 38px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
   border-radius: calc(var(--radius)/3);
+  background: color-mix(in srgb, currentColor 12%, transparent)
+}
+
+.video-asset-thumbnail img {
+  width: 100%;
+  height: 100%;
   object-fit: cover
+}
+
+.video-asset-thumbnail > span {
+  font-size: var(--video-type-body);
+  font-weight: var(--video-weight-strong);
+  opacity: .72
 }
 
 .video-asset-handle,
@@ -450,7 +484,7 @@ const showAllAssets = () => {
 }
 
 :deep(.video-panel-scroll) {
-  height: 100%;
+
   max-height: 100%;
   align-content: start;
   padding: var(--space);
@@ -494,7 +528,7 @@ const showAllAssets = () => {
 :deep(.video-template-list) {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: calc(var(--space)/3)
+  gap: calc(var(--space)/3);
 }
 
 :deep(.video-template-list>button) {
@@ -541,7 +575,7 @@ const showAllAssets = () => {
 }
 
 :deep(.video-template-thumb) {
-  border-radius: calc(var(--radius)/1)
+  border-radius: calc(var(--radius)/.5)
 }
 
 :deep(.video-template-list strong) {
@@ -581,13 +615,15 @@ const showAllAssets = () => {
 }
 
 :deep(.video-template-root) {
-  grid-template-columns: 1fr
+  grid-template-columns: 1fr;
+  margin-top: calc(var(--space)*1.5);
 }
 
-:deep(.video-template-folder) {
+:deep(.video-template-list > .video-template-folder) {
   display: flex;
   align-items: center;
-  justify-content: center
+  justify-content: flex-start;
+  padding: 0;
 }
 
 :deep(.video-template-folder h3) {
@@ -595,14 +631,18 @@ const showAllAssets = () => {
   font-size: var(--filter-title-size);
   font-weight: 500;
   line-height: 1;
-  text-align: center
+  text-align: left
 }
 
 :deep(.video-template-browser>.video-panel-scroll>header) {
-  grid-template-columns: 32px minmax(0, 1fr) 32px;
+  grid-template-columns: minmax(0, 1fr);
   display: grid;
   align-items: center;
   gap: 0
+}
+
+:deep(.video-template-browser>.video-panel-scroll>header.has-back) {
+  grid-template-columns: 32px minmax(0, 1fr) 32px
 }
 
 :deep(.video-template-back) {
@@ -622,13 +662,14 @@ const showAllAssets = () => {
 }
 
 :deep(.video-template-browser>.video-panel-scroll>header h2) {
-  grid-column: 2;
-  text-align: center
+  grid-column: 1;
+  margin: 0;
+  text-align: left
 }
 
-:deep(.video-template-browser>.video-panel-scroll>header span) {
-  grid-column: 3;
-  justify-self: end
+:deep(.video-template-browser>.video-panel-scroll>header.has-back h2) {
+  grid-column: 2;
+  text-align: center
 }
 
 :deep(.video-inspector>.video-panel-scroll) {

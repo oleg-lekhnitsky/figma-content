@@ -6,13 +6,12 @@ import VideoPresetPreview from '~/components/video-composer/VideoPresetPreview.v
 
 const props = defineProps<{ templates: VideoTemplate[]; modelValue: string; assets: AssetMasonryItem[] }>()
 defineEmits<{ 'update:modelValue': [value: string] }>()
-type Folder = 'carousel' | 'carousel-3d' | 'globe' | 'scale' | 'flicker'
-const folders: Array<{ id: Folder; label: string }> = [{ id: 'carousel', label: 'Carousel' }, { id: 'carousel-3d', label: 'Carousel 3D' }, { id: 'globe', label: 'Globe' }, { id: 'scale', label: 'Scale' }, { id: 'flicker', label: 'Flicker' }]
+type Folder = 'carousel' | 'carousel-3d' | 'orbit' | 'globe' | 'scale' | 'stories' | 'flicker' | 'test'
+const folders: Array<{ id: Folder; label: string }> = [{ id: 'carousel', label: 'Carousel' }, { id: 'carousel-3d', label: 'Carousel 3D' }, { id: 'orbit', label: 'Orbit' }, { id: 'globe', label: 'Globe' }, { id: 'scale', label: 'Scale' }, { id: 'stories', label: 'Stories' }, { id: 'flicker', label: 'One Shot' }, { id: 'test', label: 'Test' }]
 const openFolder = ref<Folder | null>(null)
 const folderTemplates = (folder: Folder) => props.templates.filter(item => item.collection === folder)
 const visibleTemplates = computed(() => openFolder.value ? folderTemplates(openFolder.value) : [])
-const folderLabel = computed(() => folders.find(folder => folder.id === openFolder.value)?.label || 'Templates')
-const rootItemCount = computed(() => folders.length + props.templates.filter(item => !item.collection).length)
+const folderLabel = computed(() => folders.find(folder => folder.id === openFolder.value)?.label || 'Presets')
 const previewing = ref<string | null>(null)
 const startPreview = (event: PointerEvent, templateId: string) => {
   if (event.pointerType === 'mouse') previewing.value = templateId
@@ -39,11 +38,11 @@ const containPanelTouch = (event: TouchEvent) => {
 <template>
   <section class="video-panel video-template-browser">
     <div class="video-panel-scroll" @touchstart.passive="startPanelTouch" @touchmove="containPanelTouch">
-      <header><button v-if="openFolder" class="video-template-back" type="button"
+      <header :class="{ 'has-back': openFolder }"><button v-if="openFolder" class="video-template-back" type="button"
           aria-label="Back to template collections" @click="openFolder = null">
           <ChevronLeft :size="18" weight="Outline" :stroke-width="2" aria-hidden="true" />
         </button>
-        <h2 class="filter-overlay-title">{{ folderLabel }}</h2><span>{{ openFolder ? visibleTemplates.length : rootItemCount }}</span>
+        <h2 class="filter-overlay-title">{{ folderLabel }}</h2>
       </header>
       <div v-if="!openFolder" class="video-template-list video-template-root">
         <button v-for="template in templates.filter(item => !item.collection)" :key="template.id"
