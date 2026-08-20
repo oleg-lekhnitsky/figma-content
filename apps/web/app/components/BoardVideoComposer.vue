@@ -867,8 +867,13 @@ const showAllAssets = () => {
 }
 
 :deep(.video-color-hue input[type=range]::-webkit-slider-thumb) {
-  appearance: none;
-  opacity: 0
+  width: 16px;
+  height: 16px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: 0 0 0 1px oklch(0 0 0/.5);
+  appearance: none
 }
 
 :deep(.video-color-hue input[type=range]::-moz-range-thumb) {
