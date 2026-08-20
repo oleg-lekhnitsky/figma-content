@@ -43,7 +43,7 @@ const containPanelTouch = (event: TouchEvent) => {
           aria-label="Back to template collections" @click="openFolder = null">
           <ChevronLeft :size="18" weight="Outline" :stroke-width="2" aria-hidden="true" />
         </button>
-        <p>{{ folderLabel }}</p><span>{{ openFolder ? visibleTemplates.length : rootItemCount }}</span>
+        <h2 class="filter-overlay-title">{{ folderLabel }}</h2><span>{{ openFolder ? visibleTemplates.length : rootItemCount }}</span>
       </header>
       <div v-if="!openFolder" class="video-template-list video-template-root">
         <button v-for="template in templates.filter(item => !item.collection)" :key="template.id"

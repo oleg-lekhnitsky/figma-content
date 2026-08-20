@@ -1,7 +1,4 @@
-/*
- * Optional filter presentation layer.
- * Remove this file from the `css` array in nuxt.config.ts to disable it.
- */
+/* Shared filter controls and bottom-sheet presentation. */
 
 :root {
   --filter-control-height: 2.25rem;
@@ -9,16 +6,25 @@
   --filter-control-padding: .875rem;
   --filter-control-end-padding: 2.25rem;
   --filter-control-font-size: .8125rem;
+  --filter-control-max-width: 11rem;
   --filter-panel-control-gap: .375rem;
+  --filter-compact-max-width: 20rem;
+  --filter-compact-background: rgb(0 0 0 / .22);
   --filter-clear-segment-width: 2.5rem;
-  --filter-clear-icon-offset: -.125rem;
+  --filter-clear-icon-size: 1.1875rem;
+  --filter-clear-icon-stroke: 2.1;
   --filter-clear-divider-color: rgb(255 255 255 / .25);
-  --filter-caption-size: .75rem;
-  --filter-title-size: clamp(1.75rem, 3vw, 2.75rem);
+  --filter-caption-size: 1.0rem;
+  --filter-title-size: clamp(2.5rem, 3vw, 2.75rem);
   --filter-pill-radius: 999rem;
   --filter-focus-width: .125rem;
   --filter-chevron-size: .4375rem;
+  --filter-date-caption-top: .1875rem;
+  --filter-date-input-padding-top: .6875rem;
+  --filter-date-range-gap: .5rem;
+  --filter-date-label-gap: .3125rem;
   --filter-overlay-blur: 5rem;
+  --filter-overlay-height: 100dvh;
   --filter-control-blur: var(--material-tinted-blur);
   --filter-overlay-enter-duration: 420ms;
   --filter-overlay-enter-easing: cubic-bezier(.2, 0, 0, 1);
@@ -32,6 +38,10 @@
   --filter-overlay-control-hover-background: var(--material-tinted-hover-bg);
   --filter-overlay-primary-background: rgb(255 255 255 / .9);
   --filter-overlay-primary-color: #595959;
+  --filter-overlay-backdrop-background: rgb(255 255 255 / .72);
+  --filter-overlay-border-color: rgb(255 255 255 / .42);
+  --filter-overlay-muted-color: rgb(255 255 255 / .58);
+  --filter-overlay-caption-color: rgb(255 255 255 / .62);
   --filter-overlay-width: 30rem;
   --filter-overlay-row-height: clamp(3.625rem, 8vh, 5.125rem);
   --filter-overlay-margin: clamp(1.125rem, 3vw, 3.75rem);
@@ -51,7 +61,23 @@
   --filter-morph-duration: var(--filter-overlay-enter-duration);
   --filter-field-height: 2.625rem;
   --filter-field-font-size: 1.125rem;
+  --filter-overlay-field-font-size: clamp(1.35rem, 2.5vw, 2.25rem);
+  --filter-overlay-field-font-size-mobile: 1.35rem;
+  --filter-overlay-field-end-padding: 3rem;
+  --filter-overlay-date-caption-top: .5625rem;
+  --filter-overlay-date-input-padding-top: .9375rem;
+  --filter-overlay-chevron-inset: .3125rem;
+  --filter-overlay-close-inset: clamp(1.125rem, 2.5vw, 2.5rem);
   --filter-hairline: .0625rem;
+  --filter-sheet-height-mobile: 90dvh;
+  --filter-view-sheet-max-height-mobile: 60dvh;
+  --filter-sheet-row-height-mobile: 3.75rem;
+  --filter-sheet-group-gap-mobile: 1.375rem;
+  --filter-sheet-content-padding-mobile: calc(var(--space) * 3) calc(var(--space) * 2.5) max(calc(var(--space) * 3), env(safe-area-inset-bottom));
+  --filter-sheet-content-bottom-mobile: max(calc(var(--space) * 3), env(safe-area-inset-bottom));
+  --filter-sheet-handle-size: var(--control-height);
+  --filter-sheet-handle-thickness: .3125rem;
+  --filter-sheet-drag-duration: 180ms;
 }
 
 html { scrollbar-gutter: stable; }
@@ -89,14 +115,11 @@ html { scrollbar-gutter: stable; }
   ::view-transition-group(filters-panel) {
     animation-duration: var(--filter-morph-duration);
     animation-timing-function: var(--filter-overlay-enter-easing);
+    overflow: visible;
   }
 
   html[data-filter-transition='closing']::view-transition-group(filters-panel) {
     animation-timing-function: var(--filter-overlay-exit-easing);
-  }
-
-  ::view-transition-group(filters-panel) {
-    overflow: visible;
   }
 
   ::view-transition-image-pair(filters-panel),
@@ -179,7 +202,7 @@ html { scrollbar-gutter: stable; }
   box-sizing: border-box;
   width: auto;
   min-width: 0;
-  max-width: 11rem;
+  max-width: var(--filter-control-max-width);
   height: var(--filter-control-height);
   min-height: var(--filter-control-height);
   padding: 0 var(--filter-control-end-padding) 0 var(--filter-control-padding);
@@ -208,7 +231,7 @@ button.filter-dropdown-trigger { display: flex; align-items: center; white-space
 .asset-filter-controls > .date-field > span {
   position: absolute;
   z-index: 1;
-  top: .1875rem;
+  top: var(--filter-date-caption-top);
   left: calc(var(--space) / 2);
   color: var(--color-muted);
   font-size: var(--filter-caption-size);
@@ -216,7 +239,7 @@ button.filter-dropdown-trigger { display: flex; align-items: center; white-space
 }
 
 .asset-filter-controls > .date-field > input {
-  padding: .6875rem calc(var(--space) / 2) 0;
+  padding: var(--filter-date-input-padding-top) calc(var(--space) / 2) 0;
   appearance: auto;
 }
 
@@ -262,12 +285,12 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
   flex: 0 0 auto;
   display: flex;
   width: max-content;
-  max-width: 20rem;
+  max-width: var(--filter-compact-max-width);
   height: var(--filter-control-height-mobile);
   box-sizing: border-box;
   overflow: hidden;
   border-radius: var(--filter-pill-radius);
-  background: rgb(0 0 0 / .22);
+  background: var(--filter-compact-background);
   box-shadow: none;
   backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
   -webkit-backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
@@ -375,11 +398,11 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
 .selection-panel:not(.selection-panel--filter-overlay) > .filter-clear-compact svg,
 .selection-panel.selection-panel--bare:not(.selection-panel--filter-overlay) > .mobile-control-blur > .filter-clear-compact svg {
   display: block;
-  width: 1.1875rem;
-  height: 1.1875rem;
+  width: var(--filter-clear-icon-size);
+  height: var(--filter-clear-icon-size);
   fill: none;
   stroke: currentColor;
-  stroke-width: 2.1;
+  stroke-width: var(--filter-clear-icon-stroke);
   stroke-linecap: round;
   transform: none;
 }
@@ -387,7 +410,7 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
 .selection-panel.selection-panel--filter-overlay {
   inset: 0 !important;
   width: 100% !important;
-  height: 100dvh;
+  height: var(--filter-overlay-height);
   max-width: none !important;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -398,10 +421,9 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
   overflow-anchor: none;
   overscroll-behavior-y: contain;
   scrollbar-width: none;
-  -ms-overflow-style: none;
   border: 0;
   border-radius: 0 !important;
-  background: rgb(255 255 255 / .72) !important;
+  background: var(--filter-overlay-backdrop-background) !important;
   box-shadow: none !important;
   backdrop-filter: blur(var(--filter-overlay-blur)) !important;
   -webkit-backdrop-filter: blur(var(--filter-overlay-blur)) !important;
@@ -448,7 +470,7 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
   box-sizing: border-box;
   width: min(100%, var(--filter-overlay-width));
   min-height: 0;
-  max-height: calc(100dvh - var(--filter-overlay-margin) - var(--filter-overlay-margin));
+  max-height: calc(var(--filter-overlay-height) - var(--filter-overlay-margin) - var(--filter-overlay-margin));
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -462,7 +484,6 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
   border-radius: var(--filter-overlay-radius);
   color: var(--filter-overlay-panel-color);
   background: var(--filter-overlay-panel-background);
-  max-width: 520px;
   animation: filter-panel-fade-in var(--filter-overlay-enter-duration) var(--filter-overlay-enter-easing) var(--filter-panel-enter-delay) both;
 }
 
@@ -479,7 +500,7 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
 
 .selection-panel--filter-overlay .filter-overlay-title {
   margin: 0 0 calc(var(--filter-overlay-group-gap) / 2);
-  color: #fff;
+  color: var(--filter-overlay-panel-color);
   font-size: var(--filter-title-size);
   font-weight: 500;
   letter-spacing: -.04em;
@@ -488,13 +509,14 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
 
 .selection-panel--filter-overlay .filter-option-group {
   display: grid;
-  gap: .625rem;
+  gap: var(--space);
   margin: 0;
 }
 
-.selection-panel--filter-overlay .filter-option-group h3 {
+.selection-panel--filter-overlay .filter-option-group h3,
+.selection-panel--filter-overlay .video-mobile-panel.is-mobile-open .video-panel-scroll legend {
   margin: 0;
-  color: rgb(255 255 255 / .58);
+  color: var(--color-surface);
   font-size: var(--filter-caption-size);
   font-weight: 700;
   letter-spacing: 0;
@@ -507,38 +529,61 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
   gap: var(--filter-option-gap);
 }
 
-.selection-panel--filter-overlay .filter-option-list > button {
+.selection-panel--filter-overlay :is(.filter-option-list, .video-choice-row) > button,
+.selection-panel--filter-overlay .video-toggle {
   box-sizing: border-box;
   width: auto;
-  height: var(--filter-option-height);
   min-height: var(--filter-option-height);
   flex: 0 0 auto;
-  padding: 0 var(--filter-option-padding);
-  border: var(--filter-hairline) solid rgb(255 255 255 / .42);
+  padding: var(--filter-option-padding);
+  border: var(--filter-hairline) solid var(--filter-overlay-border-color);
   border-radius: var(--filter-pill-radius);
-  color: #fff;
+  color: var(--color-surface);
   background: transparent;
   font-size: var(--filter-option-font-size);
-  font-weight: 500;
   line-height: 1;
   white-space: nowrap;
   opacity: 1;
 }
 
-.selection-panel--filter-overlay .filter-option-list > button:is(:hover, :active, :focus) {
+.selection-panel--filter-overlay :is(.filter-option-list, .video-choice-row) > button:is(:hover, :active, :focus),
+.selection-panel--filter-overlay .video-toggle:is(:hover, :active, :focus) {
   opacity: 1;
 }
 
 @media (hover: none), (pointer: coarse) {
-  .selection-panel--filter-overlay .filter-option-list > button:is(:hover, :active, :focus) {
+  .selection-panel--filter-overlay :is(.filter-option-list, .video-choice-row) > button:is(:hover, :active, :focus),
+  .selection-panel--filter-overlay .video-toggle:is(:hover, :active, :focus) {
     scale: 1;
   }
 }
 
-.selection-panel--filter-overlay .filter-option-list > button[aria-pressed='true'] {
+.selection-panel--filter-overlay :is(.filter-option-list, .video-choice-row) > button[aria-pressed='true'],
+.selection-panel--filter-overlay .video-toggle[aria-pressed='true'] {
   border-color: var(--filter-overlay-primary-background);
-  color: #595959;
+  color: var(--filter-overlay-primary-color);
   background: var(--filter-overlay-primary-background);
+}
+
+@media (max-width: 640px) {
+  .selection-panel--filter-overlay .video-mobile-panel.is-mobile-open .video-panel-scroll {
+    --filter-overlay-group-gap: var(--filter-sheet-group-gap-mobile);
+    height: 100%;
+    max-height: 100%;
+    display: grid;
+    align-content: start;
+    gap: var(--filter-overlay-group-gap);
+    padding: var(--filter-sheet-content-padding-mobile);
+    scroll-padding-bottom: var(--filter-sheet-content-bottom-mobile);
+  }
+
+  .selection-panel--filter-overlay .video-mobile-panel.is-mobile-open .video-panel-scroll > header {
+    margin-bottom: 0;
+  }
+
+  .selection-panel--filter-overlay .video-mobile-panel.is-mobile-open :is(.video-choice-row, fieldset > .video-control-pair) {
+    margin-top: var(--space);
+  }
 }
 
 .selection-panel--filter-overlay .filter-visible-search { height: var(--filter-field-height); }
@@ -547,24 +592,24 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
   height: var(--filter-field-height);
   padding: 0;
   border: 0;
-  border-bottom: var(--filter-hairline) solid rgb(255 255 255 / .42);
+  border-bottom: var(--filter-hairline) solid var(--filter-overlay-border-color);
   border-radius: 0;
-  color: #fff;
+  color: var(--filter-overlay-panel-color);
   background: transparent;
   font-size: var(--filter-field-font-size);
   font-weight: 500;
 }
-.selection-panel--filter-overlay .filter-visible-search input::placeholder { color: rgb(255 255 255 / .58); }
+.selection-panel--filter-overlay .filter-visible-search input::placeholder { color: var(--filter-overlay-muted-color); }
 
 .selection-panel--filter-overlay .filter-date-range {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: .5rem;
+  gap: var(--filter-date-range-gap);
 }
 
-.selection-panel--filter-overlay .filter-date-range label { display: grid; gap: .3125rem; }
+.selection-panel--filter-overlay .filter-date-range label { display: grid; gap: var(--filter-date-label-gap); }
 .selection-panel--filter-overlay .filter-date-range span {
-  color: rgb(255 255 255 / .58);
+  color: var(--filter-overlay-muted-color);
   font-size: var(--filter-caption-size);
 }
 .selection-panel--filter-overlay .filter-date-range input {
@@ -572,9 +617,9 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
   min-height: var(--filter-control-height);
   padding: 0;
   border: 0;
-  border-bottom: var(--filter-hairline) solid rgb(255 255 255 / .42);
+  border-bottom: var(--filter-hairline) solid var(--filter-overlay-border-color);
   border-radius: 0;
-  color: #fff;
+  color: var(--filter-overlay-panel-color);
   background: transparent;
   font-size: var(--filter-control-font-size);
   font-weight: 500;
@@ -602,35 +647,34 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
   height: 100%;
   min-height: 0;
   justify-content: flex-start;
-  padding: 0 3rem 0 0;
+  padding: 0 var(--filter-overlay-field-end-padding) 0 0;
   border: 0 !important;
   border-radius: 0 !important;
   color: inherit;
   background: transparent;
-  font-size: clamp(1.35rem, 2.5vw, 2.25rem);
+  font-size: var(--filter-overlay-field-font-size);
   font-weight: 500;
-  letter-spacing: -.035em;
 }
 
 .selection-panel--filter-overlay .asset-filter-controls > .search-field > input { padding-inline: 0; }
 
 .selection-panel--filter-overlay .asset-filter-controls > .date-field > span {
-  top: .5625rem;
+  top: var(--filter-overlay-date-caption-top);
   left: 0;
-  color: rgb(255 255 255 / .62);
+  color: var(--filter-overlay-caption-color);
   font-size: var(--filter-caption-size);
   letter-spacing: .04em;
   text-transform: uppercase;
 }
 
-.selection-panel--filter-overlay .asset-filter-controls > .date-field > input { padding: .9375rem 0 0; }
-.selection-panel--filter-overlay .filter-dropdown-chevron { right: .3125rem; }
+.selection-panel--filter-overlay .asset-filter-controls > .date-field > input { padding: var(--filter-overlay-date-input-padding-top) 0 0; }
+.selection-panel--filter-overlay .filter-dropdown-chevron { right: var(--filter-overlay-chevron-inset); }
 
 .selection-panel--filter-overlay > .filter-panel-toggle.is-expanded {
   position: fixed;
   z-index: 2;
-  top: clamp(1.125rem, 2.5vw, 2.5rem);
-  right: clamp(1.125rem, 2.5vw, 2.5rem);
+  top: var(--filter-overlay-close-inset);
+  right: var(--filter-overlay-close-inset);
   width: var(--control-height) !important;
   height: var(--control-height) !important;
   min-height: var(--control-height) !important;
@@ -695,12 +739,11 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
 
 .selection-panel--filter-overlay.selection-panel-enter-active,
 .selection-panel--filter-overlay.selection-panel-leave-active {
-  transition: opacity var(--filter-morph-duration) var(--filter-overlay-enter-easing);
+  transition: none;
 }
 
 @media (max-width: 520px) {
   .selection-panel.selection-panel--filter-overlay {
-    height: 100dvh;
     display: flex;
     flex-direction: column;
     align-items: end;
@@ -710,15 +753,15 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
   }
 
   .selection-panel--filter-overlay .asset-filter-controls {
-    --filter-row-height: 3.75rem;
-    --filter-overlay-group-gap: 1.375rem;
+    --filter-row-height: var(--filter-sheet-row-height-mobile);
+    --filter-overlay-group-gap: var(--filter-sheet-group-gap-mobile);
     position: relative;
     width: 100%;
     max-width: none;
-    height: 90dvh;
-    max-height: 90dvh;
+    height: var(--filter-sheet-height-mobile);
+    max-height: var(--filter-sheet-height-mobile);
     margin: 0;
-    padding: calc(var(--space) * 2) var(--space) max(calc(var(--space) * 1.5), env(safe-area-inset-bottom));
+    padding: var(--filter-sheet-content-padding-mobile);
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior-y: contain;
@@ -728,7 +771,12 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
     -webkit-backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
     -webkit-overflow-scrolling: touch;
     transform: translate3d(0, var(--sheet-drag-y, 0px), 0);
-    transition: transform 180ms var(--filter-overlay-enter-easing);
+    transition: transform var(--filter-sheet-drag-duration) var(--filter-overlay-enter-easing);
+  }
+
+  .selection-panel--filter-overlay .asset-filter-controls.board-view-controls {
+    height: auto;
+    max-height: var(--filter-view-sheet-max-height-mobile);
   }
 
   .selection-panel--filter-overlay .asset-filter-controls > :not(.filter-sheet-handle) {
@@ -745,9 +793,9 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
     z-index: 3;
     top: 0;
     left: 50%;
-    width: 44px;
-    height: 44px;
-    min-height: 44px;
+    width: var(--filter-sheet-handle-size);
+    height: var(--filter-sheet-handle-size);
+    min-height: var(--filter-sheet-handle-size);
     display: block;
     padding: 0;
     color: var(--filter-overlay-panel-color);
@@ -760,8 +808,8 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
     position: absolute;
     top: calc(var(--space) / 2);
     left: 0;
-    width: 44px;
-    height: 5px;
+    width: var(--filter-sheet-handle-size);
+    height: var(--filter-sheet-handle-thickness);
     border-radius: var(--filter-pill-radius);
     background: color-mix(in srgb, var(--filter-overlay-panel-color) 55%, transparent);
   }
@@ -790,13 +838,8 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
   .selection-panel--filter-overlay .asset-filter-controls > label > input,
   .selection-panel--filter-overlay .asset-filter-controls > label > select,
   .selection-panel--filter-overlay .asset-filter-controls > .filter-dropdown-trigger {
-    font-size: 1.35rem;
+    font-size: var(--filter-overlay-field-font-size-mobile);
   }
-}
-
-@keyframes filter-sheet-in {
-  from { translate: 0 2rem; opacity: 0; }
-  to { translate: 0 0; opacity: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -28,7 +28,7 @@ const resetFlicker = () => emit('update:modelValue', { ...props.modelValue, visi
 <template>
   <section class="video-panel video-inspector">
     <div class="video-panel-scroll">
-    <header><p>Scene</p></header>
+    <header><h2 class="filter-overlay-title">Scene</h2></header>
     <fieldset v-if="template?.renderer === 'webgl' && !isCarousel3d && !isGlobe && !isScale"><legend>Direction</legend><div class="video-choice-row"><button v-for="value in ['up','down','left','right']" :key="value" type="button" :aria-pressed="modelValue.direction === value" @click="set('direction', value as VideoComposerSettings['direction'])">{{ value }}</button></div></fieldset>
     <template v-if="isFlicker">
       <fieldset><legend>Image fit</legend><div class="video-choice-row"><button type="button" :aria-pressed="modelValue.fit === 'contain'" @click="set('fit','contain')">Fit</button><button type="button" :aria-pressed="modelValue.fit === 'cover'" @click="set('fit','cover')">Fill</button></div></fieldset>

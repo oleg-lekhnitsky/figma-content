@@ -6,6 +6,14 @@
   font-display: swap;
 }
 
+@font-face {
+  font-family: "ABC Diatype Cyrillic Trial";
+  src: url("/fonts/ABCDiatypeCyrillicTrial-Bold.otf") format("opentype");
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
 :root {
   --space: clamp(12px, 1vw, 24px);
   --color-bg: #fafafa;
@@ -16,8 +24,8 @@
   --color-line: rgb(0 0 0 / 0.18);
   --color-accent: #666;
   --color-danger: #a21b14;
-  --material-tinted-bg: rgb(0 0 0 / 0.3);
-  --material-tinted-bg-mobile: rgb(0 0 0 / 0.36);
+  --material-tinted-bg: rgb(0 0 0 / 0.5);
+  --material-tinted-bg-mobile: rgb(0 0 0 / 0.50);
   --material-tinted-hover-bg: rgb(0 0 0 / 0.42);
   --material-tinted-fg: #fff;
   --material-tinted-blur: 1.5rem;
@@ -46,7 +54,8 @@
   color-scheme: light;
   font-family: var(--font-family-ui);
   font-size: var(--font-size-body);
-  font-weight: 700;
+  font-synthesis: none;
+  font-weight: 500;
   letter-spacing: -0.015em;
   line-height: 1.15;
 }
@@ -107,7 +116,7 @@ button,
   border-radius: 999px;
   color: #fff;
   background: #000;
-  font-weight: 700;
+  font-weight: inherit;
   cursor: pointer;
   transition-property: scale, opacity;
   transition-duration: 150ms;

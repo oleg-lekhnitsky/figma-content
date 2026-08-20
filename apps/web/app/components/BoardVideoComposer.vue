@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { AssetMasonryItem } from '~/types/asset-masonry'
-import { Download3, Eye, EyeOff, Menu4 } from 'reicon-vue'
+import { ChevronLeft, Download3, Eye, EyeOff, Menu4 } from 'reicon-vue'
 import { videoTemplates } from '~/utils/video-templates'
 import VideoCanvasInspector from '~/components/video-composer/VideoCanvasInspector.vue'
 import VideoPreviewStage from '~/components/video-composer/VideoPreviewStage.vue'
@@ -9,6 +9,7 @@ import VideoTemplateBrowser from '~/components/video-composer/VideoTemplateBrows
 import VideoTimeline from '~/components/video-composer/VideoTimeline.vue'
 
 const props = defineProps<{ assets: AssetMasonryItem[]; boardTitle: string }>()
+const emit = defineEmits<{ close: [] }>()
 const assetOrder = ref<string[]>([])
 const hiddenAssetIds = ref(new Set<string>())
 const draggedAssetId = ref<string>()
@@ -20,6 +21,7 @@ const mobilePanelClose = ref<HTMLButtonElement | null>(null)
 const mobileSheetDragY = ref(0)
 const mobileSheetDragging = ref(false)
 const mobileSheetDismissing = ref(false)
+const stageMotionReady = ref(false)
 let mobileSheetPointerId: number | undefined
 let mobileSheetStartY = 0
 let mobileSheetLastY = 0
@@ -27,6 +29,7 @@ let mobileSheetLastTime = 0
 let mobileSheetReleaseVelocity = 0
 let mobileSheetMoved = false
 let mobileSheetCloseTimer: ReturnType<typeof setTimeout> | undefined
+let stageMotionFrame: number | undefined
 const openMobilePanel = async (panel: MobilePanel, event: MouseEvent) => {
   clearTimeout(mobileSheetCloseTimer)
   mobileSheetDragY.value = 0
@@ -111,6 +114,14 @@ const activeAssets = computed(() => orderedAssets.value.filter(asset => !hiddenA
 const assetRef = computed(() => activeAssets.value)
 const titleRef = computed(() => props.boardTitle)
 const { settings, template, playing, exporting, progress, feedback, totalDuration, setCanvas, togglePlayback, seek, renderVideo } = useVideoComposer(assetRef, titleRef)
+const handleStageReady = (canvas: HTMLCanvasElement) => {
+  stageMotionReady.value = false
+  if (stageMotionFrame !== undefined) cancelAnimationFrame(stageMotionFrame)
+  setCanvas(canvas)
+  stageMotionFrame = requestAnimationFrame(() => {
+    stageMotionFrame = requestAnimationFrame(() => { stageMotionReady.value = true })
+  })
+}
 const handlePlaybackShortcut = (event: KeyboardEvent) => {
   if (event.key === 'Escape' && mobilePanel.value) {
     event.preventDefault()
@@ -142,6 +153,7 @@ onMounted(() => window.addEventListener('keydown', handlePlaybackShortcut))
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handlePlaybackShortcut)
   clearTimeout(mobileSheetCloseTimer)
+  if (stageMotionFrame !== undefined) cancelAnimationFrame(stageMotionFrame)
 })
 const moveAsset = (assetId: string, targetId: string) => {
   if (assetId === targetId) return
@@ -183,9 +195,14 @@ const showAllAssets = () => {
 </script>
 
 <template>
-  <div class="board-video-composer" :class="{ 'has-mobile-panel': mobilePanel, 'is-mobile-sheet-dragging': mobileSheetDragging, 'is-mobile-sheet-dismissing': mobileSheetDismissing }" :style="{ '--video-mobile-sheet-drag-y': `${mobileSheetDragY}px` }">
+  <div class="board-video-composer" :class="{ 'has-mobile-panel': mobilePanel, 'is-mobile-sheet-dragging': mobileSheetDragging, 'is-mobile-sheet-dismissing': mobileSheetDismissing, 'is-stage-motion-ready': stageMotionReady }" :style="{ '--video-mobile-sheet-drag-y': `${mobileSheetDragY}px` }">
+    <header class="video-mobile-header">
+      <button class="video-mobile-header-back" type="button" aria-label="Close video editor" @click="emit('close')"><ChevronLeft :size="24" weight="Outline" aria-hidden="true" /></button>
+      <h2>Video editor</h2>
+      <button class="button-primary video-mobile-header-export" type="button" :disabled="exporting || !activeAssets.length" :aria-label="exporting ? 'Rendering video' : 'Export video'" @click="renderVideo"><span>{{ exporting ? 'Rendering…' : 'Export' }}</span></button>
+    </header>
     <main class="video-composer-center">
-      <VideoPreviewStage :key="template.renderer" :safe-area="settings.safeArea" @ready="setCanvas" />
+      <VideoPreviewStage :key="template.renderer" :safe-area="settings.safeArea" @ready="handleStageReady" />
     </main>
     <nav class="video-mobile-toolbar" aria-label="Video editing tools">
       <button type="button" aria-controls="video-mobile-templates" :aria-expanded="mobilePanel === 'templates'" @click="openMobilePanel('templates', $event)">Templates</button>
@@ -201,7 +218,7 @@ const showAllAssets = () => {
       <section id="video-mobile-assets" class="video-panel video-assets-panel video-mobile-panel" :class="{ 'is-mobile-open': mobilePanel === 'assets' }" :role="mobilePanel === 'assets' ? 'dialog' : undefined" :aria-modal="mobilePanel === 'assets' || undefined" aria-label="Video assets">
         <div class="video-panel-scroll">
         <header>
-          <p>Assets</p><span>{{ activeAssets.length }}/{{ assets.length }}</span>
+          <h2 class="filter-overlay-title">Assets</h2><span>{{ activeAssets.length }}/{{ assets.length }}</span>
         </header>
         <ol>
           <li v-for="asset in orderedAssets" :key="asset.id" :class="{ 'is-hidden': hiddenAssetIds.has(asset.id), 'is-dragging': draggedAssetId === asset.id }" @dragenter.prevent="previewAssetDrop(asset.id)" @dragover.prevent="$event.dataTransfer && ($event.dataTransfer.dropEffect = 'move')" @drop.prevent="draggedAssetId = undefined">
@@ -222,7 +239,7 @@ const showAllAssets = () => {
     <button v-if="mobilePanel" ref="mobilePanelClose" class="video-mobile-sheet-handle" type="button" aria-label="Close video settings" @pointerdown="startMobileSheetDrag" @pointermove="moveMobileSheetDrag" @pointerup="finishMobileSheetDrag" @pointercancel="cancelMobileSheetDrag" @click="handleMobileSheetHandleClick"><span aria-hidden="true" /></button>
     <VideoTimeline :progress="progress" :duration="totalDuration" :playing="playing" @seek="seek" @toggle="togglePlayback">
       <p role="status" aria-live="polite">{{ feedback }}</p>
-      <button class="button-primary video-export-button" type="button" :disabled="exporting || !activeAssets.length" :aria-label="exporting ? 'Rendering video' : 'Download video'" :title="exporting ? 'Rendering video' : 'Download video'" @click="renderVideo"><Download3 class="video-export-icon" :size="20" weight="Outline" aria-hidden="true" /><span class="video-export-label">{{ exporting ? 'Rendering…' : 'Export video' }}</span></button>
+      <button class="button-primary video-export-button video-export-button--timeline" type="button" :disabled="exporting || !activeAssets.length" :aria-label="exporting ? 'Rendering video' : 'Download video'" :title="exporting ? 'Rendering video' : 'Download video'" @click="renderVideo"><Download3 class="video-export-icon" :size="20" weight="Outline" aria-hidden="true" /><span class="video-export-label">{{ exporting ? 'Rendering…' : 'Export video' }}</span></button>
     </VideoTimeline>
   </div>
 </template>
@@ -448,6 +465,10 @@ const showAllAssets = () => {
 }
 
 :deep(.video-panel header) {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   display: flex;
   min-height: 26px;
   align-items: center;
@@ -456,16 +477,14 @@ const showAllAssets = () => {
   margin-bottom: calc(var(--space)*.75)
 }
 
-:deep(.video-panel header p) {
-  margin: 0;
-  color: var(--video-text-secondary);
-  font-size: var(--video-type-body);
-  font-weight: var(--video-weight-strong);
-  line-height: 1;
-  letter-spacing: 0
+:deep(.video-panel header h2) {
+  min-width: 0;
+  max-width: 100%;
+  flex: 1 1 auto
 }
 
 :deep(.video-panel header span) {
+  flex: 0 0 auto;
   color: var(--video-text-muted);
   font-size: var(--video-type-caption);
   font-weight: var(--video-weight-regular);
@@ -600,7 +619,7 @@ const showAllAssets = () => {
   gap: 0
 }
 
-:deep(.video-template-browser>.video-panel-scroll>header:has(.video-template-back) p) {
+:deep(.video-template-browser>.video-panel-scroll>header:has(.video-template-back) h2) {
   text-align: center
 }
 
@@ -642,33 +661,6 @@ const showAllAssets = () => {
 
 :deep(.video-inspector fieldset>.video-control-pair) {
   margin-top: var(--video-inspector-control-gap)
-}
-
-:deep(.video-choice-row button),
-:deep(.video-toggle) {
-  min-height: var(--filter-option-height);
-  padding: 0 var(--filter-option-padding);
-  border: var(--filter-hairline) solid rgb(255 255 255/.42);
-  border-radius: var(--filter-pill-radius);
-  background: transparent;
-  color: inherit;
-  font-size: var(--video-type-body);
-  font-weight: var(--video-weight-regular);
-  line-height: 1;
-  text-transform: capitalize;
-  opacity: 1
-}
-
-:deep(.video-choice-row button:is(:hover,:focus-visible)),
-:deep(.video-toggle:is(:hover,:focus-visible)) {
-  background: var(--filter-overlay-control-hover-background)
-}
-
-:deep(.video-choice-row button[aria-pressed=true]),
-:deep(.video-toggle[aria-pressed=true]) {
-  border-color: var(--filter-overlay-primary-background);
-  background: var(--filter-overlay-primary-background);
-  color: var(--filter-overlay-primary-color)
 }
 
 :deep(.video-choice-row button:disabled) {
@@ -931,18 +923,6 @@ const showAllAssets = () => {
   row-gap: var(--video-inspector-section-gap)
 }
 
-:deep(.video-choice-row button),
-:deep(.video-toggle) {
-  transition-property: background-color, color, border-color, transform;
-  transition-duration: 150ms;
-  transition-timing-function: ease-out
-}
-
-:deep(.video-choice-row button:active),
-:deep(.video-toggle:active) {
-  transform: scale(.96)
-}
-
 :deep(.video-stage) {
   position: relative;
   display: grid;
@@ -1197,7 +1177,8 @@ const showAllAssets = () => {
 
 .video-mobile-toolbar,
 .video-mobile-backdrop,
-.video-mobile-sheet-handle {
+.video-mobile-sheet-handle,
+.video-mobile-header {
   display: none
 }
 
@@ -1252,21 +1233,31 @@ const showAllAssets = () => {
   }
 
   .board-video-composer {
-    --video-mobile-sheet-height: min(50dvh, 32rem);
+    --video-mobile-sheet-height: min(48dvh, 32rem);
+    position: relative;
     box-sizing: border-box;
     height: calc(100dvh - var(--space));
     max-height: calc(100dvh - var(--space));
     min-height: 0;
     grid-template-columns: 1fr;
-    grid-template-rows: minmax(0, 1fr) auto auto;
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
     gap: calc(var(--space)/2);
-    padding: var(--space) calc(var(--space)/2) max(calc(var(--space)/2), env(safe-area-inset-bottom));
+    padding: max(var(--space), env(safe-area-inset-top)) calc(var(--space)/2) max(calc(var(--space)/2), env(safe-area-inset-bottom));
     overflow: hidden;
     border-radius: var(--radius-mobile);
   }
 
   .board-video-composer.has-mobile-panel {
-    grid-template-rows: minmax(0, 42dvh);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .board-video-composer.has-mobile-panel > .video-composer-center {
+    position: absolute;
+    z-index: 1;
+    inset: calc(max(var(--space), env(safe-area-inset-top)) + var(--control-height)) var(--cluster-gap) var(--video-mobile-sheet-height);
+    width: auto;
+    height: auto;
+    align-self: auto
   }
 
   .board-video-composer.has-mobile-panel > :deep(.video-timeline),
@@ -1289,19 +1280,68 @@ const showAllAssets = () => {
   }
 
   .video-composer-center {
+    grid-column: 1;
+    grid-row: 2;
     height: 100%;
     min-height: 0;
     overflow: hidden;
     order: 1
   }
 
+  .video-mobile-header {
+    position: relative;
+    grid-column: 1;
+    grid-row: 1;
+    order: 0;
+    display: grid;
+    grid-template-columns: var(--control-height) minmax(0, 1fr) auto;
+    align-items: center;
+    gap: calc(var(--space)/2);
+    min-height: var(--control-height);
+    color: var(--color-muted)
+  }
+
+  .video-mobile-header h2 {
+    position: absolute;
+    left: 50%;
+    margin: 0;
+    overflow: hidden;
+    font-size: var(--font-size-body);
+    font-weight: var(--video-weight-strong);
+    line-height: 1;
+    text-align: center;
+    text-overflow: ellipsis;
+    translate: -50% 0;
+    white-space: nowrap
+  }
+
+  .video-mobile-header-export {
+    grid-column: 3;
+    justify-self: end
+  }
+
+  .video-mobile-header-back {
+    width: var(--control-height);
+    min-height: var(--control-height);
+    display: grid;
+    place-items: center;
+    padding: 0;
+    color: inherit;
+    background: transparent;
+    touch-action: manipulation
+  }
+
   :deep(.video-timeline) {
+    grid-column: 1;
+    grid-row: 3;
     order: 2
   }
 
   .video-mobile-toolbar {
     z-index: 4;
     bottom: max(calc(var(--space)/2), env(safe-area-inset-bottom));
+    grid-column: 1;
+    grid-row: 4;
     order: 3;
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1376,7 +1416,12 @@ const showAllAssets = () => {
     -webkit-backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
     transform: translate3d(0, var(--video-mobile-sheet-drag-y, 0), 0);
     transition: transform 180ms var(--filter-overlay-enter-easing);
-    animation: filter-sheet-in var(--filter-overlay-enter-duration) var(--filter-overlay-enter-easing) both
+    animation: video-sheet-in var(--filter-overlay-enter-duration) var(--filter-overlay-enter-easing) both
+  }
+
+  @keyframes video-sheet-in {
+    from { translate: 0 2rem; opacity: 0 }
+    to { translate: 0 0; opacity: 1 }
   }
 
   .board-video-composer.is-mobile-sheet-dragging > :deep(.video-mobile-panel.is-mobile-open),
@@ -1448,42 +1493,21 @@ const showAllAssets = () => {
   }
 
   :deep(.video-timeline) {
-    grid-template-columns: 44px auto minmax(48px, 1fr) auto;
+    grid-template-columns: 44px auto minmax(48px, 1fr);
     gap: calc(var(--space)/3);
     border-radius: var(--radius-mobile)
   }
 
-  :deep(.video-timeline-actions p) {
+  :deep(.video-timeline-actions) {
     display: none
   }
 
-  .video-export-button {
-    width: 44px;
-    min-width: 44px;
-    min-height: 44px;
-    justify-content: center;
-    padding: 0
-  }
-
-  .video-export-icon {
-    display: block
-  }
-
-  .video-export-label {
+  .video-export-button--timeline {
     display: none
   }
 
   :deep(.video-panel) {
     max-height: 58dvh
-  }
-
-  :deep(.video-mobile-panel.is-mobile-open .video-panel-scroll),
-  .video-assets-panel.is-mobile-open :deep(.video-panel-scroll) {
-    height: 100%;
-    max-height: 100%;
-    padding-top: calc(var(--space)*2);
-    padding-bottom: calc(var(--space)*3 + env(safe-area-inset-bottom));
-    scroll-padding-bottom: calc(var(--space)*3 + env(safe-area-inset-bottom))
   }
 
   :deep(.video-inspector label:has(> .video-range-input)),
@@ -1511,7 +1535,7 @@ const showAllAssets = () => {
 
   :deep(.video-stage) {
     width: 100%;
-    height: auto;
+    height: 100%;
     min-height: 0;
     padding: 0;
     background: transparent;
@@ -1521,6 +1545,12 @@ const showAllAssets = () => {
 
   :deep(.video-canvas-wrap) {
     border-radius: var(--radius-mobile)
+  }
+
+  .board-video-composer.is-stage-motion-ready :deep(.video-canvas-wrap) {
+    transition-property: width, height;
+    transition-duration: calc(var(--filter-overlay-enter-duration)/2);
+    transition-timing-function: calc(var(--filter-overlay-enter-easing)/2)
   }
 
   .video-assets-panel li {
@@ -1561,6 +1591,10 @@ const showAllAssets = () => {
 }
 
 @media (max-width:640px) and (prefers-reduced-motion: reduce) {
+  .board-video-composer.is-stage-motion-ready :deep(.video-canvas-wrap) {
+    transition: none
+  }
+
   .board-video-composer > :deep(.video-mobile-panel.is-mobile-open),
   .video-composer-right > :deep(.video-mobile-panel.is-mobile-open),
   .video-composer-right > .video-mobile-panel.is-mobile-open {
