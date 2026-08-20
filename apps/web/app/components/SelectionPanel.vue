@@ -36,6 +36,14 @@ let sheetReleaseVelocity = 0
 let previousBodyOverflow = ''
 let previousRootOverflow = ''
 let pageScrollLocked = false
+let overlayCloseTimer: ReturnType<typeof setTimeout> | undefined
+
+const resetSheetGesture = () => {
+  sheetDragY.value = 0
+  sheetDragging.value = false
+  sheetDismissing.value = false
+  sheetPointerId = undefined
+}
 
 const resetOverlayScroll = async () => {
   await nextTick()
@@ -67,12 +75,10 @@ const unlockPageScroll = () => {
 
 const finishOverlayClose = () => {
   if (!overlayClosing.value) return
+  clearTimeout(overlayCloseTimer)
   renderedOverlay.value = false
   overlayClosing.value = false
-  sheetDragY.value = 0
-  sheetDragging.value = false
-  sheetDismissing.value = false
-  sheetPointerId = undefined
+  resetSheetGesture()
 }
 
 const handleOverlayAnimationEnd = (event: AnimationEvent) => {
@@ -81,9 +87,11 @@ const handleOverlayAnimationEnd = (event: AnimationEvent) => {
 
 watch(() => [props.visible, props.overlay] as const, async ([visible, overlay]) => {
   if (visible && overlay) {
+    clearTimeout(overlayCloseTimer)
     lockPageScroll()
     renderedOverlay.value = true
     overlayClosing.value = false
+    resetSheetGesture()
     void resetOverlayScroll()
     return
   }
@@ -92,13 +100,12 @@ watch(() => [props.visible, props.overlay] as const, async ([visible, overlay]) 
   if (document.documentElement.dataset.filterTransition === 'closing') {
     renderedOverlay.value = false
     overlayClosing.value = false
-    sheetDragY.value = 0
-    sheetDragging.value = false
-    sheetDismissing.value = false
-    sheetPointerId = undefined
+    resetSheetGesture()
     return
   }
   overlayClosing.value = true
+  clearTimeout(overlayCloseTimer)
+  overlayCloseTimer = setTimeout(finishOverlayClose, 400)
   await nextTick()
   if (panelRoot.value && getComputedStyle(panelRoot.value).animationName === 'none') finishOverlayClose()
 })
@@ -177,6 +184,7 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeydown)
+  clearTimeout(overlayCloseTimer)
   unlockPageScroll()
 })
 </script>

@@ -19,6 +19,7 @@ export default defineNuxtConfig({
       ],
       link: [
         { rel: 'manifest', href: '/manifest.webmanifest' },
+        { rel: 'preload', href: '/fonts/ABCDiatypeCyrillicTrial-Medium.otf', as: 'font', type: 'font/otf', crossorigin: 'anonymous' },
         { rel: 'apple-touch-startup-image', href: '/pwa-launch.png' }
       ]
     }
