@@ -38,7 +38,7 @@
   --filter-overlay-control-hover-background: var(--material-tinted-hover-bg);
   --filter-overlay-primary-background: rgb(255 255 255 / .9);
   --filter-overlay-primary-color: #595959;
-  --filter-overlay-backdrop-background: rgb(255 255 255 / .72);
+  --filter-overlay-backdrop-background: rgb(255 255 255 / .82);
   --filter-overlay-border-color: rgb(255 255 255 / .42);
   --filter-overlay-muted-color: rgb(255 255 255 / .58);
   --filter-overlay-caption-color: rgb(255 255 255 / .62);

@@ -110,7 +110,7 @@ const storiesPresets: VideoTemplate[] = storiesPresetDefinitions.map(([number,se
 
 const flickerDefaults: Partial<VideoComposerSettings> = { visibleCount:6,delaySeconds:0,cycles:1,loop:true,flickerEffect:'off',flickerPacing:'equal',offsetX:0,offsetY:0,driftDirection:'up',secondsPerSlide:6,scaleDirection:'forward',planeSize:100,driftAmount:30,scaleAmount:30,cornerRadius:0,fit:'cover',easing:'smooth' }
 const flickerPresetDefinitions: Array<readonly [string, Partial<VideoComposerSettings>, readonly [number,number,number,number]]> = [
-  ['01',{},[.25,.25,.75,.75]],
+  ['01',{ planeSize:70,secondsPerSlide:4,fit:'contain' },[.25,.25,.75,.75]],
   ['02',{ visibleCount:12,cycles:2,flickerPacing:'eased',secondsPerSlide:4,planeSize:73 },[.7,.101,.3,.899]],
   ['03',{ flickerEffect:'scale',planeSize:118,scaleAmount:15 },[.86,.14,.14,.86]],
   ['04',{ flickerEffect:'drift',planeSize:107,driftAmount:7 },[.86,.14,.14,.86]],
@@ -123,7 +123,7 @@ const flickerPresetDefinitions: Array<readonly [string, Partial<VideoComposerSet
 ]
 const flickerPresets: VideoTemplate[] = flickerPresetDefinitions.map(([number,settings,bezier]) => ({ id:`flicker-${number}`,name:`One Shot ${number}`,description:'Editable one-shot preset.',renderer:'canvas-2d',collection:'flicker',thumbnail:'linear-gradient(135deg,transparent 12%,#d8d8d8 13% 87%,transparent 88%),#090909',bezier,preset:{...flickerDefaults,...settings} }))
 
-const testDefaults: Partial<VideoComposerSettings> = {...flickerDefaults,flickerEffect:'flip',direction:'left',visibleCount:6,secondsPerSlide:6,planeSize:80,perspective:100,easing:'sweep',flipMaterial:'lit',flipLightIntensity:200,flipRoughness:72,flipGridColumns:1,flipGridRows:1,flipGridGap:4,flipStagger:0,flipShuffle:false}
+const testDefaults: Partial<VideoComposerSettings> = {...flickerDefaults,flickerEffect:'flip',fit:'contain',direction:'left',visibleCount:6,secondsPerSlide:6,planeSize:80,perspective:100,easing:'sweep',flipMaterial:'lit',flipLightIntensity:200,flipRoughness:72,flipGridColumns:1,flipGridRows:1,flipGridGap:4,flipStagger:0,flipShuffle:false}
 const testPresets: VideoTemplate[] = [
   { id:'test-01',name:'Flip 01',description:'Experimental two-sided WebGL flip.',renderer:'webgl',collection:'test',thumbnail:'linear-gradient(90deg,transparent 18%,#d8d8d8 19% 48%,#aaa 49% 78%,transparent 79%),#090909',preset:testDefaults },
   { id:'test-02',name:'Grid Flip 01',description:'Staggered WebGL flip grid.',renderer:'webgl',collection:'test',thumbnail:'linear-gradient(90deg,transparent 7%,#d8d8d8 8% 47%,transparent 48% 52%,#aaa 53% 92%,transparent 93%),linear-gradient(0deg,transparent 49%,#090909 50% 52%,transparent 53%),#090909',preset:{...testDefaults,visibleCount:12,flipGridColumns:2,flipGridRows:2,flipGridGap:5,flipStagger:.12,easing:'sweep'} }
