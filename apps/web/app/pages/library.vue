@@ -336,6 +336,9 @@ const displayedAssets = computed(() => {
     ? source.filter(asset => `${asset.title} ${asset.description ?? ''}`.toLocaleLowerCase().includes(term))
     : source
 })
+// Keep the composer's input stable while it is open. Background asset refreshes
+// otherwise replace this array and make WebGL dispose and rebuild every texture.
+const videoAssets = ref<AssetCard[]>([])
 const cardsHidden = ref(false)
 let boardTransition = 0
 const selectBoard = async (boardId: string) => {
@@ -506,7 +509,7 @@ const closeView = () => {
   else update()
 }
 const openVideo = () => {
-  const update = () => { compactFiltersVisible.value = false; searchExpanded.value = false; filtersExpanded.value = false; viewExpanded.value = false; boardSettingsExpanded.value = false; videoExpanded.value = true }
+  const update = () => { videoAssets.value = [...displayedAssets.value]; compactFiltersVisible.value = false; searchExpanded.value = false; filtersExpanded.value = false; viewExpanded.value = false; boardSettingsExpanded.value = false; videoExpanded.value = true }
   if (supportsFilterMorph()) void morphPanel('video', update, 'opening', true)
   else update()
 }
@@ -797,7 +800,7 @@ onBeforeUnmount(() => {
 
       <SelectionPanel :visible="Boolean(selectedBoard && videoExpanded)" label="Create video" wide overlay raised
         :instant="filtersMorphing" @close="closeVideo" @after-leave="finishExpandedPanelClose">
-        <BoardVideoComposer v-if="selectedBoard" :assets="displayedAssets" :board-title="selectedBoard.title" @close="closeVideo" />
+        <BoardVideoComposer v-if="selectedBoard" :assets="videoAssets" :board-title="selectedBoard.title" @close="closeVideo" />
         <button class="filter-panel-toggle is-expanded" type="button" aria-label="Close video creator"
           aria-expanded="true" @click="closeVideo">
           <Xmark :size="20" :stroke-width="2" aria-hidden="true" />

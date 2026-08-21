@@ -417,12 +417,12 @@ watch(() => props.assetId, id => {
           @transitionend="finishSwipeTransition"><span id="mobile-gesture-hint" class="sr-only">Swipe left or right to
             browse assets. Pull down to close.</span><button class="pull-handle" type="button"
             aria-label="Close asset details" @pointerdown.stop @click="close" /><img
-            v-if="isMobile && previousPreviewUrl" class="swipe-preview previous-preview" :src="previousPreviewUrl"
+            v-if="isMobile && previousPreviewUrl" :key="`previous-${previousAssetId}`" class="swipe-preview previous-preview" :src="previousPreviewUrl"
             alt="" draggable="false">
-          <AssetMedia v-if="resolvedPreviewUrl" class="current-preview" :src="resolvedPreviewUrl"
+          <AssetMedia v-if="resolvedPreviewUrl" :key="`current-${assetId}`" class="current-preview" :src="resolvedPreviewUrl"
             :mime-type="asset.mime_type" :alt="`Preview of ${asset.title}`" loading="eager" fetchpriority="high"
             draggable="false" /><img
-            v-if="isMobile && nextPreviewUrl" class="swipe-preview next-preview" :src="nextPreviewUrl" alt=""
+            v-if="isMobile && nextPreviewUrl" :key="`next-${nextAssetId}`" class="swipe-preview next-preview" :src="nextPreviewUrl" alt=""
             draggable="false"><button class="details-hint" type="button" aria-label="Show asset details"
             @pointerdown.stop @click="revealDetails"><svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="m6 9 6 6 6-6" />
@@ -1424,7 +1424,9 @@ li span {
     background: transparent;
     clip-path: none;
     touch-action: none;
-    user-select: none
+    user-select: none;
+    contain: paint;
+    isolation: isolate
   }
 
   .asset-visual :is(img, video) {
@@ -1432,6 +1434,7 @@ li span {
     border-radius: var(--radius-mobile);
     object-fit: contain;
     object-position: 50% calc(50% - 2dvh);
+    backface-visibility: hidden;
     pointer-events: none;
     transition: transform .22s cubic-bezier(.2, 0, 0, 1)
   }
@@ -1441,11 +1444,13 @@ li span {
   }
 
   .asset-visual .current-preview {
+    z-index: 2;
     transform: translate3d(var(--swipe-x), 0, 0);
     view-transition-name: asset-preview
   }
 
   .asset-visual .swipe-preview {
+    z-index: 1;
     display: block
   }
 

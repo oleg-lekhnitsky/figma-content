@@ -333,15 +333,13 @@ textarea {
   min-width: min-content;
   display: grid;
   gap: var(--menu-row-gap);
-  padding: calc(var(--space)/2);
+  padding: calc(var(--space)/1.5);
   overflow: hidden;
-  border-radius: var(--radius);
-  box-shadow:
-    0 0 0 1px oklch(1 0 0 / 0.1),
-    0 18px 50px rgb(0 0 0 / 0.18);
+  border-radius: calc(var(--radius)*2);
+
 }
 .app-dropdown-menu-content [role^='menuitem'] {
-  border-radius: calc(var(--radius) - var(--menu-inset));
+  border-radius: calc(calc(var(--radius)*1.5) - var(--menu-inset));
 }
 .app-dropdown-menu-content [role^='menuitem']:is(:hover, :focus-visible) {
   opacity: 1;
