@@ -29,19 +29,29 @@ const carouselPresetDefinitions: Array<readonly [string, string, Partial<VideoCo
 ]
 const carouselPresets: VideoTemplate[] = carouselPresetDefinitions.map(([number,thumbnail,settings]) => ({ id:`carousel-${number}`,name:`Carousel ${number}`,description:'Editable carousel preset.',renderer:'webgl',collection:'carousel',thumbnail,preset:preset(settings) }))
 
-const carousel3dDefaults: Partial<VideoComposerSettings> = { visibleCount:12,cycles:1,loop:true,cycleDegrees:360,distance:1300,secondsPerSlide:8,reverse:false,planeSize:400,rotationX:30,rotationY:38,rotationZ:0,orbitRadius:280,perspective:140,cornerRadius:0,fade:0,offsetX:0,offsetY:0,easing:'linear' }
+const carousel3dDefaults: Partial<VideoComposerSettings> = { visibleCount:12,cycles:1,loop:true,cycleDegrees:360,distance:1300,secondsPerSlide:8,reverse:false,planeSize:400,planeRotation:0,rotationX:30,rotationY:38,rotationZ:0,orbitRadius:280,perspective:140,cornerRadius:0,fade:0,offsetX:0,offsetY:0,easing:'linear',flipMaterial:'lit',flipLightIntensity:200,flipRoughness:72 }
 const carousel3dThumb = 'linear-gradient(145deg,transparent 20%,#d8d8d8 21% 47%,transparent 48% 55%,#aaa 56% 78%,transparent 79%),#090909'
 const carousel3dPresetDefinitions: Array<readonly [string, Partial<VideoComposerSettings>]> = [
   ['01',{}],
   ['02',{ visibleCount:9,cycles:6,cycleDegrees:60,distance:990,secondsPerSlide:1.5,reverse:true,rotationX:6,rotationY:18,rotationZ:-17,orbitRadius:330,perspective:100,fade:30,easing:'sweep' }],
   ['03',{ cycles:2,cycleDegrees:180,distance:1870,secondsPerSlide:4,reverse:true,rotationX:0,rotationY:-17,orbitRadius:330,perspective:210,fade:20,easing:'sweep' }],
   ['04',{ visibleCount:9,cycles:6,cycleDegrees:60,distance:1250,secondsPerSlide:2,reverse:true,planeSize:410,rotationX:0,rotationY:0,orbitRadius:210,perspective:300,fade:20,offsetX:50.5,easing:'sweep' }],
-  ['05',{ visibleCount:33,distance:1370,secondsPerSlide:20,reverse:true,planeSize:250,rotationX:22,rotationY:0,orbitRadius:480,perspective:160,offsetY:-6 }]
+  ['05',{ visibleCount:33,distance:1370,secondsPerSlide:20,reverse:true,planeSize:250,rotationX:22,rotationY:0,orbitRadius:480,perspective:160,offsetY:-6 }],
+    ['06',{ visibleCount:33,distance:660,secondsPerSlide:5,reverse:false,planeSize:250,planeRotation:90,rotationX:90,rotationY:-90,orbitRadius:0,perspective:160,offsetY:-6 }]
 ]
 const carousel3dPresets: VideoTemplate[] = carousel3dPresetDefinitions.map(([number,settings]) => {
   const values={...carousel3dDefaults,...settings}
   return { id:`carousel-3d-${number}`,name:`Carousel 3D ${number}`,description:'Editable 3D carousel preset.',renderer:'webgl',collection:'carousel-3d',thumbnail:carousel3dThumb,preset:values }
 })
+
+const gridDefaults: Partial<VideoComposerSettings> = { visibleCount:35,flipGridColumns:7,flipGridRows:5,flipGridGap:24,planeSize:100,centerScale:2.1,secondsPerSlide:2.4,delaySeconds:.8,cycles:6,loop:true,cornerRadius:8,offsetX:0,offsetY:0,easing:'smooth',backgroundColor:'#111111',fit:'cover',driftDirection:'left',driftAmount:16,gridMoveDistance:300,gridStaggerCurve:'linear' }
+const gridThumb = 'linear-gradient(90deg,transparent 0 7%,#d8d8d8 8% 29%,transparent 30% 35%,#aaa 36% 63%,transparent 64% 69%,#777 70% 92%,transparent 93%),linear-gradient(0deg,transparent 0 7%,#777 8% 29%,transparent 30% 35%,#d8d8d8 36% 63%,transparent 64% 69%,#aaa 70% 92%,transparent 93%),#090909'
+const gridPresetDefinitions: Array<readonly [string, Partial<VideoComposerSettings>, readonly [number,number,number,number]]> = [
+  ['01',{},[.76,0,.24,1]],
+  ['02',{ flipGridColumns:8,flipGridRows:5,flipGridGap:12,planeSize:82,centerScale:2.4,secondsPerSlide:1.8,delaySeconds:.45,driftDirection:'up',driftAmount:20 },[.86,.14,.14,.86]],
+  ['03',{ flipGridColumns:6,flipGridRows:6,flipGridGap:38,planeSize:115,centerScale:1.8,secondsPerSlide:3.5,delaySeconds:1.2,driftDirection:'right',driftAmount:12 },[.25,.25,.75,.75]]
+]
+const gridPresets: VideoTemplate[] = gridPresetDefinitions.map(([number,settings,bezier]) => ({ id:`grid-${number}`,name:`Grid ${number}`,description:'Oversized WebGL grid with periodic image focus.',renderer:'webgl',collection:'grid',thumbnail:gridThumb,bezier,preset:{...gridDefaults,...settings} }))
 
 const orbitDefaults: Partial<VideoComposerSettings> = { visibleCount:7,cycles:1,loop:true,cycleDegrees:360,secondsPerSlide:8,delaySeconds:0,reverse:false,planeSize:370,rotationX:0,rotationY:0,rotationZ:0,orbitRadius:420,perspective:100,cornerRadius:0,fade:0,offsetX:0,offsetY:0,easing:'sweep' }
 const orbitPresetDefinitions: Array<readonly [string, string, Partial<VideoComposerSettings>, readonly [number,number,number,number]]> = [
@@ -138,6 +148,7 @@ export const videoTemplates: VideoTemplate[] = [
   ...flickerPresets,
   ...carouselPresets,
   ...carousel3dPresets,
+  ...gridPresets,
   ...orbitPresets,
   ...globePresets,
   ...scalePresets,

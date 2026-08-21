@@ -5,7 +5,7 @@ export type VideoRendererKind = 'canvas-2d' | 'webgl'
 export type VideoTiltMode = 'off' | 'fan' | 'uniform' | 'alternate'
 export type VideoEasing = 'flow' | 'glide' | 'linear' | 'ease' | 'sweep' | 'smooth'
 export type VideoScaleFocus = 'center' | 'start' | 'end'
-export type VideoTemplateCollection = 'carousel' | 'carousel-3d' | 'orbit' | 'globe' | 'scale' | 'stories' | 'flicker' | 'test' | 'swipe-depth'
+export type VideoTemplateCollection = 'carousel' | 'carousel-3d' | 'grid' | 'orbit' | 'globe' | 'scale' | 'stories' | 'flicker' | 'test' | 'swipe-depth'
 export type VideoScaleStyle = 'bloom' | 'recede'
 export type VideoGrowFrom = 'center' | 'top' | 'bottom' | 'left' | 'right'
 
@@ -43,6 +43,7 @@ export interface VideoComposerSettings {
   solo: boolean
   visibleCount: number
   planeSize: number
+  planeRotation: number
   cycles: number
   loop: boolean
   staggerFrames: number
@@ -74,6 +75,8 @@ export interface VideoComposerSettings {
   driftDirection: 'up' | 'down' | 'left' | 'right'
   scaleAmount: number
   driftAmount: number
+  gridMoveDistance: number
+  gridStaggerCurve: VideoEasing
   delaySeconds: number
   fps: 15 | 25 | 30 | 60
   safeArea: boolean

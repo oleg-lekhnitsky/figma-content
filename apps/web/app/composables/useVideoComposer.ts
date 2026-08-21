@@ -31,7 +31,7 @@ interface VideoComposerRuntimeOptions {
 }
 
 export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Ref<string>, initialTemplateId='flicker-01', runtimeOptions:VideoComposerRuntimeOptions={}) => {
-  const settings = ref<VideoComposerSettings>({ templateId:initialTemplateId,format:'portrait',fit:'contain',transition:'fade',secondsPerSlide:6,showTitles:false,direction:'up',gap:40,tilt:0,scaleCenter:false,tiltMode:'off',easing:'glide',cornerRadius:0,distance:100,centerScale:1.4,fade:0,offsetX:0,offsetY:0,scaleFocus:'center',solo:false,visibleCount:6,planeSize:100,cycles:1,loop:true,staggerFrames:2,delayFrames:0,cycleDegrees:360,orbitRadius:280,perspective:140,rotationX:0,rotationY:0,rotationZ:0,reverse:false,spin:0,spread:0,staggerSeconds:.4,scaleStyle:'bloom',growFrom:'center',imageFit:'fit',flickerEffect:'off',flipMaterial:'lit',flipLightIntensity:100,flipRoughness:72,flipGridColumns:1,flipGridRows:1,flipGridGap:4,flipStagger:0,flickerPacing:'equal',scaleDirection:'forward',driftDirection:'up',scaleAmount:30,driftAmount:30,delaySeconds:0,fps:30,safeArea:false,exportMotionBlur:false,backgroundColor:'#f1efed',globeMinScale:10,globeMaxScale:20,globeAxis:'y',globeMotion:'continuous',globeStops:8,globeShuffle:false,globeFaceCamera:true,globeShowBackfaces:true,globeFlipImage:false,storiesBigScale:115,storiesBigDrift:40,storiesThumbSize:85,storiesThumbAspect:'1:1',storiesContainerOpacity:40,storiesContainerBlur:60,storiesSelectorPad:5,storiesSelectorStroke:2,storiesDimAmount:20,swipeAlternating:true })
+  const settings = ref<VideoComposerSettings>({ templateId:initialTemplateId,format:'portrait',fit:'contain',transition:'fade',secondsPerSlide:6,showTitles:false,direction:'up',gap:40,tilt:0,scaleCenter:false,tiltMode:'off',easing:'glide',cornerRadius:0,distance:100,centerScale:1.4,fade:0,offsetX:0,offsetY:0,scaleFocus:'center',solo:false,visibleCount:6,planeSize:100,planeRotation:0,cycles:1,loop:true,staggerFrames:2,delayFrames:0,cycleDegrees:360,orbitRadius:280,perspective:140,rotationX:0,rotationY:0,rotationZ:0,reverse:false,spin:0,spread:0,staggerSeconds:.4,scaleStyle:'bloom',growFrom:'center',imageFit:'fit',flickerEffect:'off',flipMaterial:'lit',flipLightIntensity:100,flipRoughness:72,flipGridColumns:1,flipGridRows:1,flipGridGap:4,flipStagger:0,flickerPacing:'equal',scaleDirection:'forward',driftDirection:'up',scaleAmount:30,driftAmount:30,gridMoveDistance:300,gridStaggerCurve:'linear',delaySeconds:0,fps:30,safeArea:false,exportMotionBlur:false,backgroundColor:'#f1efed',globeMinScale:10,globeMaxScale:20,globeAxis:'y',globeMotion:'continuous',globeStops:8,globeShuffle:false,globeFaceCamera:true,globeShowBackfaces:true,globeFlipImage:false,storiesBigScale:115,storiesBigDrift:40,storiesThumbSize:85,storiesThumbAspect:'1:1',storiesContainerOpacity:40,storiesContainerBlur:60,storiesSelectorPad:5,storiesSelectorStroke:2,storiesDimAmount:20,swipeAlternating:true })
   Object.assign(settings.value,videoTemplates.find(item=>item.id===initialTemplateId)?.preset)
   const canvas = shallowRef<HTMLCanvasElement>()
   const playing = ref(false)
@@ -43,8 +43,10 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
   const videos = new Map<string, HTMLVideoElement>()
   const textures = new Map<string, unknown>()
   const webglMeshes = new Map<string, import('three').Mesh>()
+  const gridWrapMeshes = new Map<string, import('three').Mesh>()
   let animationFrame = 0
   let playbackStartedAt = 0
+  let gridPlaybackTime = 0
   let lastPreviewFrameAt = 0
   let renderRevision = 0
   let templateChangeRevision = 0
@@ -52,6 +54,8 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
   let threeRenderer: import('three').WebGLRenderer | undefined
 
   const disposeWebglMeshes = () => {
+    gridWrapMeshes.forEach(mesh=>mesh.removeFromParent())
+    gridWrapMeshes.clear()
     webglMeshes.forEach(mesh=>{
       mesh.removeFromParent()
       mesh.geometry.dispose()
@@ -76,7 +80,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
   const template = computed(() => videoTemplates.find(item => item.id === settings.value.templateId) || videoTemplates[0]!)
   const countForAssets = () => {
     const minimum=template.value.collection==='carousel-3d'?3:2
-    const maximum=template.value.collection==='globe'?60:template.value.collection==='carousel-3d'?40:template.value.collection==='flicker'?30:20
+    const maximum=template.value.collection==='globe'||template.value.collection==='grid'?60:template.value.collection==='carousel-3d'?40:template.value.collection==='flicker'?30:20
     return Math.max(minimum,Math.min(maximum,assets.value.length||minimum))
   }
   const dimensions = computed(() => videoFormatDimensions[settings.value.format])
@@ -85,6 +89,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     : template.value.collection==='globe'&&settings.value.globeMotion==='stepped'
       ? settings.value.secondsPerSlide+Math.max(1,Math.round(settings.value.cycles*Math.min(settings.value.visibleCount,settings.value.globeStops)))*settings.value.delaySeconds
     : template.value.collection==='orbit' ? Math.max(.5,settings.value.secondsPerSlide)+Math.max(0,settings.value.delaySeconds)*Math.max(1,settings.value.cycles*Math.max(1,Math.round(settings.value.visibleCount)))
+    : template.value.collection==='grid' ? (settings.value.secondsPerSlide+settings.value.delaySeconds)*settings.value.cycles
     : template.value.collection==='carousel-3d'||template.value.collection==='globe' ? settings.value.secondsPerSlide*settings.value.cycles
     : template.value.collection==='flicker'||template.value.collection==='test'||template.value.collection==='swipe-depth' ? settings.value.secondsPerSlide*settings.value.cycles
     : template.value.collection==='stories' ? settings.value.secondsPerSlide*settings.value.cycles
@@ -473,12 +478,18 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     if(runtimeOptions.transparentBackground)threeRenderer.setClearColor(0x000000,0)
     else threeRenderer.setClearColor(settings.value.backgroundColor,1)
     const isCarousel3d=template.value.collection==='carousel-3d'
+    const isGrid=template.value.collection==='grid'
     const isOrbit=template.value.collection==='orbit'
     const isGlobe=template.value.collection==='globe'
     const isScale=template.value.collection==='scale'
     const isSwipeDepth=template.value.collection==='swipe-depth'
-    const usesPlaneCount=isCarousel3d||isOrbit||isGlobe||isScale||isSwipeDepth
-    const planeCount=usesPlaneCount?Math.max(1,Math.round(settings.value.visibleCount)):assets.value.length
+    const usesPlaneCount=isCarousel3d||isGrid||isOrbit||isGlobe||isScale||isSwipeDepth
+    const configuredGridColumns=Math.max(1,Math.round(settings.value.flipGridColumns))
+    const configuredGridRows=Math.max(1,Math.round(settings.value.flipGridRows))
+    // Render one recycling row beyond each vertical edge. These repeated assets
+    // keep the canvas covered while a complete row advances upward.
+    const requestedPlaneCount=isGrid?Math.min(60,configuredGridColumns*(configuredGridRows+2)):settings.value.visibleCount
+    const planeCount=usesPlaneCount?Math.max(1,Math.round(requestedPlaneCount)):assets.value.length
     const shuffledGlobeIndices=()=>{
       const assetCount=assets.value.length,indices=Array.from({length:planeCount},(_,index)=>index%assetCount)
       let seed=assets.value.reduce((value,asset)=>{for(let index=0;index<asset.id.length;index++)value=Math.imul(value^asset.id.charCodeAt(index),16777619);return value},planeCount|0)>>>0
@@ -500,6 +511,13 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
       ? THREE.MathUtils.radToDeg(2*Math.atan(height/2/orbitCameraDistance))
       : isCarousel3d||isGlobe?THREE.MathUtils.radToDeg(2*Math.atan(1.125/Math.max(.01,settings.value.perspective/100))):36
     const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(cameraFov,width/height,.1,isOrbit?500000:100);camera.position.z=isOrbit?orbitCameraDistance:8
+    if(isGrid)gridWrapMeshes.forEach(mesh=>mesh.removeFromParent())
+    if(isCarousel3d&&settings.value.flipMaterial==='lit'){
+      const intensity=Math.max(0,settings.value.flipLightIntensity)/100
+      scene.add(new THREE.HemisphereLight(0xffffff,0x555555,1.05*intensity))
+      const keyLight=new THREE.DirectionalLight(0xffffff,1.2*intensity)
+      keyLight.position.set(-3,4,5);scene.add(keyLight)
+    }
     if(isOrbit&&(settings.value.offsetX||settings.value.offsetY))camera.setViewOffset(width,height,-settings.value.offsetX/100*width,-settings.value.offsetY/100*height,width,height)
     const carouselRotator=new THREE.Group(),carouselRing=new THREE.Group()
     if(isCarousel3d||isOrbit){carouselRotator.rotation.order=isCarousel3d?'ZYX':'XYZ';carouselRotator.rotation.set(THREE.MathUtils.degToRad(settings.value.rotationX)*(isOrbit?-1:1),THREE.MathUtils.degToRad(settings.value.rotationY),THREE.MathUtils.degToRad(settings.value.rotationZ)*(isOrbit?-1:1));carouselRotator.position.set(isOrbit?0:settings.value.offsetX/100,isOrbit?0:settings.value.offsetY/100,0);carouselRotator.add(carouselRing);scene.add(carouselRotator)}
@@ -518,6 +536,11 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     const vertical=direction==='up'||direction==='down'
     const viewportHeight=2*camera.position.z*Math.tan(THREE.MathUtils.degToRad(camera.fov/2))
     const viewportWidth=viewportHeight*camera.aspect
+    const gridColumns=configuredGridColumns,gridRows=Math.max(1,Math.ceil(planeCount/gridColumns))
+    const gridVisibleColumns=camera.aspect<.8?3:5
+    const requestedGridCellWidth=viewportWidth/gridVisibleColumns*settings.value.planeSize/100
+    const gridCellWidth=Math.max(requestedGridCellWidth,viewportWidth/gridColumns,viewportHeight*3/(4*gridRows))
+    const gridCellHeight=gridCellWidth*4/3
     const planeScale=settings.value.planeSize/(isScale?100:600)
     const maxPlaneWidth=Math.min(3.4,viewportWidth*.78)*planeScale,maxPlaneHeight=Math.min(2.35,viewportHeight*.68)*planeScale
     const largestAssetSide=Math.max(1,...sceneAssets.map(asset=>Math.max(asset.width,asset.height)))
@@ -528,6 +551,9 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
       }
       if(isCarousel3d||isGlobe){
         return {width:maxPlaneWidth,height:maxPlaneWidth/aspect}
+      }
+      if(isGrid){
+        return {width:gridCellWidth,height:gridCellHeight}
       }
       if(isScale){
         const scale=Math.min(3.4,viewportWidth*.78)*planeScale/largestAssetSide
@@ -574,6 +600,115 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     if(isCarousel3d)carouselRing.rotation.y=carouselTravel
     if(isOrbit)carouselRing.rotation.x=-carouselTravel
     if(isGlobe&&settings.value.globeMotion!=='stepped')globeGroup.rotation[settings.value.globeAxis]=carouselTravel
+    const gridGap=gridCellWidth*Math.max(0,settings.value.flipGridGap)/100
+    const gridPitchX=gridCellWidth+gridGap,gridPitchY=gridCellHeight+gridGap
+    const gridPoint=(index:number)=>({x:(index%gridColumns-(gridColumns-1)/2)*gridPitchX,y:((gridRows-1)/2-Math.floor(index/gridColumns))*gridPitchY})
+    const gridStepSpan=Math.max(.01,settings.value.secondsPerSlide+settings.value.delaySeconds)
+    const gridStep=Math.floor(time/gridStepSpan),gridStepTime=time-gridStep*gridStepSpan
+    const gridFocusColumn=Math.floor((gridColumns-1)/2)
+    const gridSequenceStep=gridStep
+    // Hold belongs after a completed focus, not before the next move. Starting
+    // the step at zero removes the dead beat before the first cards respond.
+    const gridRawTravelProgress=THREE.MathUtils.clamp(gridStepTime/Math.max(.01,settings.value.secondsPerSlide),0,1)
+    // Grid exposes easing as an editable setting, so it must take precedence
+    // over the preset's initial curve after the user selects another option.
+    const gridEasing=easingCurves[settings.value.easing]||template.value.bezier
+    // The reference has three connected beats: zoom out, move, then zoom in.
+    // Cards settle on the focus point before zooming so the selected card stays
+    // locked to the canvas center for the entire close-up.
+    const gridMotionEnd=.7
+    const gridMotionProgress=cubicBezierProgress(THREE.MathUtils.clamp(gridRawTravelProgress/gridMotionEnd,0,1),gridEasing)
+    const gridTravelProgress=gridMotionProgress
+    const gridStaggerWindow=Math.min(.45,settings.value.driftAmount/100*1.125)
+    // Express distance in complete row pitches: card height plus row gap.
+    const gridMoveRowsMagnitude=Math.max(0,(settings.value.gridMoveDistance??300)/100)
+    // Direction names describe the visible grid motion. Keep every preset on a
+    // diagonal while allowing distinct routes without giving cards their own X.
+    const gridMovesUp=settings.value.driftDirection==='up'||settings.value.driftDirection==='left'
+    const gridMovesLeft=settings.value.driftDirection==='left'||settings.value.driftDirection==='down'
+    const gridMoveRows=gridMoveRowsMagnitude*(gridMovesUp?1:-1)
+    const gridColumnStep=gridMovesLeft?2:-2
+    const gridCompletedRowShift=gridSequenceStep*gridMoveRows
+    const gridStepMoveRows=gridMoveRows
+    const gridRawCardProgress=sceneAssets.map((_,itemIndex)=>{
+      // Every plane participates in a diagonal 2D wave. Cosine keeps the phase
+      // continuous across both wrapped grid edges while row and column jointly
+      // determine when each card begins moving.
+      const column=itemIndex%gridColumns,row=Math.floor(itemIndex/gridColumns)
+      const wavePhase=row/Math.max(1,gridRows)+column/Math.max(1,gridColumns)
+      const linearDelay=.5-.5*Math.cos(wavePhase*Math.PI*2)
+      const staggerCurve=easingCurves[settings.value.gridStaggerCurve]||easingCurves.linear
+      const delayDistribution=cubicBezierProgress(linearDelay,staggerCurve)
+      const cardDelay=delayDistribution*gridStaggerWindow
+      return cubicBezierProgress(THREE.MathUtils.clamp((gridRawTravelProgress-cardDelay)/Math.max(.01,gridMotionEnd-cardDelay),0,1),gridEasing)
+    })
+    // Solve the wrapped vertical spacing exactly. A lower card may trail freely,
+    // but it cannot advance far enough to consume the gap above it. Repeating
+    // the relaxation for every row also enforces the last-to-first tile seam.
+    const gridCardProgressValues=[...gridRawCardProgress]
+    const gridProgressAllowance=Math.abs(gridStepMoveRows)>0?gridGap*.9/(Math.abs(gridStepMoveRows)*gridPitchY):1
+    if(gridProgressAllowance<=.0001)gridCardProgressValues.fill(gridTravelProgress)
+    else{
+      const constraintSoftness=Math.min(.06,gridProgressAllowance*.75)
+      const smoothMinimum=(left:number,right:number)=>{
+        const blend=Math.max(constraintSoftness-Math.abs(left-right),0)/constraintSoftness
+        return Math.min(left,right)-blend*blend*constraintSoftness*.25
+      }
+      for(let pass=0;pass<gridRows;pass++)for(let column=0;column<gridColumns;column++)for(let row=0;row<gridRows;row++){
+        const itemIndex=row*gridColumns+column
+        const upperIndex=((row-1+gridRows)%gridRows)*gridColumns+column
+        if(itemIndex>=gridCardProgressValues.length||upperIndex>=gridCardProgressValues.length)continue
+        const movingIndex=gridStepMoveRows>=0?itemIndex:upperIndex
+        const leadingIndex=gridStepMoveRows>=0?upperIndex:itemIndex
+        gridCardProgressValues[movingIndex]=smoothMinimum(gridCardProgressValues[movingIndex]!,gridCardProgressValues[leadingIndex]!+gridProgressAllowance)
+      }
+    }
+    const gridCardProgress=(itemIndex:number)=>gridCardProgressValues[itemIndex]??gridTravelProgress
+    const gridPointAtShift=(itemIndex:number,rowShift:number)=>{
+      const column=itemIndex%gridColumns,row=Math.floor(itemIndex/gridColumns)
+      return {x:(column-(gridColumns-1)/2)*gridPitchX,y:((gridRows-1)/2-row+rowShift)*gridPitchY}
+    }
+    const gridAnimatedPoint=(itemIndex:number)=>{
+      const point=gridPointAtShift(itemIndex,gridCompletedRowShift)
+      const cardProgress=gridCardProgress(itemIndex)
+      return {
+        x:point.x,
+        y:point.y+cardProgress*gridStepMoveRows*gridPitchY
+      }
+    }
+    // The camera remains fixed. Horizontal travel belongs to the grid as one
+    // rigid lattice, while the staggered cards provide only the vertical leg.
+    // Anchor travel on a real cell center. With an even row/column count, zero
+    // lies in a gutter, so the half-pitch correction is required.
+    const gridFocusRow=Math.floor((gridRows-1)/2)
+    const gridOriginFocusX=(gridFocusColumn-(gridColumns-1)/2)*gridPitchX
+    const gridCurrentTargetRow=Math.round(gridFocusRow+gridSequenceStep*gridMoveRows)
+    const gridNextTargetRow=Math.round(gridFocusRow+(gridSequenceStep+1)*gridMoveRows)
+    // Resolve focus Y from the actual row selected at each stop. The residual
+    // compensates fractional move distances instead of leaving the closest card
+    // above or below center.
+    const gridCurrentFocusY=((gridRows-1)/2-gridCurrentTargetRow+gridSequenceStep*gridMoveRows)*gridPitchY
+    const gridNextFocusY=((gridRows-1)/2-gridNextTargetRow+(gridSequenceStep+1)*gridMoveRows)*gridPitchY
+    const gridCurrentPoint={x:gridOriginFocusX+gridSequenceStep*gridPitchX*gridColumnStep,y:gridCurrentFocusY}
+    const gridNextPoint={x:gridOriginFocusX+(gridSequenceStep+1)*gridPitchX*gridColumnStep,y:gridNextFocusY}
+    // Follow the card that will occupy the center at the end of this step.
+    // Using its delayed Y progress for the shared X translation makes that
+    // card travel along one diagonal instead of moving right and then down.
+    const gridDestinationColumn=((gridFocusColumn+(gridSequenceStep+1)*gridColumnStep)%gridColumns+gridColumns)%gridColumns
+    const gridDestinationRow=((gridNextTargetRow%gridRows)+gridRows)%gridRows
+    const gridDestinationProgress=gridCardProgress(gridDestinationRow*gridColumns+gridDestinationColumn)
+    const gridZoomOutProgress=cubicBezierProgress(THREE.MathUtils.clamp(gridRawTravelProgress/.2,0,1),gridEasing)
+    const gridZoomInStart=gridMotionEnd
+    // A pronounced ease-out responds immediately at the handoff from travel;
+    // unlike the scene curve, it does not create a perceived pause before zoom.
+    const gridZoomInProgress=cubicBezierProgress(THREE.MathUtils.clamp((gridRawTravelProgress-gridZoomInStart)/(1-gridZoomInStart),0,1),[.16,1,.3,1])
+    const gridWideZoom=THREE.MathUtils.lerp(settings.value.centerScale,1,gridZoomOutProgress)
+    const gridZoom=THREE.MathUtils.lerp(gridWideZoom,settings.value.centerScale,gridZoomInProgress)
+    const desiredGridFocusX=THREE.MathUtils.lerp(gridCurrentPoint.x,gridNextPoint.x,gridDestinationProgress)
+    const desiredGridFocusY=THREE.MathUtils.lerp(gridCurrentPoint.y,gridNextPoint.y,gridDestinationProgress)
+    // Focus cells are selected from the buffered interior, so they can be
+    // centered directly without exposing an empty grid edge.
+    const gridFocusX=desiredGridFocusX,gridFocusY=desiredGridFocusY
     let rendered=0
     const carouselMeshes: import('three').Mesh[]=[]
     const globeMeshes: Array<import('three').Mesh|undefined>=[]
@@ -581,7 +716,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     // Flat carousels only need nearby cards. Cull before loading images, decoding
     // videos, or touching textures; large boards otherwise process every asset.
     const renderEntries=sceneAssets.map((asset,index)=>({asset,index})).filter(({index})=>{
-      if(isCarousel3d||isOrbit||isGlobe||isScale||isSwipeDepth)return true
+      if(isCarousel3d||isGrid||isOrbit||isGlobe||isScale||isSwipeDepth)return true
       let offset=(centers[index]||0)-focusCenter
       if(sceneAssets.length>1){
         if(offset>circumference/2)offset-=circumference
@@ -593,7 +728,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     })
     await Promise.all(renderEntries.map(async({asset,index})=>{
       const isVideo=asset.mime_type?.startsWith('video/')===true
-      const textureKey=isVideo?`${asset.id}:video`:`${asset.id}:${settings.value.cornerRadius}:${settings.value.planeSize}`
+      const textureKey=isVideo?`${asset.id}:video:${isGrid?`grid:${settings.value.fit}`:'plane'}`:`${asset.id}:${settings.value.cornerRadius}:${settings.value.planeSize}:${isGrid?`grid:${settings.value.fit}`:'plane'}`
       let texture=textures.get(textureKey) as import('three').Texture|undefined
       if(!texture){
         if(isVideo){
@@ -602,20 +737,31 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
           const videoCanvas=document.createElement('canvas'),maxSide=1024
           const sourceWidth=video.videoWidth||asset.width,sourceHeight=video.videoHeight||asset.height
           const textureScale=Math.min(1,maxSide/Math.max(sourceWidth,sourceHeight))
-          videoCanvas.width=Math.max(1,Math.round(sourceWidth*textureScale));videoCanvas.height=Math.max(1,Math.round(sourceHeight*textureScale))
+          videoCanvas.width=isGrid?768:Math.max(1,Math.round(sourceWidth*textureScale));videoCanvas.height=isGrid?1024:Math.max(1,Math.round(sourceHeight*textureScale))
           texture=new THREE.CanvasTexture(videoCanvas);texture.colorSpace=THREE.SRGBColorSpace;texture.generateMipmaps=false;texture.minFilter=THREE.LinearFilter;textures.set(textureKey,texture)
         }else{
-          let source:HTMLImageElement|HTMLCanvasElement=cachedImageFor(asset)||missingAssetSource(asset)
-          if(source instanceof HTMLCanvasElement){
+          const source:HTMLImageElement|HTMLCanvasElement=isGrid?await loadRenderable(asset):(cachedImageFor(asset)||missingAssetSource(asset))
+          if(!isGrid&&source instanceof HTMLCanvasElement){
             void loadImage(asset).then(scheduleWebglTextureRefresh).catch(()=>{})
           }
           if(!isCurrent())return
           const sourceWidth=source instanceof HTMLImageElement?source.naturalWidth:source.width
           const sourceHeight=source instanceof HTMLImageElement?source.naturalHeight:source.height
           const rounded=document.createElement('canvas'),maxSide=1024,textureScale=Math.min(1,maxSide/Math.max(sourceWidth,sourceHeight))
-          rounded.width=Math.max(1,Math.round(sourceWidth*textureScale));rounded.height=Math.max(1,Math.round(sourceHeight*textureScale))
+          rounded.width=isGrid?768:Math.max(1,Math.round(sourceWidth*textureScale));rounded.height=isGrid?1024:Math.max(1,Math.round(sourceHeight*textureScale))
           const roundedContext=rounded.getContext('2d')
-          if(roundedContext){const radius=Math.min(rounded.width,rounded.height)/2,scaledRadius=Math.min(radius,rounded.width*settings.value.cornerRadius/Math.max(1,settings.value.planeSize));roundedContext.beginPath();roundedContext.roundRect(0,0,rounded.width,rounded.height,scaledRadius);roundedContext.clip();roundedContext.drawImage(source,0,0,rounded.width,rounded.height)}
+          if(roundedContext){
+            const radius=Math.min(rounded.width,rounded.height)/2,scaledRadius=Math.min(radius,rounded.width*settings.value.cornerRadius/Math.max(1,settings.value.planeSize))
+            roundedContext.beginPath();roundedContext.roundRect(0,0,rounded.width,rounded.height,scaledRadius);roundedContext.clip()
+            if(isGrid&&settings.value.fit==='cover'){
+              const targetAspect=rounded.width/rounded.height,sourceAspect=sourceWidth/sourceHeight
+              const cropWidth=sourceAspect>targetAspect?sourceHeight*targetAspect:sourceWidth,cropHeight=sourceAspect>targetAspect?sourceHeight:sourceWidth/targetAspect
+              roundedContext.drawImage(source,(sourceWidth-cropWidth)/2,(sourceHeight-cropHeight)/2,cropWidth,cropHeight,0,0,rounded.width,rounded.height)
+            }else if(isGrid){
+              const scale=Math.min(rounded.width/sourceWidth,rounded.height/sourceHeight),drawWidth=sourceWidth*scale,drawHeight=sourceHeight*scale
+              roundedContext.drawImage(source,(rounded.width-drawWidth)/2,(rounded.height-drawHeight)/2,drawWidth,drawHeight)
+            }else roundedContext.drawImage(source,0,0,rounded.width,rounded.height)
+          }
           texture=new THREE.CanvasTexture(rounded);texture.colorSpace=THREE.SRGBColorSpace;texture.generateMipmaps=false;texture.minFilter=THREE.LinearFilter;textures.set(textureKey,texture)
         }
       }
@@ -635,7 +781,17 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
             const radius=Math.min(videoCanvas.width,videoCanvas.height)/2
             const scaledRadius=Math.min(radius,videoCanvas.width*settings.value.cornerRadius/Math.max(1,settings.value.planeSize))
             videoContext.beginPath();videoContext.roundRect(0,0,videoCanvas.width,videoCanvas.height,scaledRadius);videoContext.clip()
-            videoContext.drawImage(video,0,0,videoCanvas.width,videoCanvas.height);videoContext.restore();texture.needsUpdate=true
+            if(isGrid&&settings.value.fit==='cover'){
+              const targetAspect=videoCanvas.width/videoCanvas.height,sourceAspect=(video.videoWidth||videoCanvas.width)/(video.videoHeight||videoCanvas.height)
+              const sourceWidth=video.videoWidth||videoCanvas.width,sourceHeight=video.videoHeight||videoCanvas.height
+              const cropWidth=sourceAspect>targetAspect?sourceHeight*targetAspect:sourceWidth,cropHeight=sourceAspect>targetAspect?sourceHeight:sourceWidth/targetAspect
+              videoContext.drawImage(video,(sourceWidth-cropWidth)/2,(sourceHeight-cropHeight)/2,cropWidth,cropHeight,0,0,videoCanvas.width,videoCanvas.height)
+            }else if(isGrid){
+              const sourceWidth=video.videoWidth||videoCanvas.width,sourceHeight=video.videoHeight||videoCanvas.height,scale=Math.min(videoCanvas.width/sourceWidth,videoCanvas.height/sourceHeight)
+              const drawWidth=sourceWidth*scale,drawHeight=sourceHeight*scale
+              videoContext.drawImage(video,(videoCanvas.width-drawWidth)/2,(videoCanvas.height-drawHeight)/2,drawWidth,drawHeight)
+            }else videoContext.drawImage(video,0,0,videoCanvas.width,videoCanvas.height)
+            videoContext.restore();texture.needsUpdate=true
           }
         }
       }
@@ -647,16 +803,23 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
       let centered=offset/Math.max(.01,averagePitch)
       centered+=(index-baseIndex)*settings.value.staggerFrames/Math.max(1,30*settings.value.secondsPerSlide)
       const visibleRadius=settings.value.solo?.5:Math.max(.5,(settings.value.visibleCount-1)/2)
-      if(!isCarousel3d&&!isOrbit&&!isGlobe&&!isScale&&!isSwipeDepth&&Math.abs(centered)>visibleRadius)return
+      if(!isCarousel3d&&!isGrid&&!isOrbit&&!isGlobe&&!isScale&&!isSwipeDepth&&Math.abs(centered)>visibleRadius)return
       const {width:planeWidth,height:planeHeight}=planeSizes[index]!
       const side=THREE.DoubleSide
-      const meshKey=`${template.value.collection}:${index}:${textureKey}:${planeWidth.toFixed(5)}:${planeHeight.toFixed(5)}:${side}`
+      const materialMode=isCarousel3d?settings.value.flipMaterial:'flat'
+      const meshKey=`${template.value.collection}:${index}:${textureKey}:${planeWidth.toFixed(5)}:${planeHeight.toFixed(5)}:${side}:${materialMode}`
       let mesh=webglMeshes.get(meshKey)
       if(!mesh){
-        mesh=new THREE.Mesh(new THREE.PlaneGeometry(planeWidth,planeHeight),new THREE.MeshBasicMaterial({map:texture,transparent:!isGlobe,alphaTest:isGlobe ? .5 : 0,side}))
+        const meshMaterial=materialMode==='lit'
+          ? new THREE.MeshStandardMaterial({map:texture,transparent:true,depthWrite:false,side,roughness:Math.max(0,Math.min(1,settings.value.flipRoughness/100)),metalness:0})
+          : new THREE.MeshBasicMaterial({map:texture,transparent:!isGlobe,depthWrite:!isCarousel3d&&!isGrid,depthTest:!isGrid,alphaTest:isGlobe?.5:isGrid?.001:0,side})
+        mesh=new THREE.Mesh(new THREE.PlaneGeometry(planeWidth,planeHeight),meshMaterial)
         webglMeshes.set(meshKey,mesh)
       }else mesh.removeFromParent()
-      const material=mesh.material as import('three').MeshBasicMaterial
+      if(isGrid){mesh.renderOrder=index;mesh.frustumCulled=false;mesh.visible=true}
+      const material=mesh.material as import('three').MeshBasicMaterial|import('three').MeshStandardMaterial
+      if(isGrid&&material instanceof THREE.MeshBasicMaterial&&material.alphaTest!==.001){material.alphaTest=.001;material.needsUpdate=true}
+      if(material instanceof THREE.MeshStandardMaterial)material.roughness=Math.max(0,Math.min(1,settings.value.flipRoughness/100))
       mesh.position.set(0,0,0);mesh.rotation.set(0,0,0);mesh.scale.set(1,1,1);material.opacity=1
       if(isScale){
         const start=index*settings.value.staggerSeconds
@@ -678,6 +841,36 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
         if(!settings.value.globeFaceCamera)mesh.lookAt(mesh.position.clone().multiplyScalar(2))
         if(settings.value.globeFlipImage)mesh.scale.x=-1
         globeGroup.add(mesh);globeMeshes[index]=mesh;globeDirections[index]=normal
+      }else if(isGrid){
+        // Advance the grid by one complete row on every focus transition. The
+        // base row advances with the step, so completed moves remain continuous;
+        // the row leaving above the oversized field is recycled below it.
+        const point=gridAnimatedPoint(index)
+        const wrapWidth=gridColumns*gridPitchX*gridZoom,wrapHeight=gridRows*gridPitchY*gridZoom
+        const wrapCoordinate=(value:number,span:number)=>((value+span/2)%span+span)%span-span/2
+        const relativeX=wrapCoordinate((point.x-gridFocusX)*gridZoom,wrapWidth)
+        const relativeY=wrapCoordinate((point.y-gridFocusY)*gridZoom,wrapHeight)
+        mesh.position.set(relativeX+settings.value.offsetX/100,relativeY+settings.value.offsetY/100,0)
+        mesh.scale.setScalar(gridZoom)
+        const halfPlaneWidth=planeWidth*gridZoom/2,halfPlaneHeight=planeHeight*gridZoom/2
+        const halfViewportWidth=viewportWidth/2,halfViewportHeight=viewportHeight/2
+        const intersectsViewport=(x:number,y:number)=>x+halfPlaneWidth>=-halfViewportWidth&&x-halfPlaneWidth<=halfViewportWidth&&y+halfPlaneHeight>=-halfViewportHeight&&y-halfPlaneHeight<=halfViewportHeight
+        mesh.visible=intersectsViewport(mesh.position.x,mesh.position.y)
+        // Reuse wrapped copies and attach only those intersecting the viewport.
+        // Most cards now produce no copies instead of eight allocations/draws
+        // per frame, while edge cards still cover every lattice seam.
+        for(let wrapX=-1;wrapX<=1;wrapX++)for(let wrapY=-1;wrapY<=1;wrapY++){
+          if(wrapX===0&&wrapY===0)continue
+          const wrappedX=mesh.position.x+wrapX*wrapWidth,wrappedY=mesh.position.y+wrapY*wrapHeight
+          if(!intersectsViewport(wrappedX,wrappedY))continue
+          const wrapKey=`${meshKey}:wrap:${wrapX}:${wrapY}`
+          let wrappedMesh=gridWrapMeshes.get(wrapKey)
+          if(!wrappedMesh){wrappedMesh=mesh.clone();gridWrapMeshes.set(wrapKey,wrappedMesh)}
+          wrappedMesh.position.set(wrappedX,wrappedY,mesh.position.z)
+          wrappedMesh.quaternion.copy(mesh.quaternion);wrappedMesh.scale.copy(mesh.scale);wrappedMesh.visible=true
+          wrappedMesh.renderOrder=mesh.renderOrder;wrappedMesh.frustumCulled=false
+          scene.add(wrappedMesh)
+        }
       }else if(isSwipeDepth){
         const count=Math.max(1,sceneAssets.length)
         const slot=(index-baseIndex+count)%count
@@ -711,15 +904,18 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
       }else if(isCarousel3d){
         const slotAngle=carousel3dAngles[index]||0
         const slotDegrees=THREE.MathUtils.radToDeg(slotAngle)
-        const planeRotation=((180-slotDegrees)%180+180)%180
-        mesh.rotation.y=THREE.MathUtils.degToRad(planeRotation)
+        const facingRotation=((180-slotDegrees)%180+180)%180
+        const facingRadians=THREE.MathUtils.degToRad(facingRotation)
+        mesh.rotation.y=facingRadians
         // Anchor whichever vertical side faces inward to the orbit. The folded
         // card rotation swaps local left/right around the ring, so using a fixed
         // local side makes half the cards extend inward. A radial offset keeps
         // every card extending outward while its inner side traces the orbit.
         const radialX=Math.cos(slotAngle)
         const radialZ=Math.sin(slotAngle)
-        const anchoredRadius=carouselRadius+planeWidth/2
+        const planeRotationRadians=THREE.MathUtils.degToRad(settings.value.planeRotation)
+        const radialHalfExtent=(Math.abs(Math.cos(planeRotationRadians))*planeWidth+Math.abs(Math.sin(planeRotationRadians))*planeHeight)/2
+        const anchoredRadius=carouselRadius+radialHalfExtent
         mesh.position.set(radialX*anchoredRadius,0,radialZ*anchoredRadius)
       }else if(isOrbit){
         const angle=index/Math.max(1,sceneAssets.length)*Math.PI*2
@@ -745,7 +941,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
           else mesh.position.x+=anchorDirection*(scale-1)*planeWidth/2
         }
       }
-      if(!isScale&&!isGlobe&&!isSwipeDepth){
+      if(!isScale&&!isGrid&&!isGlobe&&!isSwipeDepth){
         const isRadialRing=isCarousel3d||isOrbit
         const depthPosition=isRadialRing?mesh.position.clone().applyEuler(carouselRing.rotation).applyEuler(carouselRotator.rotation).add(carouselRotator.position):mesh.position
         const depth=isRadialRing?Math.max(0,Math.min(1,(depthPosition.z+carouselRadius)/Math.max(.01,carouselRadius*2))):Math.abs(centered)
@@ -755,6 +951,19 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     }))
     if(!isCurrent())return
     if(!rendered&&!carouselMeshes.length&&!globeMeshes.some(Boolean))throw new Error('No previews could be loaded')
+    if(isCarousel3d&&settings.value.planeRotation){
+      scene.updateMatrixWorld(true)
+      const cameraPosition=new THREE.Vector3(),meshPosition=new THREE.Vector3(),worldQuaternion=new THREE.Quaternion(),worldNormal=new THREE.Vector3(),viewDirection=new THREE.Vector3()
+      camera.getWorldPosition(cameraPosition)
+      carouselMeshes.forEach(mesh=>{
+        mesh.getWorldPosition(meshPosition)
+        mesh.getWorldQuaternion(worldQuaternion)
+        worldNormal.set(0,0,1).applyQuaternion(worldQuaternion)
+        viewDirection.copy(cameraPosition).sub(meshPosition)
+        const visibleFaceDirection=worldNormal.dot(viewDirection)<0?-1:1
+        mesh.rotateZ(THREE.MathUtils.degToRad(settings.value.planeRotation*visibleFaceDirection))
+      })
+    }
     if(isOrbit){
       scene.updateMatrixWorld(true)
       const parentWorldQuaternion=new THREE.Quaternion(),cameraFacingQuaternion=new THREE.Quaternion()
@@ -866,7 +1075,10 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     if(lastPreviewFrameAt&&frameTime-lastPreviewFrameAt<frameInterval){animationFrame=requestAnimationFrame(tick);return}
     lastPreviewFrameAt=frameTime
     const duration=totalDuration.value
-    progress.value=(performance.now()-playbackStartedAt)/1000
+    const elapsed=(performance.now()-playbackStartedAt)/1000
+    const continuousGridLoop=template.value.collection==='grid'&&settings.value.loop
+    if(continuousGridLoop)gridPlaybackTime=elapsed
+    progress.value=continuousGridLoop?elapsed%duration:elapsed
     if(progress.value>=duration){
       if(settings.value.loop){
         progress.value=progress.value%duration
@@ -875,11 +1087,11 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
         progress.value=0;stop();void drawAt(0);return
       }
     }
-    void drawAt(progress.value).finally(()=>{if(playing.value)animationFrame=requestAnimationFrame(tick)})
+    void drawAt(continuousGridLoop?gridPlaybackTime:progress.value).finally(()=>{if(playing.value)animationFrame=requestAnimationFrame(tick)})
   }
-  const startPlayback=()=>{if(playing.value)return;playbackStartedAt=performance.now()-progress.value*1000;lastPreviewFrameAt=0;playing.value=true;videos.forEach(video=>void video.play().catch(()=>{}));animationFrame=requestAnimationFrame(tick)}
+  const startPlayback=()=>{if(playing.value)return;const startTime=template.value.collection==='grid'&&settings.value.loop?gridPlaybackTime:progress.value;playbackStartedAt=performance.now()-startTime*1000;lastPreviewFrameAt=0;playing.value=true;videos.forEach(video=>void video.play().catch(()=>{}));animationFrame=requestAnimationFrame(tick)}
   const togglePlayback=()=>{if(playing.value){stop();void drawAt(progress.value);return}startPlayback()}
-  const seek=(value:number)=>{progress.value=value;if(playing.value)playbackStartedAt=performance.now()-value*1000;void drawAt(value)}
+  const seek=(value:number)=>{progress.value=value;if(template.value.collection==='grid')gridPlaybackTime=value;if(playing.value)playbackStartedAt=performance.now()-value*1000;void drawAt(value)}
   const setCanvas=(value:HTMLCanvasElement)=>{canvas.value=value;void drawAt(progress.value)}
   const waitForReplacementCanvas=(previousCanvas:HTMLCanvasElement|undefined,changeRevision:number)=>new Promise<void>(resolve=>{
     let attempts=0
@@ -958,9 +1170,9 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     const rendererChanged=previousRenderer!==template.value.renderer
     if(!rendererChanged)disposeTextures()
     else disposeRenderer()
-    progress.value=0
+    progress.value=0;gridPlaybackTime=0
     if(template.value.preset)Object.assign(settings.value,template.value.preset)
-    settings.value.visibleCount=countForAssets()
+    if(template.value.collection!=='grid')settings.value.visibleCount=countForAssets()
     void nextTick(async()=>{
       if(rendererChanged)await waitForReplacementCanvas(previousCanvas,changeRevision)
       if(changeRevision!==templateChangeRevision)return
@@ -975,7 +1187,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     })
   })
   watch(
-    ()=>[settings.value.format,settings.value.fit,settings.value.transition,settings.value.secondsPerSlide,settings.value.showTitles,settings.value.direction,settings.value.gap,settings.value.tilt,settings.value.scaleCenter,settings.value.tiltMode,settings.value.easing,settings.value.cornerRadius,settings.value.distance,settings.value.centerScale,settings.value.fade,settings.value.offsetX,settings.value.offsetY,settings.value.scaleFocus,settings.value.solo,settings.value.visibleCount,settings.value.planeSize,settings.value.cycles,settings.value.loop,settings.value.staggerFrames,settings.value.delayFrames,settings.value.cycleDegrees,settings.value.orbitRadius,settings.value.perspective,settings.value.rotationX,settings.value.rotationY,settings.value.rotationZ,settings.value.reverse,settings.value.spin,settings.value.spread,settings.value.staggerSeconds,settings.value.scaleStyle,settings.value.growFrom,settings.value.imageFit,settings.value.flickerEffect,settings.value.flipMaterial,settings.value.flipLightIntensity,settings.value.flipRoughness,settings.value.flickerPacing,settings.value.scaleDirection,settings.value.driftDirection,settings.value.scaleAmount,settings.value.driftAmount,settings.value.delaySeconds,settings.value.backgroundColor,settings.value.globeMinScale,settings.value.globeMaxScale,settings.value.globeAxis,settings.value.globeMotion,settings.value.globeStops,settings.value.globeShuffle,settings.value.globeFaceCamera,settings.value.globeShowBackfaces,settings.value.globeFlipImage,settings.value.storiesBigScale,settings.value.storiesBigDrift,settings.value.storiesThumbSize,settings.value.storiesThumbAspect,settings.value.storiesContainerOpacity,settings.value.storiesContainerBlur,settings.value.storiesSelectorPad,settings.value.storiesSelectorStroke,settings.value.storiesDimAmount,settings.value.swipeAlternating],
+    ()=>[settings.value.format,settings.value.fit,settings.value.transition,settings.value.secondsPerSlide,settings.value.showTitles,settings.value.direction,settings.value.gap,settings.value.tilt,settings.value.scaleCenter,settings.value.tiltMode,settings.value.easing,settings.value.cornerRadius,settings.value.distance,settings.value.centerScale,settings.value.fade,settings.value.offsetX,settings.value.offsetY,settings.value.scaleFocus,settings.value.solo,settings.value.visibleCount,settings.value.planeSize,settings.value.planeRotation,settings.value.cycles,settings.value.loop,settings.value.staggerFrames,settings.value.delayFrames,settings.value.cycleDegrees,settings.value.orbitRadius,settings.value.perspective,settings.value.rotationX,settings.value.rotationY,settings.value.rotationZ,settings.value.reverse,settings.value.spin,settings.value.spread,settings.value.staggerSeconds,settings.value.scaleStyle,settings.value.growFrom,settings.value.imageFit,settings.value.flickerEffect,settings.value.flipMaterial,settings.value.flipLightIntensity,settings.value.flipRoughness,settings.value.flickerPacing,settings.value.scaleDirection,settings.value.driftDirection,settings.value.scaleAmount,settings.value.driftAmount,settings.value.gridMoveDistance,settings.value.gridStaggerCurve,settings.value.delaySeconds,settings.value.backgroundColor,settings.value.globeMinScale,settings.value.globeMaxScale,settings.value.globeAxis,settings.value.globeMotion,settings.value.globeStops,settings.value.globeShuffle,settings.value.globeFaceCamera,settings.value.globeShowBackfaces,settings.value.globeFlipImage,settings.value.storiesBigScale,settings.value.storiesBigDrift,settings.value.storiesThumbSize,settings.value.storiesThumbAspect,settings.value.storiesContainerOpacity,settings.value.storiesContainerBlur,settings.value.storiesSelectorPad,settings.value.storiesSelectorStroke,settings.value.storiesDimAmount,settings.value.swipeAlternating],
     ()=>{if(!playing.value)void nextTick(()=>drawAt(progress.value))}
   )
   watch(()=>[settings.value.cornerRadius,settings.value.planeSize],disposeTextures)
@@ -983,7 +1195,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     ()=>[settings.value.flipGridColumns,settings.value.flipGridRows,settings.value.flipGridGap,settings.value.flipStagger,settings.value.flipShuffle],
     ()=>{if(!playing.value)void nextTick(()=>drawAt(progress.value))}
   )
-  watch(assets,()=>{images.clear();videos.forEach(video=>{video.pause();video.removeAttribute('src');video.load()});videos.clear();disposeTextures();progress.value=0;void nextTick(async()=>{if(template.value.collection==='flicker')await preloadFlickerAssets();await drawAt(0)})},{immediate:true})
+  watch(assets,()=>{images.clear();videos.forEach(video=>{video.pause();video.removeAttribute('src');video.load()});videos.clear();disposeTextures();progress.value=0;gridPlaybackTime=0;void nextTick(async()=>{if(template.value.collection==='flicker')await preloadFlickerAssets();await drawAt(0)})},{immediate:true})
   onBeforeUnmount(()=>{stop();cancelAnimationFrame(textureRefreshFrame);disposeRenderer();videos.forEach(video=>{video.removeAttribute('src');video.load()})})
   return {settings,template,canvas,playing,exporting,progress,feedback,totalDuration,setCanvas,togglePlayback,seek,renderVideo,drawAt,stop}
 }
