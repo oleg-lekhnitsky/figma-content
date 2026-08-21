@@ -97,6 +97,7 @@ export interface VideoComposerSettings {
   storiesSelectorPad: number
   storiesSelectorStroke: number
   storiesDimAmount: number
+  swipeAlternating: boolean
 }
 
 export const videoFormatDimensions: Record<VideoFormat, readonly [number, number]> = {

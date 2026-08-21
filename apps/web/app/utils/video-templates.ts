@@ -129,7 +129,7 @@ const testPresets: VideoTemplate[] = [
   { id:'test-02',name:'Grid Flip 01',description:'Staggered WebGL flip grid.',renderer:'webgl',collection:'test',thumbnail:'linear-gradient(90deg,transparent 7%,#d8d8d8 8% 47%,transparent 48% 52%,#aaa 53% 92%,transparent 93%),linear-gradient(0deg,transparent 49%,#090909 50% 52%,transparent 53%),#090909',preset:{...testDefaults,visibleCount:12,flipGridColumns:2,flipGridRows:2,flipGridGap:5,flipStagger:.12,easing:'sweep'} }
 ]
 
-const swipeDepthDefaults: Partial<VideoComposerSettings> = { visibleCount:6,cycles:1,loop:true,direction:'left',secondsPerSlide:6,planeSize:520,gap:90,distance:85,perspective:100,cornerRadius:0,fade:30,tilt:7,offsetX:0,offsetY:0,easing:'sweep',scaleCenter:false,solo:false }
+const swipeDepthDefaults: Partial<VideoComposerSettings> = { visibleCount:6,cycles:1,loop:true,direction:'left',swipeAlternating:true,secondsPerSlide:6,planeSize:520,gap:90,distance:85,perspective:100,cornerRadius:0,fade:30,tilt:7,offsetX:0,offsetY:0,easing:'sweep',scaleCenter:false,solo:false }
 const swipeDepthPresets: VideoTemplate[] = [
   { id:'swipe-depth-01',name:'Swipe Depth 01',description:'WebGL depth row with sequential swipe transitions.',renderer:'webgl',collection:'swipe-depth',thumbnail:'linear-gradient(145deg,transparent 18%,#777 19% 35%,transparent 36% 40%,#aaa 41% 61%,transparent 62% 66%,#d8d8d8 67% 88%,transparent 89%),#090909',bezier:[.76,0,.24,1],preset:swipeDepthDefaults }
 ]
