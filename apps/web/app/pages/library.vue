@@ -756,7 +756,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="library-shell">
     <main id="main-content">
-      <header class="index-toolbar" :class="{ 'toolbar-hidden': !toolbarVisible }">
+      <header class="index-toolbar">
         <div class="header-identity">
           <NuxtLink class="account-link" to="/account" :aria-label="`Open account for ${accountName}`"
             :title="accountName"><img v-if="session?.data.user?.avatarUrl" :src="session.data.user.avatarUrl"
@@ -1008,9 +1008,8 @@ main {
 }
 
 .index-toolbar {
-  position: sticky;
+  position: relative;
   z-index: 4;
-  top: 0;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   align-items: start;
@@ -1265,18 +1264,10 @@ button {
   }
 }
 
-.index-toolbar {
-  transition: opacity .18s ease-out, transform .24s cubic-bezier(.2, 0, 0, 1)
-}
-
-.library-shell {
-  --header-height: calc(44px + var(--space)*2)
-}
-
 .board-tabs-shell {
   position: sticky;
   z-index: 3;
-  top: var(--header-height);
+  top: 0;
   margin: 0 calc(var(--space)*-1) calc(var(--space)*1);
   overflow: hidden;
   background: var(--color-bg);
@@ -1358,7 +1349,7 @@ button {
 .board-tabs-shell.toolbar-hidden {
   pointer-events: none;
   opacity: 0;
-  transform: translateY(calc((var(--header-height) + 100%)*-1))
+  transform: translateY(-100%)
 }
 
 @media(hover:hover) and (pointer:fine) {
@@ -1552,12 +1543,6 @@ button {
   .library-shell :deep(.asset-masonry .card-meta) {
     display: none
   }
-}
-
-.index-toolbar.toolbar-hidden {
-  pointer-events: none;
-  opacity: 0;
-  transform: translateY(calc(-100% - var(--space)))
 }
 
 .index-toolbar {

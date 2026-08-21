@@ -70,9 +70,21 @@ let revealFrame = 0
 let mediaRevealFrame = 0
 const pendingLoadedImages = new Set<string>()
 let touchPointerId: number | undefined
+const quickActionsAssetId = ref<string | null>(null)
+let quickActionsTimer: ReturnType<typeof setTimeout> | undefined
+let quickActionsPointerId: number | undefined
+let quickActionsStartX = 0
+let quickActionsStartY = 0
+let suppressNextOpenId: string | null = null
 let activeViewTransition: { finished: Promise<void>; skipTransition?: () => void } | undefined
 const assetLink = (id: string): RouteLocationRaw => ({ path: '/library', query: { ...route.query, asset: id } })
 const openAsset = (event: MouseEvent, id: string) => {
+  if (suppressNextOpenId === id) {
+    event.preventDefault()
+    event.stopPropagation()
+    suppressNextOpenId = null
+    return
+  }
   if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
   const transitionDocument = document as Document & { startViewTransition?: (update: () => Promise<void>) => { finished: Promise<void>; skipTransition?: () => void } }
   if (!transitionDocument.startViewTransition || !window.matchMedia('(max-width: 760px)').matches || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
@@ -97,6 +109,32 @@ const openAsset = (event: MouseEvent, id: string) => {
     activeViewTransition = undefined
     void router.push(assetLink(id))
   }
+}
+const cancelQuickActionsHold = () => {
+  clearTimeout(quickActionsTimer)
+  quickActionsTimer = undefined
+  quickActionsPointerId = undefined
+}
+const startQuickActionsHold = (event: PointerEvent, asset: T) => {
+  if (event.pointerType !== 'touch' || !props.interactive || (!asset.figma_url && !props.canApprove) || props.reorderable) return
+  cancelQuickActionsHold()
+  if (quickActionsAssetId.value !== asset.id) quickActionsAssetId.value = null
+  quickActionsPointerId = event.pointerId
+  quickActionsStartX = event.clientX
+  quickActionsStartY = event.clientY
+  quickActionsTimer = setTimeout(() => {
+    quickActionsTimer = undefined
+    quickActionsAssetId.value = asset.id
+    suppressNextOpenId = asset.id
+  }, 500)
+}
+const moveQuickActionsHold = (event: PointerEvent) => {
+  if (event.pointerId !== quickActionsPointerId) return
+  if (Math.hypot(event.clientX - quickActionsStartX, event.clientY - quickActionsStartY) > 10) cancelQuickActionsHold()
+}
+const finishQuickActionsHold = (event: PointerEvent) => {
+  if (event.pointerId !== quickActionsPointerId) return
+  cancelQuickActionsHold()
 }
 const commitTitle = (asset: T, event: Event) => {
   const input = event.currentTarget as HTMLInputElement
@@ -265,6 +303,7 @@ onMounted(() => {
   observeCards()
 })
 onBeforeUnmount(() => {
+  cancelQuickActionsHold()
   cancelAnimationFrame(measureFrame)
   cancelAnimationFrame(revealFrame)
   cancelAnimationFrame(mediaRevealFrame)
@@ -278,17 +317,21 @@ onBeforeUnmount(() => {
     <TransitionGroup name="card-list" :css="false">
     <article
       v-for="(asset, index) in renderedAssets" :key="asset.id" class="asset-card"
-      :class="{ 'is-priority': index < 7, 'is-loaded': loadedImages.has(asset.id), 'is-selected': isSelected(asset.id), 'is-dragging': draggedId === asset.id, 'is-pointer-dragging': pointerDragging && draggedId === asset.id, 'is-drop-target': dropIndex === index && draggedId !== asset.id }"
+      :class="{ 'is-priority': index < 7, 'is-loaded': loadedImages.has(asset.id), 'is-selected': isSelected(asset.id), 'is-dragging': draggedId === asset.id, 'is-pointer-dragging': pointerDragging && draggedId === asset.id, 'is-drop-target': dropIndex === index && draggedId !== asset.id, 'has-quick-actions': quickActionsAssetId === asset.id }"
       :data-asset-id="asset.id"
       :style="{ '--media-stagger': `${Math.min(index * 35, 280)}ms` }"
       @pointerdown="startMouseDrag($event, index)" @pointermove="movePointerDrag" @pointerup="finishPointerDrag"
       @pointercancel="cancelPointerDrag" @lostpointercapture="handlePointerCaptureLost">
-      <div class="preview" :class="{ 'is-loading': !loadedImages.has(asset.id) }" :style="{ aspectRatio: `${asset.width} / ${asset.height}` }">
+      <div
+        class="preview" :class="{ 'is-loading': !loadedImages.has(asset.id) }"
+        :style="{ aspectRatio: `${asset.width} / ${asset.height}` }"
+        @pointerdown="startQuickActionsHold($event, asset)" @pointermove="moveQuickActionsHold"
+        @pointerup="finishQuickActionsHold" @pointercancel="cancelQuickActionsHold">
         <NuxtLink v-if="interactive" class="preview-link" :to="assetLink(asset.id)" :aria-label="`View ${asset.title}`" @click="openAsset($event, asset.id)">
           <AssetMedia :class="{ 'is-loaded': loadedImages.has(asset.id) }" :data-asset-id="asset.id" :src="asset.previewUrl" :srcset="asset.preview2xUrl ? `${asset.previewUrl} 640w, ${asset.preview2xUrl} 1280w` : undefined" :sizes="previewSizes" :single-resolution-media="preview1xMedia" :mime-type="asset.mime_type" :width="asset.width" :height="asset.height" :alt="`Preview of ${asset.title}`" :loading="index < 7 ? 'eager' : 'lazy'" :fetchpriority="index < 7 ? 'high' : 'auto'" @load="markImageLoaded(asset.id)" />
         </NuxtLink>
         <AssetMedia v-else :class="{ 'is-loaded': loadedImages.has(asset.id) }" :data-asset-id="asset.id" :src="asset.previewUrl" :srcset="asset.preview2xUrl ? `${asset.previewUrl} 640w, ${asset.preview2xUrl} 1280w` : undefined" :sizes="previewSizes" :single-resolution-media="preview1xMedia" :mime-type="asset.mime_type" :width="asset.width" :height="asset.height" :alt="asset.title" :loading="index < 7 ? 'eager' : 'lazy'" :fetchpriority="index < 7 ? 'high' : 'auto'" @load="markImageLoaded(asset.id)" />
-        <div v-if="interactive && (asset.figma_url || canApprove)" class="card-quick-actions"><a v-if="asset.figma_url" class="figma-button" :href="asset.figma_url" target="_blank" rel="noopener noreferrer">Open in Figma</a><button v-if="canApprove" class="card-approval-toggle" type="button" :aria-pressed="asset.status === 'approved'" :aria-label="asset.status === 'approved' ? `Remove approval from ${asset.title}` : `Approve ${asset.title}`" :title="asset.status === 'approved' ? 'Remove approval' : 'Approve'" @click.stop="emit('toggleApproval', asset)"><Heart :size="16" :weight="asset.status === 'approved' ? 'Filled' : 'Outline'" aria-hidden="true" /></button></div>
+        <div v-if="interactive && (asset.figma_url || canApprove)" class="card-quick-actions"><a v-if="asset.figma_url" class="figma-button" :href="asset.figma_url" target="_blank" rel="noopener noreferrer" @pointerdown.stop>Open in Figma</a><button v-if="canApprove" class="card-approval-toggle" type="button" :aria-pressed="asset.status === 'approved'" :aria-label="asset.status === 'approved' ? `Remove approval from ${asset.title}` : `Approve ${asset.title}`" :title="asset.status === 'approved' ? 'Remove approval' : 'Approve'" @pointerdown.stop @click.stop="emit('toggleApproval', asset)"><Heart :size="16" :weight="asset.status === 'approved' ? 'Filled' : 'Outline'" aria-hidden="true" /></button></div>
         <div class="preview-actions"><slot name="previewActions" :asset="asset" /></div>
         <button v-if="selectable" class="selection-control" type="button" :class="{ active: isSelected(asset.id) }" :aria-label="`${isSelected(asset.id) ? 'Deselect' : 'Select'} ${asset.title}`" :aria-pressed="isSelected(asset.id)" @click="emit('toggleSelection', asset)" />
         <button
@@ -344,6 +387,7 @@ onBeforeUnmount(() => {
 @media(max-width:900px){.asset-masonry,.asset-masonry.custom-view:not(.column-layout){grid-template-columns:repeat(min(var(--board-columns,3),3),minmax(0,1fr))}.asset-masonry.stable-columns .asset-card:nth-child(n){grid-column:auto}.asset-masonry.stable-columns .asset-card:nth-child(3n + 1){grid-column:1}.asset-masonry.stable-columns .asset-card:nth-child(3n + 2){grid-column:2}.asset-masonry.stable-columns .asset-card:nth-child(3n){grid-column:3}}
 @media(max-width:520px){.asset-masonry{--board-default-gap:var(--masonry-mobile-column-gap);width:calc(100% + var(--masonry-mobile-inline-bleed)*2);margin-inline:calc(var(--masonry-mobile-inline-bleed)*-1);grid-template-columns:repeat(2,minmax(0,1fr));column-gap:var(--masonry-mobile-column-gap)}.asset-masonry,.asset-masonry.is-masonry{row-gap:var(--masonry-mobile-row-gap)}.asset-masonry.custom-view,.asset-masonry.custom-view.is-masonry{row-gap:0}.asset-card{padding-bottom:0}.preview{border-radius:var(--radius-mobile);clip-path:inset(0 round var(--radius-mobile))}.asset-masonry.stable-columns .asset-card:nth-child(n){grid-column:auto}.asset-masonry.stable-columns .asset-card:nth-child(odd){grid-column:1}.asset-masonry.stable-columns .asset-card:nth-child(even){grid-column:2}.card-body{padding-top:var(--masonry-mobile-row-gap);padding-left:calc(var(--space)/4);font-size:var(--font-size-body-compact)}}
 .asset-masonry.custom-view .preview{border-radius:var(--board-radius,var(--radius));clip-path:inset(0 round var(--board-radius,var(--radius)))}
+.asset-masonry.custom-view.hide-text.is-masonry{overflow:hidden;border-radius:var(--board-radius,var(--radius));clip-path:inset(0 round var(--board-radius,var(--radius)))}
 @media(max-width:520px){.asset-masonry.custom-view:not(.column-layout){grid-template-columns:repeat(min(var(--board-columns,2),2),minmax(0,1fr));column-gap:var(--board-gap,var(--space))}}
 .asset-masonry.custom-view:not(.column-layout){grid-template-columns:repeat(clamp(1,calc(7 + var(--board-column-offset,0)),9),minmax(0,1fr))}
 @media(max-width:2200px){.asset-masonry.custom-view:not(.column-layout){grid-template-columns:repeat(clamp(1,calc(6 + var(--board-column-offset,0)),8),minmax(0,1fr))}}
@@ -351,6 +395,6 @@ onBeforeUnmount(() => {
 @media(max-width:1280px){.asset-masonry.custom-view:not(.column-layout){grid-template-columns:repeat(clamp(1,calc(4 + var(--board-column-offset,0)),6),minmax(0,1fr))}}
 @media(max-width:900px){.asset-masonry.custom-view:not(.column-layout){grid-template-columns:repeat(clamp(1,calc(3 + var(--board-column-offset,0)),5),minmax(0,1fr))}}
 @media(max-width:520px){.asset-masonry.custom-view:not(.column-layout){grid-template-columns:repeat(clamp(1,calc(2 + var(--board-column-offset,0)),4),minmax(0,1fr))}}
-@media(hover:none),(pointer:coarse){.selection-control.selection-control{opacity:1}.card-quick-actions{display:none}.preview-actions{opacity:1;transform:none;pointer-events:auto}.touch-reorder-handle{display:grid}.preview-link,.preview-link:hover,.preview-link:active,.preview-link:focus{opacity:1}.preview :is(img,video){filter:none}}
+@media(hover:none),(pointer:coarse){.selection-control.selection-control{opacity:1}.preview{-webkit-touch-callout:none}.asset-card.has-quick-actions .card-quick-actions,.asset-card:focus-within .card-quick-actions{visibility:visible;transform:translate(-50%,0) scale(1);pointer-events:auto}.figma-button,.card-approval-toggle{min-height:44px}.figma-button{padding-inline:18px}.card-approval-toggle{width:44px;min-width:44px}.preview-actions{opacity:1;transform:none;pointer-events:auto}.touch-reorder-handle{display:grid}.preview-link,.preview-link:hover,.preview-link:active,.preview-link:focus{opacity:1}.preview :is(img,video){filter:none}}
 @media(prefers-reduced-motion:reduce){.asset-masonry.is-arranging .asset-card .preview{animation:none}.asset-card{opacity:1;transform:none;transition:none}.preview :is(img,video),.preview :deep(.asset-media-picture img){opacity:1;transform:none;transition:none}.figma-button{transition-duration:.01ms;transform:translate(-50%,0)}.preview-actions{transition:none}.figma-button:active{scale:1}}
 </style>

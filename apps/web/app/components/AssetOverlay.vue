@@ -67,9 +67,8 @@ const role = computed(() => session.value?.data.user?.role)
 const canEdit = computed(() => ['editor', 'admin'].includes(role.value ?? '') || (role.value === 'contributor' && asset.value?.uploaded_by === session.value?.data.user?.id))
 const canApprove = computed(() => ['editor', 'admin'].includes(role.value ?? ''))
 const canOpenBoardPicker = computed(() => {
-  if (asset.value?.status !== 'approved') return false
   if (!session.value?.data.user) return true
-  return ['editor', 'admin'].includes(role.value ?? '') || (role.value === 'contributor' && asset.value.uploaded_by === session.value.data.user.id)
+  return ['editor', 'admin'].includes(role.value ?? '') || (role.value === 'contributor' && asset.value?.uploaded_by === session.value.data.user.id)
 })
 const eligibleBoards = computed(() => (boardData.value?.data.collections ?? []).filter(board => board.mode === 'static' && ['owner', 'editor', 'contributor'].includes(board.role) && (board.role !== 'contributor' || asset.value?.uploaded_by === session.value?.data.user?.id)))
 const boardSearch = ref('')
@@ -262,7 +261,8 @@ const addToBoard = async (targetBoardId = boardId.value) => {
   actionMessage.value = ''
   addingBoardId.value = targetBoardId
   try {
-    await $fetch(`/api/shares/${targetBoardId}/assets`, { method: 'POST', body: { assetId: props.assetId } })
+    const response = await $fetch<{ data: { added: boolean; approved: boolean } }>(`/api/shares/${targetBoardId}/assets`, { method: 'POST', body: { assetId: props.assetId } })
+    if (response.data.approved && asset.value) asset.value.status = 'approved'
     actionMessage.value = 'Added to board.'
     boardPickerOpen.value = false
   } catch { actionError.value = 'Unable to add this asset to the board.' }
