@@ -1917,7 +1917,6 @@ button {
 
 .submitter-stack {
   min-width: max-content;
-  height: 36px;
   display: flex;
   align-items: center;
   padding-left: 2px

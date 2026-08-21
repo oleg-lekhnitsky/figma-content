@@ -47,6 +47,7 @@
   --filter-overlay-margin: clamp(1.125rem, 3vw, 3.75rem);
   --filter-overlay-padding: clamp(1.5rem, 3vw, 2.5rem);
   --filter-overlay-radius: clamp(1.875rem, 4vw, 8.25rem);
+  --filter-scroll-radius: clamp(1.875rem, 2.5vw, 4rem);
   --filter-overlay-group-gap: clamp(1.375rem, 3vh, 2.125rem);
   --filter-option-gap: .375rem;
   --filter-option-height: 2.125rem;
@@ -99,12 +100,13 @@ html { scrollbar-gutter: stable; }
 
   html[data-filter-transition='opening']::view-transition-new(root) {
     animation: none;
-    opacity: 0;
+    opacity: 1;
   }
 
   html[data-filter-transition='closing']::view-transition-old(root) {
     z-index: 1;
-    animation: filter-backdrop-opacity-out var(--filter-backdrop-exit-duration) var(--filter-backdrop-exit-easing) both;
+    animation: none;
+    opacity: 0;
   }
 
   html[data-filter-transition='closing']::view-transition-new(root) {
@@ -168,7 +170,7 @@ html { scrollbar-gutter: stable; }
   }
   to {
     filter: blur(var(--filter-overlay-blur));
-    opacity: .28;
+    opacity: 1;
   }
 }
 
@@ -177,7 +179,6 @@ html { scrollbar-gutter: stable; }
   to { opacity: 0; }
 }
 
-.selection-panel--instant.selection-panel--filter-overlay,
 .selection-panel--instant.selection-panel--filter-overlay .asset-filter-controls,
 .selection-panel--instant.selection-panel--filter-overlay > .filter-panel-toggle.is-expanded {
   animation: none !important;
@@ -431,21 +432,39 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
   transform: none !important;
   backface-visibility: hidden;
   isolation: isolate;
-  will-change: opacity;
+  will-change: backdrop-filter;
   -webkit-transform: translateZ(0) !important;
-  animation: filter-overlay-fade-in var(--filter-overlay-enter-duration) var(--filter-overlay-enter-easing) both;
+  animation: filter-overlay-blur-in var(--filter-overlay-enter-duration) var(--filter-overlay-enter-easing) both;
 }
 
 .selection-panel.selection-panel--filter-overlay::-webkit-scrollbar { display: none; }
 
-@keyframes filter-overlay-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+@keyframes filter-overlay-blur-in {
+  from {
+    backdrop-filter: blur(0);
+    -webkit-backdrop-filter: blur(0);
+  }
+  to {
+    backdrop-filter: blur(var(--filter-overlay-blur));
+    -webkit-backdrop-filter: blur(var(--filter-overlay-blur));
+  }
 }
 
 .selection-panel.selection-panel--filter-overlay.selection-panel--filter-closing {
   pointer-events: none;
-  animation: filter-overlay-fade-out var(--filter-overlay-enter-duration) var(--filter-overlay-enter-easing) both;
+}
+
+.selection-panel.selection-panel--filter-overlay.selection-panel--instant.selection-panel--filter-closing {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  animation: none;
+}
+
+.selection-panel--filter-overlay.selection-panel--instant.selection-panel--filter-closing .asset-filter-controls {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .selection-panel--filter-overlay > :is(.filter-controls-enter-active, .filter-controls-leave-active) {
@@ -459,11 +478,6 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
 
 .selection-panel--filter-overlay.selection-panel--filter-closing > button {
   visibility: hidden;
-}
-
-@keyframes filter-overlay-fade-out {
-  from { opacity: 1; }
-  to { opacity: 0; }
 }
 
 .selection-panel--filter-overlay .asset-filter-controls {
@@ -514,6 +528,36 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
 }
 
 .selection-panel--filter-overlay .asset-filter-controls--expanded { gap: 0; }
+
+@media (min-width: 521px) {
+  .selection-panel--filter-overlay .asset-filter-controls--expanded {
+    padding: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .selection-panel--filter-overlay .asset-filter-controls--filters.asset-filter-controls--expanded {
+    height: calc(var(--filter-overlay-height) - var(--filter-overlay-margin) - var(--filter-overlay-margin));
+  }
+
+  .selection-panel--filter-overlay .asset-filter-controls--expanded .filter-sheet-content {
+    gap: calc(var(--space) / 2);
+    border-radius: var(--filter-scroll-radius);
+    clip-path: inset(0 round var(--filter-scroll-radius));
+  }
+
+  .selection-panel--filter-overlay .asset-filter-controls--expanded .filter-sheet-content > :is(.filter-overlay-title, .filter-option-group, .submitter-stack),
+  .selection-panel--filter-overlay .asset-filter-controls--expanded > .filter-actions.is-visible {
+    box-sizing: border-box;
+    padding: var(--filter-overlay-padding);
+    border-radius: var(--filter-overlay-radius);
+    background: var(--filter-overlay-panel-background);
+  }
+
+  .selection-panel--filter-overlay .asset-filter-controls--expanded > .filter-actions.is-visible {
+    margin-top: calc(var(--space) / 2);
+  }
+}
 
 .selection-panel--filter-overlay .filter-overlay-title {
   margin: 0 0 calc(var(--filter-overlay-group-gap) / 2);
@@ -759,7 +803,7 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
   white-space: nowrap;
 }
 
-.selection-panel--filter-overlay .submitter-stack { margin-top: var(--space); }
+
 
 .selection-panel--filter-overlay.selection-panel-enter-active,
 .selection-panel--filter-overlay.selection-panel-leave-active {

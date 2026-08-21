@@ -479,8 +479,8 @@ const showAllAssets = () => {
   border-radius: var(--video-panel-radius);
   color: var(--filter-overlay-panel-color);
   background: var(--filter-overlay-panel-background);
-  backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation));
-  -webkit-backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation))
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none
 }
 
 :deep(.video-panel-scroll) {
@@ -775,8 +775,8 @@ const showAllAssets = () => {
   inset: 0;
   border-radius: inherit;
   background: var(--filter-overlay-panel-background);
-  backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation));
-  -webkit-backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation));
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   content: '';
   pointer-events: none
 }

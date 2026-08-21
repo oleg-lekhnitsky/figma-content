@@ -66,7 +66,7 @@ const sortOptions = [
 </script>
 
 <template>
-  <form class="asset-filter-controls" :class="{ 'asset-filter-controls--expanded': expanded }" aria-label="Filter assets" @submit.prevent>
+  <form class="asset-filter-controls asset-filter-controls--filters" :class="{ 'asset-filter-controls--expanded': expanded }" aria-label="Filter assets" @submit.prevent>
     <button v-if="expanded" class="filter-sheet-handle" type="button" aria-label="Close filters"><span aria-hidden="true" /></button>
     <div class="filter-sheet-content">
       <template v-if="expanded">
