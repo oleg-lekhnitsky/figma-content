@@ -128,7 +128,7 @@ const orderedAssets = computed(() => {
 const activeAssets = computed(() => orderedAssets.value.filter(asset => !hiddenAssetIds.value.has(asset.id)))
 const assetRef = computed(() => activeAssets.value)
 const titleRef = computed(() => props.boardTitle)
-const { settings, template, playing, exporting, progress, feedback, totalDuration, setCanvas, togglePlayback, seek, renderVideo } = useVideoComposer(assetRef, titleRef)
+const { settings, template, playing, exporting, progress, feedback, totalDuration, setCanvas, togglePlayback, seek, renderVideo } = useVideoComposer(assetRef, titleRef, 'flicker-01', { preserveDrawingBuffer:true })
 const handleStageReady = (canvas: HTMLCanvasElement) => {
   stageMotionReady.value = false
   if (stageMotionFrame !== undefined) cancelAnimationFrame(stageMotionFrame)
@@ -377,7 +377,7 @@ const showAllAssets = () => {
   display: grid;
   grid-template-columns: 24px 38px minmax(0, 1fr) 32px;
   align-items: center;
-  gap: calc(var(--space)/4);
+  gap: calc(var(--space)/2);
   min-height: 44px;
   border-radius: calc(var(--radius)/2);
   font-size: var(--video-type-body);
@@ -677,6 +677,24 @@ const showAllAssets = () => {
   gap: var(--video-inspector-section-gap)
 }
 
+:deep(.video-inspector) {
+  container-type: inline-size
+}
+
+@container (min-width: 32rem) {
+  :deep(.video-inspector>.video-panel-scroll) {
+    grid-template-columns: repeat(2, minmax(0, 1fr))
+  }
+
+  :deep(.video-inspector>.video-panel-scroll>header),
+  :deep(.video-inspector>.video-panel-scroll>.video-control-pair),
+  :deep(.video-inspector>.video-panel-scroll>.video-reset),
+  :deep(.video-inspector>.video-panel-scroll>fieldset:has(> .video-control-pair)),
+  :deep(.video-inspector>.video-panel-scroll>fieldset:has(.video-choice-row button:nth-child(4))) {
+    grid-column: 1 / -1
+  }
+}
+
 :deep(.video-inspector>.video-panel-scroll>header) {
   margin-bottom: 0
 }
@@ -768,9 +786,10 @@ const showAllAssets = () => {
   display: flex;
   align-items: center;
   gap: 7px;
-  width: 100%;
-  height: 34px;
-  padding: 4px 10px 4px 5px;
+  width: max-content;
+  max-width: 100%;
+  height: calc(1em + var(--filter-option-padding) + var(--filter-option-padding) + var(--filter-hairline) + var(--filter-hairline));
+  padding: 4px var(--filter-option-padding);
   border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
   border-radius: 999px;
   color: var(--video-range-value-color)

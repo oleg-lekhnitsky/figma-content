@@ -24,6 +24,7 @@
   --color-line: rgb(0 0 0 / 0.18);
   --color-accent: #666;
   --color-danger: #a21b14;
+  --material-tinted-fallback-bg: #666;
   --material-tinted-bg: rgb(0 0 0 / 0.5);
   --material-tinted-bg-mobile: rgb(0 0 0 / 0.50);
   --material-tinted-hover-bg: rgb(0 0 0 / 0.42);
@@ -76,6 +77,19 @@ body {
   margin: 0;
   color: var(--color-fg);
   background: var(--color-bg);
+}
+
+.material-tinted {
+  color: var(--material-tinted-fg);
+  background: var(--material-tinted-fallback-bg);
+}
+
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .material-tinted {
+    background: var(--material-tinted-bg);
+    -webkit-backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
+    backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
+  }
 }
 h1,
 h2 {
@@ -302,8 +316,36 @@ textarea {
 
 /* Shared workspace identity and switcher */
 .workspace-switcher {
-  position: relative;
   min-width: 0;
+}
+.app-popover-content {
+  position: fixed;
+  z-index: 100;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.app-dropdown-menu-content {
+  --menu-inset: calc(var(--space) / 3);
+  --menu-row-gap: calc(var(--space) / 12);
+  --menu-row-height: calc(var(--control-height) * 0.75);
+  --menu-radius: calc(var(--radius) * 0.75);
+  width: 100%;
+  min-width: min-content;
+  display: grid;
+  gap: var(--menu-row-gap);
+  padding: calc(var(--space)/2);
+  overflow: hidden;
+  border-radius: var(--radius);
+  box-shadow:
+    0 0 0 1px oklch(1 0 0 / 0.1),
+    0 18px 50px rgb(0 0 0 / 0.18);
+}
+.app-dropdown-menu-content [role^='menuitem'] {
+  border-radius: calc(var(--radius) - var(--menu-inset));
+}
+.app-dropdown-menu-content [role^='menuitem']:is(:hover, :focus-visible) {
+  opacity: 1;
+  background: var(--material-tinted-hover-bg);
 }
 .workspace-trigger {
   display: flex;
@@ -337,59 +379,50 @@ textarea {
   rotate: 180deg;
 }
 .workspace-popover {
-  position: absolute;
-  z-index: 20;
-  top: calc(100% + var(--space) / 3);
-  left: 0;
-  width: min(280px, calc(100vw - var(--space) * 2));
-  padding: calc(var(--space) / 2);
-  overflow: hidden;
+  width: 100%;
   border: 0;
-  border-radius: 18px;
-  color: var(--material-tinted-fg);
-  background: var(--material-tinted-bg);
-  -webkit-backdrop-filter: blur(var(--material-tinted-blur))
-    saturate(var(--material-tinted-saturation));
-  backdrop-filter: blur(var(--material-tinted-blur))
-    saturate(var(--material-tinted-saturation));
-  box-shadow: 0 18px 50px rgb(0 0 0 / 0.14);
   font-size: var(--font-size-body-compact);
-  font-weight: 650;
+  font-weight: 500;
   letter-spacing: -0.01em;
-  isolation: isolate;
-  transform: translateZ(0);
-  contain: paint;
+  line-height: 1.1;
 }
 .workspace-popover > p {
-  margin: calc(var(--space) / 2);
+  margin: 0;
+  padding: var(--menu-inset) calc(var(--menu-inset) * 2);
   color: color-mix(in srgb, var(--material-tinted-fg) 64%, transparent);
   font-size: var(--font-size-label);
+  font-weight: 500;
 }
 .workspace-popover > button {
   display: flex;
   width: 100%;
-  min-height: var(--control-height);
+  min-height: var(--menu-row-height);
   align-items: center;
   justify-content: space-between;
-  padding: calc(var(--space) / 2);
-  border-radius: 11px;
+  gap: var(--space);
+  padding: var(--menu-inset) calc(var(--menu-inset) * 2);
   color: inherit;
   background: transparent;
+  font-weight: 500;
   text-align: left;
-}
-.workspace-popover > button:is(:hover, :focus-visible) {
-  background: var(--material-tinted-hover-bg);
 }
 .workspace-popover > button:disabled {
   cursor: wait;
 }
-.workspace-popover button span {
-  display: grid;
+.workspace-popover button > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workspace-item-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--menu-inset);
 }
 .workspace-popover small {
   color: color-mix(in srgb, var(--material-tinted-fg) 64%, transparent);
   font-size: var(--font-size-caption);
-  font-weight: 550;
+  font-weight: 500;
   text-transform: capitalize;
 }
 .workspace-popover button svg {
@@ -400,14 +433,25 @@ textarea {
 }
 .workspace-links {
   display: grid;
-  gap: calc(var(--space) / 2);
-  margin-top: calc(var(--space) / 2);
-  padding: calc(var(--space) / 2);
+  gap: 0;
+  margin-top: var(--menu-inset);
+  padding-top: var(--menu-inset);
   border-top: 1px solid
     color-mix(in srgb, var(--material-tinted-fg) 28%, transparent);
 }
 .workspace-links a {
+  min-height: var(--menu-row-height);
+  display: flex;
+  align-items: center;
+  padding-inline: calc(var(--menu-inset) * 2);
   color: inherit;
+}
+
+@media (pointer: coarse) {
+  .workspace-popover > button,
+  .workspace-links a {
+    min-height: var(--control-height);
+  }
 }
 
 @media (max-width: 720px) {
@@ -429,8 +473,10 @@ textarea {
   .admin-shell > main > .intro h1 {
     grid-column: 1;
   }
-  .workspace-popover {
-    background: var(--material-tinted-bg-mobile);
+  @supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+    .material-tinted {
+      background: var(--material-tinted-bg-mobile);
+    }
   }
 }
 

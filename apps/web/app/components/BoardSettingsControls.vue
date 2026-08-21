@@ -53,7 +53,8 @@ onBeforeUnmount(() => {
 <template>
   <div class="asset-filter-controls asset-filter-controls--expanded board-settings-controls">
     <button class="filter-sheet-handle" type="button" aria-label="Close board settings"><span aria-hidden="true" /></button>
-    <div class="board-settings-intro">
+    <div class="filter-sheet-content">
+      <div class="board-settings-intro">
       <h2 class="filter-overlay-title">{{ title }}</h2>
       <p class="board-type-summary"><strong>{{ mode === 'dynamic' ? 'Dynamic board.' : 'Static board.' }}</strong> {{ mode === 'dynamic' ? 'Matching assets update automatically from filters.' : 'Assets are selected and arranged manually.' }}</p>
     </div>
@@ -109,9 +110,10 @@ onBeforeUnmount(() => {
       <p>This permanently removes the board, member access, and its public link.</p>
       <button type="button" :disabled="busy" @click="$emit('deleteBoard')">Delete board</button>
     </section>
-    <Transition name="board-settings-toast">
-      <p v-if="feedback" class="board-settings-feedback" :class="{ error }" role="status" aria-live="polite">{{ feedback }}</p>
-    </Transition>
+      <Transition name="board-settings-toast">
+        <p v-if="feedback" class="board-settings-feedback" :class="{ error }" role="status" aria-live="polite">{{ feedback }}</p>
+      </Transition>
+    </div>
   </div>
 </template>
 

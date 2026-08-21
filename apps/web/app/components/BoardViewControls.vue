@@ -25,7 +25,8 @@ const columnOptions: Array<{ value: BoardViewSettings['columns']; label: string 
 <template>
   <div class="asset-filter-controls asset-filter-controls--expanded board-view-controls">
     <button class="filter-sheet-handle" type="button" aria-label="Close view settings"><span aria-hidden="true" /></button>
-    <h2 class="filter-overlay-title">Board view</h2>
+    <div class="filter-sheet-content">
+      <h2 class="filter-overlay-title">Board view</h2>
     <section class="filter-option-group" role="group" aria-labelledby="board-view-card-text">
       <h3 id="board-view-card-text">Card text</h3>
       <div class="filter-option-list">
@@ -50,6 +51,7 @@ const columnOptions: Array<{ value: BoardViewSettings['columns']; label: string 
       <div class="filter-option-list">
         <button v-for="option in columnOptions" :key="option.value" type="button" :aria-pressed="modelValue.columns === option.value" :disabled="disabled" @click="update('columns', option.value)">{{ option.label }}</button>
       </div>
-    </section>
+      </section>
+    </div>
   </div>
 </template>

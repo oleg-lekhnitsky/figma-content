@@ -5,12 +5,16 @@ import VideoRangeInput from '~/components/video-composer/VideoRangeInput.vue'
 const props = defineProps<{ modelValue: VideoComposerSettings; template?: VideoTemplate }>()
 const emit = defineEmits<{ 'update:modelValue': [value: VideoComposerSettings] }>()
 const set = <K extends keyof VideoComposerSettings>(key: K, value: VideoComposerSettings[K]) => emit('update:modelValue', { ...props.modelValue, [key]: value })
+const optionLabel = (value: string) => value.charAt(0).toUpperCase() + value.slice(1)
 const tiltModes: { value: VideoComposerSettings['tiltMode']; label: string }[] = [
   { value: 'off', label: 'Off' }, { value: 'fan', label: 'Fan' }, { value: 'uniform', label: 'Uniform' }, { value: 'alternate', label: 'Alternate' }
 ]
 const easings: { value: VideoComposerSettings['easing']; label: string }[] = [
   { value: 'flow', label: 'Flow' }, { value: 'glide', label: 'Glide' }, { value: 'linear', label: 'Linear' }, { value: 'ease', label: 'Ease' }, { value: 'sweep', label: 'Sweep' }, { value: 'smooth', label: 'Smooth' }
 ]
+const directionOptions = [
+  { value: 'up', label: 'Up' }, { value: 'down', label: 'Down' }, { value: 'left', label: 'Left' }, { value: 'right', label: 'Right' }
+] as const
 const focusOptions = computed(() => props.modelValue.direction === 'left' || props.modelValue.direction === 'right'
   ? [{ value:'center',label:'Center' },{ value:'start',label:'Left' },{ value:'end',label:'Right' }] as const
   : [{ value:'center',label:'Center' },{ value:'start',label:'Top' },{ value:'end',label:'Bottom' }] as const)
@@ -22,11 +26,13 @@ const isScale = computed(() => props.template?.collection === 'scale')
 const isStories = computed(() => props.template?.collection === 'stories')
 const isFlicker = computed(() => props.template?.collection === 'flicker')
 const isTest = computed(() => props.template?.collection === 'test')
+const isSwipeDepth = computed(() => props.template?.collection === 'swipe-depth')
 const resetCarousel3d = () => emit('update:modelValue', { ...props.modelValue, visibleCount:12,cycles:1,cycleDegrees:360,distance:1300,secondsPerSlide:8,reverse:false,planeSize:400,rotationX:30,rotationY:38,rotationZ:0,orbitRadius:280,perspective:140,cornerRadius:0,fade:0,offsetX:0,offsetY:0,easing:'linear' })
 const resetOrbit = () => emit('update:modelValue', { ...props.modelValue, visibleCount:7,cycles:1,cycleDegrees:360,secondsPerSlide:8,delaySeconds:0,reverse:false,planeSize:370,rotationX:0,rotationY:0,rotationZ:0,orbitRadius:420,perspective:100,cornerRadius:0,fade:0,offsetX:0,offsetY:0,easing:'sweep' })
 const resetGlobe = () => emit('update:modelValue', { ...props.modelValue, visibleCount:40,orbitRadius:355,globeMinScale:10,globeMaxScale:20,distance:1000,perspective:100,fade:0,cornerRadius:0,offsetX:0,offsetY:0,rotationX:0,rotationY:0,rotationZ:0,cycles:1,secondsPerSlide:7,cycleDegrees:360,delaySeconds:0,globeStops:8,reverse:false,globeAxis:'y',globeMotion:'continuous',globeShuffle:false,globeFaceCamera:true,globeShowBackfaces:true,globeFlipImage:false,planeSize:1000,easing:'linear' })
 const resetScale = () => emit('update:modelValue', { ...props.modelValue, visibleCount:10,secondsPerSlide:2,planeSize:100,cornerRadius:0,spin:0,staggerSeconds:.4,scaleStyle:'bloom',growFrom:'center',imageFit:'fit',offsetX:0,offsetY:0 })
 const resetStories = () => emit('update:modelValue', { ...props.modelValue, visibleCount:8,cycles:1,loop:true,secondsPerSlide:13.3,delaySeconds:.33,direction:'right',cornerRadius:6,offsetX:0,offsetY:0,storiesBigScale:115,storiesBigDrift:40,storiesThumbSize:85,storiesThumbAspect:'1:1',storiesContainerOpacity:40,storiesContainerBlur:60,storiesSelectorPad:5,storiesSelectorStroke:2,storiesDimAmount:20,easing:'smooth' })
+const resetSwipeDepth = () => emit('update:modelValue', { ...props.modelValue, visibleCount:6,cycles:1,loop:true,direction:'left',secondsPerSlide:6,planeSize:520,gap:90,distance:85,perspective:100,cornerRadius:0,fade:30,tilt:7,offsetX:0,offsetY:0,easing:'sweep',scaleCenter:false,solo:false })
 const resetFlicker = () => emit('update:modelValue', { ...props.modelValue, visibleCount:6,delaySeconds:0,cycles:1,flickerEffect:'off',flickerPacing:'equal',offsetX:0,offsetY:0,driftDirection:'up',secondsPerSlide:6,scaleDirection:'forward',planeSize:100,driftAmount:30,scaleAmount:30,cornerRadius:0,fit:'cover',easing:'smooth' })
 </script>
 
@@ -35,9 +41,9 @@ const resetFlicker = () => emit('update:modelValue', { ...props.modelValue, visi
     <div class="video-panel-scroll">
     <header><h2 class="filter-overlay-title">Scene</h2></header>
     <fieldset><legend>Loop</legend><div class="video-choice-row"><button type="button" :aria-pressed="modelValue.loop" @click="set('loop',true)">On</button><button type="button" :aria-pressed="!modelValue.loop" @click="set('loop',false)">Off</button></div></fieldset>
-    <fieldset v-if="template?.renderer === 'webgl' && !isCarousel3d && !isOrbit && !isGlobe && !isScale"><legend>Direction</legend><div class="video-choice-row"><button v-for="value in ['up','down','left','right']" :key="value" type="button" :aria-pressed="modelValue.direction === value" @click="set('direction', value as VideoComposerSettings['direction'])">{{ value }}</button></div></fieldset>
+    <fieldset v-if="template?.renderer === 'webgl' && !isCarousel3d && !isOrbit && !isGlobe && !isScale && !isSwipeDepth"><legend>Direction</legend><div class="video-choice-row"><button v-for="option in directionOptions" :key="option.value" type="button" :aria-pressed="modelValue.direction === option.value" @click="set('direction', option.value)">{{ option.label }}</button></div></fieldset>
     <template v-if="isStories">
-      <fieldset><legend>Direction</legend><div class="video-choice-row"><button v-for="value in ['right','left','down','up'] as const" :key="value" type="button" :aria-pressed="modelValue.direction === value" @click="set('direction',value)">{{ value }}</button></div></fieldset>
+      <fieldset><legend>Direction</legend><div class="video-choice-row"><button v-for="option in [...directionOptions].reverse()" :key="option.value" type="button" :aria-pressed="modelValue.direction === option.value" @click="set('direction',option.value)">{{ option.label }}</button></div></fieldset>
       <fieldset><legend>Thumbnail aspect</legend><div class="video-choice-row"><button v-for="value in ['1:1','3:4','4:3'] as const" :key="value" type="button" :aria-pressed="modelValue.storiesThumbAspect === value" @click="set('storiesThumbAspect',value)">{{ value }}</button></div></fieldset>
       <label><span>Count <output>{{ modelValue.visibleCount }}</output></span><VideoRangeInput min="3" max="12" :value="modelValue.visibleCount" @input="set('visibleCount',Number(($event.target as HTMLInputElement).value))" /></label>
       <div class="video-control-pair"><label><span>Active size <output>{{ modelValue.storiesBigScale }}%</output></span><VideoRangeInput min="100" max="200" :value="modelValue.storiesBigScale" @input="set('storiesBigScale',Number(($event.target as HTMLInputElement).value))" /></label><label><span>Active drift <output>{{ modelValue.storiesBigDrift }}</output></span><VideoRangeInput min="0" max="200" :value="modelValue.storiesBigDrift" @input="set('storiesBigDrift',Number(($event.target as HTMLInputElement).value))" /></label></div>
@@ -53,9 +59,9 @@ const resetFlicker = () => emit('update:modelValue', { ...props.modelValue, visi
     <template v-if="isFlicker">
       <fieldset><legend>Image fit</legend><div class="video-choice-row"><button type="button" :aria-pressed="modelValue.fit === 'contain'" @click="set('fit','contain')">Fit</button><button type="button" :aria-pressed="modelValue.fit === 'cover'" @click="set('fit','cover')">Fill</button></div></fieldset>
       <fieldset><legend>Pacing</legend><div class="video-choice-row"><button type="button" :aria-pressed="modelValue.flickerPacing === 'equal'" @click="set('flickerPacing','equal')">Equal</button><button type="button" :aria-pressed="modelValue.flickerPacing === 'eased'" @click="set('flickerPacing','eased')">Eased</button></div></fieldset>
-      <fieldset><legend>Effect</legend><div class="video-choice-row"><button v-for="value in ['off','scale','drift'] as const" :key="value" type="button" :aria-pressed="modelValue.flickerEffect === value" @click="set('flickerEffect',value)">{{ value }}</button></div></fieldset>
+      <fieldset><legend>Effect</legend><div class="video-choice-row"><button v-for="value in ['off','scale','drift'] as const" :key="value" type="button" :aria-pressed="modelValue.flickerEffect === value" @click="set('flickerEffect',value)">{{ optionLabel(value) }}</button></div></fieldset>
       <fieldset v-if="modelValue.flickerEffect === 'scale'"><legend>Scale direction</legend><div class="video-choice-row"><button type="button" :aria-pressed="modelValue.scaleDirection === 'forward'" @click="set('scaleDirection','forward')">Forward</button><button type="button" :aria-pressed="modelValue.scaleDirection === 'reverse'" @click="set('scaleDirection','reverse')">Reverse</button></div></fieldset>
-      <fieldset v-if="modelValue.flickerEffect === 'drift'"><legend>Drift direction</legend><div class="video-choice-row"><button v-for="value in ['up','down','left','right'] as const" :key="value" type="button" :aria-pressed="modelValue.driftDirection === value" @click="set('driftDirection',value)">{{ value }}</button></div></fieldset>
+      <fieldset v-if="modelValue.flickerEffect === 'drift'"><legend>Drift direction</legend><div class="video-choice-row"><button v-for="option in directionOptions" :key="option.value" type="button" :aria-pressed="modelValue.driftDirection === option.value" @click="set('driftDirection',option.value)">{{ option.label }}</button></div></fieldset>
       <label><span>Count <output>{{ modelValue.visibleCount }}</output></span><VideoRangeInput min="2" max="30" :value="modelValue.visibleCount" @input="set('visibleCount',Number(($event.target as HTMLInputElement).value))" /></label>
       <label><span>Plane size <output>{{ modelValue.planeSize }}%</output></span><VideoRangeInput min="10" max="200" :value="modelValue.planeSize" @input="set('planeSize',Number(($event.target as HTMLInputElement).value))" /></label>
       <label v-if="modelValue.flickerEffect === 'scale'"><span>Scale amount <output>{{ modelValue.scaleAmount }}%</output></span><VideoRangeInput min="0" max="100" :value="modelValue.scaleAmount" @input="set('scaleAmount',Number(($event.target as HTMLInputElement).value))" /></label>
@@ -66,8 +72,21 @@ const resetFlicker = () => emit('update:modelValue', { ...props.modelValue, visi
       <fieldset><legend>Easing</legend><div class="video-choice-row"><button v-for="option in easings" :key="option.value" type="button" :aria-pressed="modelValue.easing === option.value" @click="set('easing',option.value)">{{ option.label }}</button></div></fieldset>
       <button class="video-reset" type="button" @click="resetFlicker">Reset One Shot values</button>
     </template>
-    <template v-if="template?.renderer === 'webgl'">
-      <template v-if="isTest">
+    <template v-if="template?.renderer === 'webgl' || isScale">
+      <template v-if="isSwipeDepth">
+        <fieldset><legend>Direction</legend><div class="video-choice-row"><button v-for="option in directionOptions" :key="option.value" type="button" :aria-pressed="modelValue.direction === option.value" @click="set('direction',option.value)">{{ option.label }}</button></div></fieldset>
+        <label><span>Count <output>{{ modelValue.visibleCount }}</output></span><VideoRangeInput min="2" max="20" :value="modelValue.visibleCount" @input="set('visibleCount',Number(($event.target as HTMLInputElement).value))" /></label>
+        <label><span>Plane size <output>{{ modelValue.planeSize }} px</output></span><VideoRangeInput min="100" max="1000" step="10" :value="modelValue.planeSize" @input="set('planeSize',Number(($event.target as HTMLInputElement).value))" /></label>
+        <div class="video-control-pair"><label><span>Row spacing <output>{{ modelValue.gap }}</output></span><VideoRangeInput min="0" max="400" step="5" :value="modelValue.gap" @input="set('gap',Number(($event.target as HTMLInputElement).value))" /></label><label><span>Depth spacing <output>{{ modelValue.distance }}</output></span><VideoRangeInput min="10" max="300" step="5" :value="modelValue.distance" @input="set('distance',Number(($event.target as HTMLInputElement).value))" /></label></div>
+        <label><span>Swipe rotation <output>{{ modelValue.tilt }}°</output></span><VideoRangeInput min="-45" max="45" :value="modelValue.tilt" @input="set('tilt',Number(($event.target as HTMLInputElement).value))" /></label>
+        <label><span>Depth fade <output>{{ modelValue.fade }}%</output></span><VideoRangeInput min="0" max="100" :value="modelValue.fade" @input="set('fade',Number(($event.target as HTMLInputElement).value))" /></label>
+        <label><span>Corner radius <output>{{ modelValue.cornerRadius }} px</output></span><VideoRangeInput min="0" max="200" :value="modelValue.cornerRadius" @input="set('cornerRadius',Number(($event.target as HTMLInputElement).value))" /></label>
+        <div class="video-control-pair"><label><span>Offset X <output>{{ modelValue.offsetX }}</output></span><VideoRangeInput min="-100" max="100" step="0.5" :value="modelValue.offsetX" @input="set('offsetX',Number(($event.target as HTMLInputElement).value))" /></label><label><span>Offset Y <output>{{ modelValue.offsetY }}</output></span><VideoRangeInput min="-100" max="100" step="0.5" :value="modelValue.offsetY" @input="set('offsetY',Number(($event.target as HTMLInputElement).value))" /></label></div>
+        <fieldset><legend>Animation</legend><div class="video-control-pair"><label><span>Cycles <output>{{ modelValue.cycles }}</output></span><VideoRangeInput min="1" max="6" :value="modelValue.cycles" @input="set('cycles',Number(($event.target as HTMLInputElement).value))" /></label><label><span>Duration <output>{{ modelValue.secondsPerSlide.toFixed(1) }}s</output></span><VideoRangeInput min="1" max="30" step="0.5" :value="modelValue.secondsPerSlide" @input="set('secondsPerSlide',Number(($event.target as HTMLInputElement).value))" /></label></div></fieldset>
+        <fieldset><legend>Easing</legend><div class="video-choice-row"><button v-for="option in easings" :key="option.value" type="button" :aria-pressed="modelValue.easing === option.value" @click="set('easing',option.value)">{{ option.label }}</button></div></fieldset>
+        <button class="video-reset" type="button" @click="resetSwipeDepth">Reset swipe depth values</button>
+      </template>
+      <template v-else-if="isTest">
         <fieldset><legend>Image fit</legend><div class="video-choice-row"><button type="button" :aria-pressed="modelValue.fit === 'contain'" @click="set('fit','contain')">Fit</button><button type="button" :aria-pressed="modelValue.fit === 'cover'" @click="set('fit','cover')">Fill</button></div></fieldset>
         <fieldset><legend>Material</legend><div class="video-choice-row"><button type="button" :aria-pressed="modelValue.flipMaterial === 'flat'" @click="set('flipMaterial','flat')">Flat</button><button type="button" :aria-pressed="modelValue.flipMaterial === 'lit'" @click="set('flipMaterial','lit')">Lit</button></div></fieldset>
         <div v-if="modelValue.flipMaterial === 'lit'" class="video-control-pair"><label><span>Light <output>{{ modelValue.flipLightIntensity }}%</output></span><VideoRangeInput min="0" max="200" :value="modelValue.flipLightIntensity" @input="set('flipLightIntensity',Number(($event.target as HTMLInputElement).value))" /></label><label><span>Roughness <output>{{ modelValue.flipRoughness }}%</output></span><VideoRangeInput min="0" max="100" :value="modelValue.flipRoughness" @input="set('flipRoughness',Number(($event.target as HTMLInputElement).value))" /></label></div>
@@ -84,7 +103,7 @@ const resetFlicker = () => emit('update:modelValue', { ...props.modelValue, visi
       </template>
       <template v-else-if="isScale">
         <fieldset><legend>Scale style</legend><div class="video-choice-row"><button type="button" :aria-pressed="modelValue.scaleStyle === 'bloom'" @click="set('scaleStyle','bloom')">Bloom</button><button type="button" :aria-pressed="modelValue.scaleStyle === 'recede'" @click="set('scaleStyle','recede')">Recede</button></div></fieldset>
-        <fieldset><legend>Grow from</legend><div class="video-choice-row"><button v-for="value in ['center','top','bottom','left','right'] as const" :key="value" type="button" :aria-pressed="modelValue.growFrom === value" @click="set('growFrom',value)">{{ value }}</button></div></fieldset>
+        <fieldset><legend>Grow from</legend><div class="video-choice-row"><button v-for="value in ['center','top','bottom','left','right'] as const" :key="value" type="button" :aria-pressed="modelValue.growFrom === value" @click="set('growFrom',value)">{{ optionLabel(value) }}</button></div></fieldset>
         <fieldset><legend>Image fit</legend><div class="video-choice-row"><button type="button" :aria-pressed="modelValue.imageFit === 'fit'" @click="set('imageFit','fit')">Fit</button><button type="button" :aria-pressed="modelValue.imageFit === 'fill'" @click="set('imageFit','fill')">Fill</button></div></fieldset>
         <label><span>Count <output>{{ modelValue.visibleCount }}</output></span><VideoRangeInput min="2" max="20" :value="modelValue.visibleCount" @input="set('visibleCount',Number(($event.target as HTMLInputElement).value))" /></label>
         <label><span>Plane size <output>{{ modelValue.planeSize }}%</output></span><VideoRangeInput min="5" max="400" :value="modelValue.planeSize" @input="set('planeSize',Number(($event.target as HTMLInputElement).value))" /></label>
@@ -96,7 +115,7 @@ const resetFlicker = () => emit('update:modelValue', { ...props.modelValue, visi
       </template>
       <template v-else-if="isGlobe">
         <fieldset><legend>Direction</legend><div class="video-choice-row"><button type="button" :aria-pressed="!modelValue.reverse" @click="set('reverse',false)">Forward</button><button type="button" :aria-pressed="modelValue.reverse" @click="set('reverse',true)">Reverse</button></div></fieldset>
-        <fieldset><legend>Axis</legend><div class="video-choice-row"><button v-for="value in ['x','y','z'] as const" :key="value" type="button" :aria-pressed="modelValue.globeAxis === value" @click="set('globeAxis',value)">{{ value.toUpperCase() }}</button></div></fieldset>
+        <fieldset><legend>Axis</legend><div class="video-choice-row video-axis-row"><button v-for="value in ['x','y','z'] as const" :key="value" type="button" :aria-pressed="modelValue.globeAxis === value" @click="set('globeAxis',value)">{{ value.toUpperCase() }}</button></div></fieldset>
         <fieldset><legend>Motion</legend><div class="video-choice-row"><button type="button" :aria-pressed="modelValue.globeMotion === 'continuous'" @click="set('globeMotion','continuous')">Continuous</button><button type="button" :aria-pressed="modelValue.globeMotion === 'stepped'" @click="set('globeMotion','stepped')">Stepped</button></div></fieldset>
         <fieldset><legend>Shuffle</legend><div class="video-choice-row"><button type="button" :aria-pressed="!modelValue.globeShuffle" @click="set('globeShuffle',false)">Off</button><button type="button" :aria-pressed="modelValue.globeShuffle" @click="set('globeShuffle',true)">On</button></div></fieldset>
         <label><span>Count <output>{{ modelValue.visibleCount }}</output></span><VideoRangeInput min="4" max="60" :value="modelValue.visibleCount" @input="set('visibleCount',Number(($event.target as HTMLInputElement).value))" /></label>
@@ -164,7 +183,7 @@ const resetFlicker = () => emit('update:modelValue', { ...props.modelValue, visi
       <button class="video-reset" type="button" @click="resetCarousel">Reset carousel values</button>
       </template>
     </template>
-    <fieldset v-if="template?.renderer !== 'webgl' && !isFlicker && !isStories"><legend>Transition</legend><div class="video-choice-row"><button v-for="value in ['cut','fade']" :key="value" type="button" :aria-pressed="modelValue.transition === value" @click="set('transition', value as 'cut'|'fade')">{{ value }}</button></div></fieldset>
+    <fieldset v-if="template?.renderer !== 'webgl' && !isFlicker && !isStories && !isScale"><legend>Transition</legend><div class="video-choice-row"><button v-for="value in ['cut','fade']" :key="value" type="button" :aria-pressed="modelValue.transition === value" @click="set('transition', value as 'cut'|'fade')">{{ optionLabel(value) }}</button></div></fieldset>
     </div>
   </section>
 </template>

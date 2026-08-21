@@ -14,6 +14,7 @@ const assetVisual = ref<HTMLElement>()
 const assetMore = ref<HTMLElement>()
 const assetMoreTrigger = ref<HTMLButtonElement>()
 const assetMoreMenu = ref<HTMLElement>()
+const assetTitleInput = ref<HTMLTextAreaElement>()
 const moreOpen = ref(false)
 const { data, error, refresh } = await useLazyFetch<{ data: { asset: AssetDetail } }>(() => `/api/assets/${props.assetId}`)
 const { data: previewData, execute: loadFullPreview } = await useLazyFetch<{ data: { id: string; url: string } }>(() => `/api/assets/${props.assetId}/preview`, { immediate: false })
@@ -140,6 +141,13 @@ const resetEditor = () => {
   contentType.value = asset.value.content_type ?? ''
 }
 watch(asset, resetEditor, { immediate: true })
+const resizeTitleInput = () => {
+  const input = assetTitleInput.value
+  if (!input) return
+  input.style.height = '0'
+  input.style.height = `${input.scrollHeight}px`
+}
+watch(title, () => void nextTick(resizeTitleInput), { flush: 'post' })
 const lockPageScroll = () => {
   if (scrollLocked) return
   previousBodyOverflow = document.body.style.overflow
@@ -161,7 +169,7 @@ onMounted(() => {
   lockPageScroll()
   dialog.value?.showModal()
   document.addEventListener('pointerdown', handleMoreMenuPointerDown)
-  if (!props.previewUrl || !isMobile.value) void loadFullPreview()
+  void loadFullPreview()
 })
 onBeforeUnmount(() => {
   clearTimeout(closeTimer)
@@ -455,9 +463,9 @@ watch(() => props.assetId, id => {
                 @click="cancelEditing">Cancel</button></div>
           </form>
           <template v-else>
-            <h1><textarea v-if="canEdit" v-model="title" class="asset-title-input" rows="1" maxlength="200"
+            <h1><textarea v-if="canEdit" ref="assetTitleInput" v-model="title" class="asset-title-input" rows="1" maxlength="200"
                 aria-label="Asset name" :disabled="titleSaving" @change="saveTitle"
-                @keydown="handleTitleKeydown" /><span v-else>{{ asset.title }}</span></h1>
+                @input="resizeTitleInput" @keydown="handleTitleKeydown" /><span v-else>{{ asset.title }}</span></h1>
             <p v-if="asset.description" class="description">{{ asset.description }}</p>
           </template>
           <div v-if="!editing" class="primary-actions"><button v-if="canOpenBoardPicker"
@@ -602,9 +610,7 @@ watch(() => props.assetId, id => {
   z-index: 0;
   inset: 0;
   pointer-events: none;
-  background: rgb(255 255 255 / .72);
-  backdrop-filter: blur(var(--filter-overlay-blur));
-  -webkit-backdrop-filter: blur(var(--filter-overlay-blur))
+  background: transparent
 }
 
 .overlay-content {
@@ -613,9 +619,9 @@ watch(() => props.assetId, id => {
 }
 
 .asset-dialog::backdrop {
-  background: transparent;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  background: rgb(255 255 255 / .72);
+  backdrop-filter: blur(var(--filter-overlay-blur));
+  -webkit-backdrop-filter: blur(var(--filter-overlay-blur));
   transition-property: background-color, backdrop-filter;
   transition-duration: .2s;
   transition-timing-function: ease-out
@@ -873,6 +879,8 @@ h1 {
   font-weight: inherit;
   letter-spacing: inherit;
   line-height: inherit;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
   field-sizing: content;
 }
 
@@ -1395,9 +1403,7 @@ li span {
   }
 
   .asset-dialog::before {
-    background: rgb(255 255 255 / .72);
-    backdrop-filter: blur(var(--filter-overlay-blur));
-    -webkit-backdrop-filter: blur(var(--filter-overlay-blur))
+    background: transparent
   }
 
   .overlay-content {

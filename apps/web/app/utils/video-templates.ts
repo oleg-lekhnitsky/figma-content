@@ -97,7 +97,7 @@ const scalePresetDefinitions: Array<readonly [string, Partial<VideoComposerSetti
   ['03',{ spin:-45,scaleStyle:'bloom',planeSize:70 },[.16,1,.3,1]],
   ['04',{ staggerSeconds:.6,secondsPerSlide:4,growFrom:'bottom',scaleStyle:'bloom' },[.87,0,.13,1]]
 ]
-const scalePresets: VideoTemplate[] = scalePresetDefinitions.map(([number,settings,bezier],index) => ({ id:`scale-${number}`,name:`Scale ${number}`,description:'Editable scale preset.',renderer:'webgl',collection:'scale',thumbnail:scaleThumbs[index]!,bezier,preset:{...scaleDefaults,...settings} }))
+const scalePresets: VideoTemplate[] = scalePresetDefinitions.map(([number,settings,bezier],index) => ({ id:`scale-${number}`,name:`Scale ${number}`,description:'Editable scale preset.',renderer:'canvas-2d',collection:'scale',thumbnail:scaleThumbs[index]!,bezier,preset:{...scaleDefaults,...settings} }))
 
 const storiesDefaults: Partial<VideoComposerSettings> = { visibleCount:8,cycles:1,loop:true,secondsPerSlide:13.3,delaySeconds:.33,direction:'right',cornerRadius:6,offsetX:0,offsetY:0,storiesBigScale:115,storiesBigDrift:40,storiesThumbSize:85,storiesThumbAspect:'1:1',storiesContainerOpacity:40,storiesContainerBlur:60,storiesSelectorPad:5,storiesSelectorStroke:2,storiesDimAmount:20,easing:'smooth' }
 const storiesPresetDefinitions: Array<readonly [string, Partial<VideoComposerSettings>, readonly [number,number,number,number]]> = [
@@ -129,6 +129,11 @@ const testPresets: VideoTemplate[] = [
   { id:'test-02',name:'Grid Flip 01',description:'Staggered WebGL flip grid.',renderer:'webgl',collection:'test',thumbnail:'linear-gradient(90deg,transparent 7%,#d8d8d8 8% 47%,transparent 48% 52%,#aaa 53% 92%,transparent 93%),linear-gradient(0deg,transparent 49%,#090909 50% 52%,transparent 53%),#090909',preset:{...testDefaults,visibleCount:12,flipGridColumns:2,flipGridRows:2,flipGridGap:5,flipStagger:.12,easing:'sweep'} }
 ]
 
+const swipeDepthDefaults: Partial<VideoComposerSettings> = { visibleCount:6,cycles:1,loop:true,direction:'left',secondsPerSlide:6,planeSize:520,gap:90,distance:85,perspective:100,cornerRadius:0,fade:30,tilt:7,offsetX:0,offsetY:0,easing:'sweep',scaleCenter:false,solo:false }
+const swipeDepthPresets: VideoTemplate[] = [
+  { id:'swipe-depth-01',name:'Swipe Depth 01',description:'WebGL depth row with sequential swipe transitions.',renderer:'webgl',collection:'swipe-depth',thumbnail:'linear-gradient(145deg,transparent 18%,#777 19% 35%,transparent 36% 40%,#aaa 41% 61%,transparent 62% 66%,#d8d8d8 67% 88%,transparent 89%),#090909',bezier:[.76,0,.24,1],preset:swipeDepthDefaults }
+]
+
 export const videoTemplates: VideoTemplate[] = [
   ...flickerPresets,
   ...carouselPresets,
@@ -137,5 +142,6 @@ export const videoTemplates: VideoTemplate[] = [
   ...globePresets,
   ...scalePresets,
   ...storiesPresets,
-  ...testPresets
+  ...testPresets,
+  ...swipeDepthPresets
 ]

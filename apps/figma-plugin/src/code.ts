@@ -15,14 +15,12 @@ const findVideoHash = (node: ExportableNode) => {
   return null
 }
 
-const exportWithoutFrameMask = async (node: ExportableNode, settings: PluginExportSettings) => {
+const exportWithoutFrameRadius = async (node: ExportableNode, settings: PluginExportSettings) => {
   if (settings.format === 'MP4') throw new Error('Embedded videos are downloaded through the library server.')
   const clone = node.clone()
   try {
-    // Export the selected frame as a flat canvas: its children may overflow and
-    // the frame itself must not round the uploaded image. The source node stays
-    // untouched, so the user never sees its design change during export.
-    clone.clipsContent = false
+    // Remove only the frame radius while preserving its clipping behavior. The
+    // source node stays untouched, so the user never sees its design change.
     clone.cornerRadius = 0
     clone.x = -100000 - clone.width
     clone.y = -100000 - clone.height
@@ -54,7 +52,6 @@ const describe = async (node: ExportableNode): Promise<SelectedFrame> => {
   const clone = node.clone()
   let preview: Uint8Array
   try {
-    clone.clipsContent = false
     clone.cornerRadius = 0
     clone.x = -100000 - clone.width
     clone.y = -100000 - clone.height
@@ -92,7 +89,7 @@ figma.ui.onmessage = async (message: UiMessage) => {
     const node = await figma.getNodeByIdAsync(message.nodeId)
     if (!node || (node.type !== 'FRAME' && node.type !== 'COMPONENT' && node.type !== 'INSTANCE')) return figma.ui.postMessage({ type: 'export-result', requestId: message.requestId, nodeId: message.nodeId, error: 'This layer is no longer available.' } satisfies ControllerMessage)
     try {
-      const bytes = await exportWithoutFrameMask(node, message.settings)
+      const bytes = await exportWithoutFrameRadius(node, message.settings)
       figma.ui.postMessage({ type: 'export-result', requestId: message.requestId, nodeId: message.nodeId, bytes } satisfies ControllerMessage)
     } catch (error) {
       const detail = typeof error === 'object' && error && 'message' in error ? String(error.message) : String(error)

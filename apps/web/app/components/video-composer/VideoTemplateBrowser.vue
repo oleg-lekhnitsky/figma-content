@@ -6,8 +6,8 @@ import VideoPresetPreview from '~/components/video-composer/VideoPresetPreview.v
 
 const props = defineProps<{ templates: VideoTemplate[]; modelValue: string; assets: AssetMasonryItem[] }>()
 defineEmits<{ 'update:modelValue': [value: string] }>()
-type Folder = 'carousel' | 'carousel-3d' | 'orbit' | 'globe' | 'scale' | 'stories' | 'flicker' | 'test'
-const folders: Array<{ id: Folder; label: string }> = [{ id: 'carousel', label: 'Carousel' }, { id: 'carousel-3d', label: 'Carousel 3D' }, { id: 'test', label: 'Flip Flop' }, { id: 'globe', label: 'Globe' }, { id: 'flicker', label: 'One Shot' }, { id: 'orbit', label: 'Orbit' }, { id: 'scale', label: 'Scale' }, { id: 'stories', label: 'Stories' }]
+type Folder = 'carousel' | 'carousel-3d' | 'orbit' | 'globe' | 'scale' | 'stories' | 'flicker' | 'test' | 'swipe-depth'
+const folders: Array<{ id: Folder; label: string }> = [{ id: 'carousel', label: 'Carousel' }, { id: 'carousel-3d', label: 'Carousel 3D' }, { id: 'test', label: 'Flip Flop' }, { id: 'globe', label: 'Globe' }, { id: 'flicker', label: 'One Shot' }, { id: 'orbit', label: 'Orbit' }, { id: 'scale', label: 'Scale' }, { id: 'stories', label: 'Stories' }, { id: 'swipe-depth', label: 'Swipe Depth' }]
 const openFolder = ref<Folder | null>(null)
 const folderTemplates = (folder: Folder) => props.templates.filter(item => item.collection === folder)
 const visibleTemplates = computed(() => openFolder.value ? folderTemplates(openFolder.value) : [])

@@ -49,6 +49,8 @@ const emit = defineEmits<{
 }>()
 const inheritedViewSettings = inject<Ref<BoardViewSettings> | undefined>('boardViewSettings', undefined)
 const effectiveViewSettings = computed(() => props.viewSettings ?? inheritedViewSettings?.value)
+const previewSizes = computed(() => props.layout === 'column' ? 'min(760px, 100vw)' : '(max-width: 900px) 33vw, 320px')
+const preview1xMedia = computed(() => props.layout === 'column' ? '(max-width: 520px)' : '(max-width: 520px), (min-width: 901px)')
 
 const route = useRoute()
 const router = useRouter()
@@ -65,6 +67,8 @@ const pointerDragging = ref(false)
 let resizeObserver: ResizeObserver | undefined
 let measureFrame = 0
 let revealFrame = 0
+let mediaRevealFrame = 0
+const pendingLoadedImages = new Set<string>()
 let touchPointerId: number | undefined
 let activeViewTransition: { finished: Promise<void>; skipTransition?: () => void } | undefined
 const assetLink = (id: string): RouteLocationRaw => ({ path: '/library', query: { ...route.query, asset: id } })
@@ -212,16 +216,11 @@ const measureCards = () => {
 const syncLoadedImages = () => {
   const root = masonry.value
   if (!root) return
-  let changed = false
   for (const media of root.querySelectorAll<HTMLImageElement | HTMLVideoElement>('.preview :is(img,video)[data-asset-id]')) {
     const id = media.dataset.assetId
     const ready = media instanceof HTMLVideoElement ? media.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA : media.complete && media.naturalWidth > 0
-    if (id && ready && !loadedImages.has(id)) {
-      loadedImages.add(id)
-      changed = true
-    }
+    if (id && ready) markImageLoaded(id)
   }
-  if (changed) nextTick(measureCards)
 }
 const observeCards = () => {
   resizeObserver?.disconnect()
@@ -233,8 +232,17 @@ const observeCards = () => {
   measureCards()
 }
 const markImageLoaded = (id: string) => {
-  loadedImages.add(id)
-  nextTick(measureCards)
+  if (loadedImages.has(id) || pendingLoadedImages.has(id)) return
+  pendingLoadedImages.add(id)
+  if (mediaRevealFrame) return
+  mediaRevealFrame = requestAnimationFrame(() => {
+    mediaRevealFrame = requestAnimationFrame(() => {
+      for (const loadedId of pendingLoadedImages) loadedImages.add(loadedId)
+      pendingLoadedImages.clear()
+      mediaRevealFrame = 0
+      nextTick(measureCards)
+    })
+  })
 }
 const projectAndTags = (asset: AssetMasonryItem) => {
   const tags = (asset.asset_tags ?? []).slice(0, 2).map(link => link.tags?.name).filter(Boolean)
@@ -259,6 +267,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   cancelAnimationFrame(measureFrame)
   cancelAnimationFrame(revealFrame)
+  cancelAnimationFrame(mediaRevealFrame)
   activeViewTransition?.skipTransition?.()
   resizeObserver?.disconnect()
 })
@@ -269,15 +278,16 @@ onBeforeUnmount(() => {
     <TransitionGroup name="card-list" :css="false">
     <article
       v-for="(asset, index) in renderedAssets" :key="asset.id" class="asset-card"
-      :class="{ 'is-priority': index < 7, 'is-selected': isSelected(asset.id), 'is-dragging': draggedId === asset.id, 'is-pointer-dragging': pointerDragging && draggedId === asset.id, 'is-drop-target': dropIndex === index && draggedId !== asset.id }"
+      :class="{ 'is-priority': index < 7, 'is-loaded': loadedImages.has(asset.id), 'is-selected': isSelected(asset.id), 'is-dragging': draggedId === asset.id, 'is-pointer-dragging': pointerDragging && draggedId === asset.id, 'is-drop-target': dropIndex === index && draggedId !== asset.id }"
       :data-asset-id="asset.id"
+      :style="{ '--media-stagger': `${Math.min(index * 35, 280)}ms` }"
       @pointerdown="startMouseDrag($event, index)" @pointermove="movePointerDrag" @pointerup="finishPointerDrag"
       @pointercancel="cancelPointerDrag" @lostpointercapture="handlePointerCaptureLost">
       <div class="preview" :class="{ 'is-loading': !loadedImages.has(asset.id) }" :style="{ aspectRatio: `${asset.width} / ${asset.height}` }">
         <NuxtLink v-if="interactive" class="preview-link" :to="assetLink(asset.id)" :aria-label="`View ${asset.title}`" @click="openAsset($event, asset.id)">
-          <AssetMedia :class="{ 'is-loaded': loadedImages.has(asset.id) }" :data-asset-id="asset.id" :src="asset.previewUrl" :srcset="asset.preview2xUrl ? `${asset.previewUrl} 1x, ${asset.preview2xUrl} 2x` : undefined" :mime-type="asset.mime_type" :width="asset.width" :height="asset.height" :alt="`Preview of ${asset.title}`" :loading="index < 7 ? 'eager' : 'lazy'" :fetchpriority="index < 7 ? 'high' : 'auto'" @load="markImageLoaded(asset.id)" />
+          <AssetMedia :class="{ 'is-loaded': loadedImages.has(asset.id) }" :data-asset-id="asset.id" :src="asset.previewUrl" :srcset="asset.preview2xUrl ? `${asset.previewUrl} 640w, ${asset.preview2xUrl} 1280w` : undefined" :sizes="previewSizes" :single-resolution-media="preview1xMedia" :mime-type="asset.mime_type" :width="asset.width" :height="asset.height" :alt="`Preview of ${asset.title}`" :loading="index < 7 ? 'eager' : 'lazy'" :fetchpriority="index < 7 ? 'high' : 'auto'" @load="markImageLoaded(asset.id)" />
         </NuxtLink>
-        <AssetMedia v-else :class="{ 'is-loaded': loadedImages.has(asset.id) }" :data-asset-id="asset.id" :src="asset.previewUrl" :srcset="asset.preview2xUrl ? `${asset.previewUrl} 1x, ${asset.preview2xUrl} 2x` : undefined" :mime-type="asset.mime_type" :width="asset.width" :height="asset.height" :alt="asset.title" :loading="index < 7 ? 'eager' : 'lazy'" :fetchpriority="index < 7 ? 'high' : 'auto'" @load="markImageLoaded(asset.id)" />
+        <AssetMedia v-else :class="{ 'is-loaded': loadedImages.has(asset.id) }" :data-asset-id="asset.id" :src="asset.previewUrl" :srcset="asset.preview2xUrl ? `${asset.previewUrl} 640w, ${asset.preview2xUrl} 1280w` : undefined" :sizes="previewSizes" :single-resolution-media="preview1xMedia" :mime-type="asset.mime_type" :width="asset.width" :height="asset.height" :alt="asset.title" :loading="index < 7 ? 'eager' : 'lazy'" :fetchpriority="index < 7 ? 'high' : 'auto'" @load="markImageLoaded(asset.id)" />
         <div v-if="interactive && (asset.figma_url || canApprove)" class="card-quick-actions"><a v-if="asset.figma_url" class="figma-button" :href="asset.figma_url" target="_blank" rel="noopener noreferrer">Open in Figma</a><button v-if="canApprove" class="card-approval-toggle" type="button" :aria-pressed="asset.status === 'approved'" :aria-label="asset.status === 'approved' ? `Remove approval from ${asset.title}` : `Approve ${asset.title}`" :title="asset.status === 'approved' ? 'Remove approval' : 'Approve'" @click.stop="emit('toggleApproval', asset)"><Heart :size="16" :weight="asset.status === 'approved' ? 'Filled' : 'Outline'" aria-hidden="true" /></button></div>
         <div class="preview-actions"><slot name="previewActions" :asset="asset" /></div>
         <button v-if="selectable" class="selection-control" type="button" :class="{ active: isSelected(asset.id) }" :aria-label="`${isSelected(asset.id) ? 'Deselect' : 'Select'} ${asset.title}`" :aria-pressed="isSelected(asset.id)" @click="emit('toggleSelection', asset)" />
@@ -307,15 +317,16 @@ onBeforeUnmount(() => {
 .asset-masonry{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));column-gap:var(--space);align-items:start}.asset-masonry.custom-view:not(.column-layout){grid-template-columns:repeat(min(var(--board-columns,7),7),minmax(0,1fr));column-gap:var(--board-gap,var(--space))}.asset-masonry.is-masonry{grid-auto-flow:dense;grid-auto-rows:1px;row-gap:0}
 .asset-masonry.stable-columns .asset-card:nth-child(7n + 1){grid-column:1}.asset-masonry.stable-columns .asset-card:nth-child(7n + 2){grid-column:2}.asset-masonry.stable-columns .asset-card:nth-child(7n + 3){grid-column:3}.asset-masonry.stable-columns .asset-card:nth-child(7n + 4){grid-column:4}.asset-masonry.stable-columns .asset-card:nth-child(7n + 5){grid-column:5}.asset-masonry.stable-columns .asset-card:nth-child(7n + 6){grid-column:6}.asset-masonry.stable-columns .asset-card:nth-child(7n){grid-column:7}
 .asset-masonry.column-layout{--column-viewport-margin:clamp(24px,6vh,64px);width:min(760px,100%);margin-inline:auto;grid-template-columns:minmax(0,1fr);row-gap:0}.asset-masonry.column-layout .asset-card{padding-bottom:var(--section-gap)}.asset-masonry.column-layout .preview{height:auto;aspect-ratio:auto!important;overflow:visible;clip-path:none;background:transparent}.asset-masonry.column-layout .preview :is(img,video){width:auto;height:auto;max-width:100%;max-height:calc(100vh - var(--column-viewport-margin)*2);max-height:calc(100dvh - var(--column-viewport-margin)*2);margin-inline:auto;border-radius:var(--radius);object-fit:contain}.asset-masonry.column-layout .card-body{flex-direction:column;align-items:center;justify-content:center;text-align:center}
-.asset-card{position:relative;min-width:0;padding-bottom:calc(var(--space)*2);color:inherit;background:transparent}.asset-masonry.is-masonry .asset-card{grid-row-end:span var(--card-rows)}
+.asset-masonry.column-layout .preview :deep(.asset-media-picture img){width:auto;height:auto;max-width:100%;max-height:calc(100vh - var(--column-viewport-margin)*2);max-height:calc(100dvh - var(--column-viewport-margin)*2);margin-inline:auto;border-radius:var(--radius);object-fit:contain}
+.asset-card{position:relative;min-width:0;padding-bottom:calc(var(--space)*2);color:inherit;background:transparent;opacity:0;transform:translateY(16px);transition-property:opacity,transform;transition-duration:.18s,.22s;transition-delay:var(--media-stagger,0ms);transition-timing-function:ease-out,cubic-bezier(.2,0,0,1)}.asset-card.is-loaded{opacity:1;transform:translateY(0)}.asset-masonry.is-masonry .asset-card{grid-row-end:span var(--card-rows)}
 .asset-masonry.is-arranging .asset-card{cursor:grab}.asset-masonry.is-arranging .asset-card:active{cursor:grabbing}.asset-card.is-dragging{opacity:.35}.asset-card.is-pointer-dragging{pointer-events:none}.asset-card.is-drop-target .preview{box-shadow:0 0 0 3px var(--color-accent)}
 .asset-masonry.is-arranging .preview :is(img,video){-webkit-user-drag:none;-webkit-user-select:none;user-select:none}
 .asset-masonry.is-arranging .asset-card .preview{animation:arrange-wiggle 170ms ease-in-out infinite alternate;transform-origin:50% 45%}.asset-masonry.is-arranging .asset-card:nth-child(2n) .preview{animation-duration:190ms;animation-delay:-85ms;animation-direction:alternate-reverse}.asset-masonry.is-arranging .asset-card:nth-child(3n) .preview{animation-duration:155ms;animation-delay:-130ms}.asset-masonry.is-arranging .asset-card.is-dragging .preview{animation:none;rotate:0deg}@keyframes arrange-wiggle{from{rotate:-.7deg}to{rotate:.7deg}}
 .preview{position:relative;overflow:hidden;border-radius:var(--board-radius,var(--radius));background:transparent;clip-path:inset(0 round var(--board-radius,var(--radius)))}.preview.is-loading{background:var(--color-surface)}
 .asset-masonry.custom-view .card-status{display:none}.asset-masonry.hide-text .card-body{display:none}.asset-masonry.custom-view .asset-card{padding-bottom:var(--board-gap,var(--space))}
-.preview-link{display:block;width:100%;height:100%}.preview-link:hover,.card-body a:hover{opacity:1}
-.preview :is(img,video){display:block;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .12s ease-out}.preview :is(img,video).is-loaded{opacity:1}
-.asset-card.is-priority .preview :is(img,video){transition:none}
+.preview-link,.preview picture{display:block;width:100%;height:100%}.preview-link:hover,.card-body a:hover{opacity:1}
+.preview :is(img,video){display:block;width:100%;height:100%;object-fit:cover;opacity:1;transform:none}
+.preview :deep(.asset-media-picture img){display:block;width:100%;height:100%;object-fit:cover;opacity:1;transform:none}
 .card-body{display:flex;justify-content:space-between;align-items:flex-start;gap:var(--space);padding-top:8px}.card-body>div{min-width:0;flex:1}.card-body .card-title,.card-body :deep(p){margin:0;font:inherit;letter-spacing:inherit}.card-title{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.card-title a{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.card-body a{text-decoration:none}.card-body :deep(p),.card-meta{opacity:.3}.card-meta{white-space:nowrap}.card-status{text-transform:capitalize}
 .card-title-input{box-sizing:border-box;display:block;width:100%;min-width:0;overflow:hidden;padding:0;border:0;border-bottom:1px solid transparent;border-radius:0;color:inherit;background:transparent;font:inherit;font-weight:inherit;letter-spacing:inherit;line-height:inherit;text-overflow:ellipsis;white-space:nowrap}.card-title-input:focus{border-bottom-color:currentColor;outline:0;text-overflow:clip}.card-title-input:focus-visible{outline:0}
 .card-quick-actions{position:absolute;z-index:2;left:50%;bottom:10px;display:flex;align-items:center;gap:calc(var(--space)/4);visibility:hidden;transform:translate(-50%,8px) scale(.96);pointer-events:none;transition:transform 150ms cubic-bezier(.2,0,0,1);transition-behavior:allow-discrete}
@@ -341,5 +352,5 @@ onBeforeUnmount(() => {
 @media(max-width:900px){.asset-masonry.custom-view:not(.column-layout){grid-template-columns:repeat(clamp(1,calc(3 + var(--board-column-offset,0)),5),minmax(0,1fr))}}
 @media(max-width:520px){.asset-masonry.custom-view:not(.column-layout){grid-template-columns:repeat(clamp(1,calc(2 + var(--board-column-offset,0)),4),minmax(0,1fr))}}
 @media(hover:none),(pointer:coarse){.selection-control.selection-control{opacity:1}.card-quick-actions{display:none}.preview-actions{opacity:1;transform:none;pointer-events:auto}.touch-reorder-handle{display:grid}.preview-link,.preview-link:hover,.preview-link:active,.preview-link:focus{opacity:1}.preview :is(img,video){filter:none}}
-@media(prefers-reduced-motion:reduce){.asset-masonry.is-arranging .asset-card .preview{animation:none}.preview :is(img,video){transition:none}.figma-button{transition-duration:.01ms;transform:translate(-50%,0)}.preview-actions{transition:none}.figma-button:active{scale:1}}
+@media(prefers-reduced-motion:reduce){.asset-masonry.is-arranging .asset-card .preview{animation:none}.asset-card{opacity:1;transform:none;transition:none}.preview :is(img,video),.preview :deep(.asset-media-picture img){opacity:1;transform:none;transition:none}.figma-button{transition-duration:.01ms;transform:translate(-50%,0)}.preview-actions{transition:none}.figma-button:active{scale:1}}
 </style>

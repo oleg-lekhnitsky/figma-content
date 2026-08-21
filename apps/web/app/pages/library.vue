@@ -654,9 +654,9 @@ const toggleAssetApproval = async (asset: AssetCard) => {
 const selectedAssetId = computed(() => typeof route.query.asset === 'string' ? route.query.asset : '')
 const selectedAssetPreviewUrl = computed(() => {
   const selected = displayedAssets.value.find(asset => asset.id === selectedAssetId.value)
-  return selected?.preview2xUrl ?? selected?.previewUrl ?? ''
+  return selected?.previewUrl ?? ''
 })
-const assetPreviewUrls = computed(() => Object.fromEntries(displayedAssets.value.map(asset => [asset.id, asset.preview2xUrl ?? asset.previewUrl])))
+const assetPreviewUrls = computed(() => Object.fromEntries(displayedAssets.value.map(asset => [asset.id, asset.previewUrl])))
 const closeAsset = () => replaceLibraryQuery({ asset: undefined })
 const navigateAsset = (id: string) => router.replace({ path: '/library', query: { ...route.query, asset: id } })
 const handleAssetDeleted = (id: string) => {
@@ -1448,7 +1448,7 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: calc(var(--space)/2) var(--space);
-  margin-top: var(--space)
+  margin-top: calc(var(--space)/2);
 }
 
 .selected-board-meta {
@@ -2015,7 +2015,7 @@ button {
 
   .brand {
     min-width: 0;
-    overflow: hidden
+    overflow: visible
   }
 
   .index-toolbar nav {

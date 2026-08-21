@@ -45,8 +45,8 @@
   --filter-overlay-width: 30rem;
   --filter-overlay-row-height: clamp(3.625rem, 8vh, 5.125rem);
   --filter-overlay-margin: clamp(1.125rem, 3vw, 3.75rem);
-  --filter-overlay-padding: clamp(1.5rem, 4vw, 3.5rem);
-  --filter-overlay-radius: clamp(1.875rem, 5vw, 8.25rem);
+  --filter-overlay-padding: clamp(1.5rem, 3vw, 2.5rem);
+  --filter-overlay-radius: clamp(1.875rem, 4vw, 8.25rem);
   --filter-overlay-group-gap: clamp(1.375rem, 3vh, 2.125rem);
   --filter-option-gap: .375rem;
   --filter-option-height: 2.125rem;
@@ -73,7 +73,7 @@
   --filter-view-sheet-max-height-mobile: 60dvh;
   --filter-sheet-row-height-mobile: 3.75rem;
   --filter-sheet-group-gap-mobile: 1.375rem;
-  --filter-sheet-inline-padding-mobile: calc(var(--space) * 2.5);
+  --filter-sheet-inline-padding-mobile: calc(var(--space) * 2.0);
   --filter-sheet-content-padding-mobile: calc(var(--space) * 3.5) var(--filter-sheet-inline-padding-mobile) max(calc(var(--space) * 3) , env(safe-area-inset-bottom));
   --filter-sheet-content-bottom-mobile: max(calc(var(--space) * 3), env(safe-area-inset-bottom));
   --filter-sheet-handle-size: var(--control-height);
@@ -191,14 +191,14 @@ html { scrollbar-gutter: stable; }
   gap: calc(var(--space) / 4);
 }
 
-.asset-filter-controls > label,
+.asset-filter-controls > .filter-sheet-content > label,
 .filter-dropdown {
   position: relative;
   width: max-content;
   height: var(--filter-control-height);
 }
 
-.asset-filter-controls > label > input,
+.asset-filter-controls > .filter-sheet-content > label > input,
 .filter-dropdown-trigger.filter-dropdown-trigger {
   box-sizing: border-box;
   width: auto;
@@ -219,17 +219,17 @@ html { scrollbar-gutter: stable; }
 .filter-dropdown-trigger.filter-dropdown-trigger { position: relative; appearance: none; }
 button.filter-dropdown-trigger { display: flex; align-items: center; white-space: nowrap; }
 
-.asset-filter-controls > label > input:focus-visible,
+.asset-filter-controls > .filter-sheet-content > label > input:focus-visible,
 .filter-dropdown-trigger.filter-dropdown-trigger:focus-visible {
   outline: var(--filter-focus-width) solid var(--color-accent);
   outline-offset: var(--filter-focus-width);
   border: 0;
 }
 
-.asset-filter-controls > .search-field > input { padding-inline: calc(var(--space) / 2); }
+.asset-filter-controls > .filter-sheet-content > .search-field > input { padding-inline: calc(var(--space) / 2); }
 .asset-filter-controls input[type='search']::-webkit-search-cancel-button { appearance: none; }
 
-.asset-filter-controls > .date-field > span {
+.asset-filter-controls > .filter-sheet-content > .date-field > span {
   position: absolute;
   z-index: 1;
   top: var(--filter-date-caption-top);
@@ -239,7 +239,7 @@ button.filter-dropdown-trigger { display: flex; align-items: center; white-space
   pointer-events: none;
 }
 
-.asset-filter-controls > .date-field > input {
+.asset-filter-controls > .filter-sheet-content > .date-field > input {
   padding: var(--filter-date-input-padding-top) calc(var(--space) / 2) 0;
   appearance: auto;
 }
@@ -259,12 +259,12 @@ button.filter-dropdown-trigger { display: flex; align-items: center; white-space
 
 @media (max-width: 520px) {
   .asset-filter-controls { min-height: var(--filter-control-height-mobile); }
-  .asset-filter-controls > label,
-  .asset-filter-controls > label > input,
+  .asset-filter-controls > .filter-sheet-content > label,
+  .asset-filter-controls > .filter-sheet-content > label > input,
   .filter-dropdown,
   .filter-dropdown-trigger.filter-dropdown-trigger { height: var(--filter-control-height-mobile); min-height: var(--filter-control-height-mobile); }
-  .asset-filter-controls > .search-field { flex: 1 1 auto; }
-  .asset-filter-controls > .search-field > input { width: 100%; max-width: none; font-size: var(--font-size-body); }
+  .asset-filter-controls > .filter-sheet-content > .search-field { flex: 1 1 auto; }
+  .asset-filter-controls > .filter-sheet-content > .search-field > input { width: 100%; max-width: none; font-size: var(--font-size-body); }
 }
 
 /* OEM journal-inspired full-screen filter takeover. */
@@ -476,10 +476,11 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
   flex-direction: column;
   align-items: stretch;
   gap: 0;
-  margin: var(--filter-overlay-margin) auto;
+  align-self: center;
+  margin: 0 auto;
   padding: var(--filter-overlay-padding);
   overflow-x: hidden;
-  overflow-y: auto;
+  overflow-y: hidden;
   overscroll-behavior-y: contain;
   scrollbar-width: none;
   border-radius: var(--filter-overlay-radius);
@@ -490,14 +491,29 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
 
 .selection-panel--filter-overlay .asset-filter-controls::-webkit-scrollbar { display: none; }
 
+.selection-panel--filter-overlay .filter-sheet-content {
+  min-height: 0;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--filter-overlay-group-gap);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-width: none;
+}
+
+.selection-panel--filter-overlay .filter-sheet-content::-webkit-scrollbar { display: none; }
+
+.selection-panel--filter-overlay .filter-sheet-content > * { flex-shrink: 0; }
+
 @keyframes filter-panel-fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
 }
 
-.selection-panel--filter-overlay .asset-filter-controls--expanded {
-  gap: var(--filter-overlay-group-gap);
-}
+.selection-panel--filter-overlay .asset-filter-controls--expanded { gap: 0; }
 
 .selection-panel--filter-overlay .filter-overlay-title {
   margin: 0 0 calc(var(--filter-overlay-group-gap) / 2);
@@ -506,6 +522,7 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
   font-weight: 500;
   letter-spacing: -.04em;
   line-height: .95;
+  margin-bottom: 0;
 }
 
 .selection-panel--filter-overlay .filter-option-group {
@@ -546,6 +563,10 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
   line-height: 1;
   white-space: nowrap;
   opacity: 1;
+}
+
+.selection-panel--filter-overlay .video-axis-row > button {
+  min-width: var(--filter-option-height);
 }
 
 .selection-panel--filter-overlay :is(.filter-option-list, .video-choice-row) > button:is(:hover, :active, :focus),
@@ -627,8 +648,8 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
   font-weight: 500;
 }
 
-.selection-panel--filter-overlay .asset-filter-controls > label,
-.selection-panel--filter-overlay .asset-filter-controls > .filter-dropdown-trigger {
+.selection-panel--filter-overlay .asset-filter-controls > .filter-sheet-content > label,
+.selection-panel--filter-overlay .asset-filter-controls > .filter-sheet-content > .filter-dropdown-trigger {
   width: 100% !important;
   max-width: none !important;
   height: var(--filter-row-height);
@@ -641,9 +662,9 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
 
 .selection-panel--filter-overlay .multi-select-dialog:not([open]) { display: none !important; }
 
-.selection-panel--filter-overlay .asset-filter-controls > label > input,
-.selection-panel--filter-overlay .asset-filter-controls > label > select,
-.selection-panel--filter-overlay .asset-filter-controls > .filter-dropdown-trigger {
+.selection-panel--filter-overlay .asset-filter-controls > .filter-sheet-content > label > input,
+.selection-panel--filter-overlay .asset-filter-controls > .filter-sheet-content > label > select,
+.selection-panel--filter-overlay .asset-filter-controls > .filter-sheet-content > .filter-dropdown-trigger {
   width: 100% !important;
   max-width: none !important;
   height: 100%;
@@ -658,9 +679,9 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
   font-weight: 500;
 }
 
-.selection-panel--filter-overlay .asset-filter-controls > .search-field > input { padding-inline: 0; }
+.selection-panel--filter-overlay .asset-filter-controls > .filter-sheet-content > .search-field > input { padding-inline: 0; }
 
-.selection-panel--filter-overlay .asset-filter-controls > .date-field > span {
+.selection-panel--filter-overlay .asset-filter-controls > .filter-sheet-content > .date-field > span {
   top: var(--filter-overlay-date-caption-top);
   left: 0;
   color: var(--filter-overlay-caption-color);
@@ -669,7 +690,7 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
   text-transform: uppercase;
 }
 
-.selection-panel--filter-overlay .asset-filter-controls > .date-field > input { padding: var(--filter-overlay-date-input-padding-top) 0 0; }
+.selection-panel--filter-overlay .asset-filter-controls > .filter-sheet-content > .date-field > input { padding: var(--filter-overlay-date-input-padding-top) 0 0; }
 .selection-panel--filter-overlay .filter-dropdown-chevron { right: var(--filter-overlay-chevron-inset); }
 
 .selection-panel--filter-overlay > .filter-panel-toggle.is-expanded {
@@ -695,12 +716,13 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
 }
 
 .selection-panel--filter-overlay .filter-actions {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: var(--filter-action-gap);
   flex-wrap: nowrap;
   max-height: 0;
-  margin-top: calc(var(--filter-overlay-group-gap) * -1);
+  margin-top: 0;
   overflow: hidden;
   opacity: 0;
   visibility: hidden;
@@ -716,7 +738,7 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
 
 .selection-panel--filter-overlay .filter-actions.is-visible {
   max-height: var(--filter-action-height);
-  margin-top: 0;
+  margin-top: var(--filter-overlay-group-gap);
   opacity: 1;
   visibility: visible;
   transform: translateY(0);
@@ -763,10 +785,8 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
     height: var(--filter-sheet-height-mobile);
     max-height: var(--filter-sheet-height-mobile);
     margin: 0;
-    padding: var(--filter-sheet-content-padding-mobile);
-    overflow-x: hidden;
-    overflow-y: auto;
-    overscroll-behavior-y: contain;
+    padding: 0;
+    overflow: hidden;
     border-radius: calc(var(--radius-mobile) * 2) calc(var(--radius-mobile) * 2) 0 0;
     background: var(--filter-overlay-panel-background-mobile);
     backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
@@ -781,7 +801,26 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
     max-height: var(--filter-view-sheet-max-height-mobile);
   }
 
-  .selection-panel--filter-overlay .asset-filter-controls > :not(.filter-sheet-handle) {
+  .selection-panel--filter-overlay .filter-sheet-content {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 0;
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--filter-overlay-group-gap);
+    padding: var(--filter-sheet-content-padding-mobile);
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .selection-panel--filter-overlay .filter-sheet-content::-webkit-scrollbar { display: none; }
+
+  .selection-panel--filter-overlay .filter-sheet-content > * {
     flex-shrink: 0;
   }
 
@@ -799,11 +838,12 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
     height: var(--filter-sheet-handle-size);
     min-height: var(--filter-sheet-handle-size);
     display: block;
+    margin: 0;
     padding: 0;
     color: var(--filter-overlay-panel-color);
     background: transparent;
-    translate: -50% 0;
     touch-action: none;
+    transform: translateX(-50%);
   }
 
   .selection-panel--filter-overlay .filter-sheet-handle > span {
@@ -827,19 +867,21 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
   .selection-panel--filter-overlay .filter-actions {
     width: 100%;
     flex-wrap: wrap;
+    box-sizing: border-box;
+    padding: 0 var(--filter-sheet-inline-padding-mobile) max(var(--space), env(safe-area-inset-bottom));
   }
 
   .selection-panel--filter-overlay .filter-actions.is-visible {
-    max-height: calc(var(--filter-action-height) * 2 + var(--filter-action-gap));
+    max-height: calc(var(--filter-action-height) * 2 + var(--filter-action-gap) + max(var(--space), env(safe-area-inset-bottom)));
   }
 
   .selection-panel--filter-overlay .filter-actions > button {
     max-width: 100%;
   }
 
-  .selection-panel--filter-overlay .asset-filter-controls > label > input,
-  .selection-panel--filter-overlay .asset-filter-controls > label > select,
-  .selection-panel--filter-overlay .asset-filter-controls > .filter-dropdown-trigger {
+  .selection-panel--filter-overlay .asset-filter-controls > .filter-sheet-content > label > input,
+  .selection-panel--filter-overlay .asset-filter-controls > .filter-sheet-content > label > select,
+  .selection-panel--filter-overlay .asset-filter-controls > .filter-sheet-content > .filter-dropdown-trigger {
     font-size: var(--filter-overlay-field-font-size-mobile);
   }
 }

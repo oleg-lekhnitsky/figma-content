@@ -117,7 +117,7 @@ const style = computed<CSSProperties>(() => ({
     height: 28px;
     margin-top: calc((var(--range-control-height-mobile) - 28px) / 2);
     border-radius: 14px;
-    background: linear-gradient(to right, transparent 12px, var(--video-range-handle) 12px 16px, transparent 16px);
+    background: transparent;
     opacity: 1
   }
 
@@ -125,7 +125,7 @@ const style = computed<CSSProperties>(() => ({
     width: 28px;
     height: 28px;
     border-radius: 14px;
-    background: linear-gradient(to right, transparent 12px, var(--video-range-handle) 12px 16px, transparent 16px);
+    background: transparent;
     opacity: 1
   }
 }

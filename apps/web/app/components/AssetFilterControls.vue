@@ -67,8 +67,9 @@ const sortOptions = [
 
 <template>
   <form class="asset-filter-controls" :class="{ 'asset-filter-controls--expanded': expanded }" aria-label="Filter assets" @submit.prevent>
-    <template v-if="expanded">
-      <button class="filter-sheet-handle" type="button" aria-label="Close filters"><span aria-hidden="true" /></button>
+    <button v-if="expanded" class="filter-sheet-handle" type="button" aria-label="Close filters"><span aria-hidden="true" /></button>
+    <div class="filter-sheet-content">
+      <template v-if="expanded">
       <h2 v-if="heading" class="filter-overlay-title">{{ heading }}</h2>
       <section v-if="showSearch" class="filter-option-group filter-search-group">
         <h3>Search</h3>
@@ -95,9 +96,9 @@ const sortOptions = [
         <h3>Sort</h3>
         <div class="filter-option-list"><button v-for="option in sortOptions" :key="option.value" type="button" :aria-pressed="sort === option.value" @click="emit('update:sort', option.value)">{{ option.label }}</button></div>
       </section>
-    </template>
-    <template v-else>
-    <label v-if="showSearch" class="search-field"><span class="sr-only">Search assets</span><input :value="search" type="search" placeholder="Search" @input="$emit('update:search', ($event.target as HTMLInputElement).value)"></label>
+      </template>
+      <template v-else>
+      <label v-if="showSearch" class="search-field"><span class="sr-only">Search assets</span><input :value="search" type="search" placeholder="Search" @input="$emit('update:search', ($event.target as HTMLInputElement).value)"></label>
     <label v-if="showStatus" class="filter-dropdown"><span class="sr-only">Status</span><select class="filter-dropdown-trigger" :value="status" @change="$emit('update:status', ($event.target as HTMLSelectElement).value)"><option value="">All statuses</option><option value="approved">Approved</option><option value="draft">Draft</option></select><span class="filter-dropdown-chevron" aria-hidden="true" /></label>
     <FilterMultiSelect :model-value="projectIds" label="Projects" :options="projects" @update:model-value="$emit('update:projectIds', $event)" />
     <FilterMultiSelect :model-value="tagIds" label="Tags" :options="tags" @update:model-value="$emit('update:tagIds', $event)" />
@@ -111,9 +112,10 @@ const sortOptions = [
       <label class="date-field"><span>To</span><input :value="dateTo" type="date" :min="dateFrom || undefined" @input="$emit('update:dateTo', ($event.target as HTMLInputElement).value)"></label>
     </template>
     <label v-if="showSort" class="filter-dropdown"><span class="sr-only">Sort</span><select class="filter-dropdown-trigger" :value="sort" @change="$emit('update:sort', ($event.target as HTMLSelectElement).value)"><option value="newest">Newest</option><option value="oldest">Oldest</option><option value="updated">Recently updated</option><option value="title">Title</option><option value="dimensions">Dimensions</option><option value="submitter">Submitter</option></select><span class="filter-dropdown-chevron" aria-hidden="true" /></label>
-    </template>
+      </template>
+      <slot />
+    </div>
     <div v-if="$slots.actions" class="filter-actions" :class="{ 'is-visible': actionsVisible }" :aria-hidden="!actionsVisible" :inert="!actionsVisible"><slot name="actions" /></div>
-    <slot />
   </form>
 </template>
 
