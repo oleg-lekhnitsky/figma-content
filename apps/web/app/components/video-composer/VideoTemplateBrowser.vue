@@ -57,10 +57,10 @@ const containPanelTouch = (event: TouchEvent) => {
         </button>
       </div>
       <div v-else class="video-template-list">
-        <button v-for="template in visibleTemplates" :key="template.id" class="video-template-preset" type="button"
+        <button v-for="(template, index) in visibleTemplates" :key="template.id" class="video-template-preset" type="button"
           :aria-pressed="modelValue === template.id" @pointerenter="startPreview($event, template.id)"
           @pointerleave="stopPreview" @click="$emit('update:modelValue', template.id)">
-          <VideoPresetPreview :template="template" :assets="assets" :previewing="previewing === template.id" />
+          <VideoPresetPreview :template="template" :assets="assets" :previewing="previewing === template.id" :auto-preview="index === 0" />
           <strong>{{ template.name }}</strong>
         </button>
       </div>

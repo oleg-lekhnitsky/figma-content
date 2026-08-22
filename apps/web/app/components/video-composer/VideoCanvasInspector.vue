@@ -11,7 +11,7 @@ const formats: Array<{ value: VideoFormat; label: string }> = [{ value:'portrait
 <template>
   <section class="video-panel video-inspector">
     <div class="video-panel-scroll">
-      <header><h2 class="filter-overlay-title">Canvas</h2></header>
+      <header><h2 class="filter-overlay-title">Scene</h2></header>
       <fieldset><legend>Aspect</legend><div class="video-choice-row"><button v-for="option in formats" :key="option.value" type="button" :aria-pressed="modelValue.format === option.value" @click="set('format',option.value)">{{ option.label }}</button></div></fieldset>
       <fieldset><legend>FPS</legend><div class="video-choice-row"><button v-for="value in [15,25,30,60] as const" :key="value" type="button" :aria-pressed="modelValue.fps === value" @click="set('fps',value)">{{ value }}</button></div></fieldset>
       <fieldset><legend>Safe area</legend><div class="video-choice-row"><button type="button" :aria-pressed="!modelValue.safeArea" @click="set('safeArea',false)">Off</button><button type="button" :aria-pressed="modelValue.safeArea" @click="set('safeArea',true)">On</button></div></fieldset>
