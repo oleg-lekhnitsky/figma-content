@@ -2,7 +2,7 @@
 import { Figma, Heart, MoreH, Search, X } from 'reicon-vue'
 import { toTitleCase } from '~/utils/text'
 
-const props = withDefaults(defineProps<{ assetId: string; assetIds?: string[]; previewUrl?: string; previewUrls?: Record<string, string> }>(), { assetIds: () => [], previewUrl: '', previewUrls: () => ({}) })
+const props = withDefaults(defineProps<{ assetId: string; assetIds?: string[]; previewUrl?: string; previewUrls?: Record<string, string>; mimeTypes?: Record<string, string> }>(), { assetIds: () => [], previewUrl: '', previewUrls: () => ({}), mimeTypes: () => ({}) })
 const emit = defineEmits<{ close: []; deleted: [id: string]; navigate: [id: string]; renamed: [id: string, title: string] }>()
 interface AssetDetail { id: string; uploaded_by: string; title: string; description: string | null; width: number; height: number; file_size: number; mime_type: string; status: string; version: number; created_at: string; updated_at: string; figma_url: string; language: string | null; content_type: string | null; project_id: string | null; campaign_id: string | null; projects: { name: string } | null; campaigns: { name: string } | null; asset_tags: Array<{ tags: { id: string; name: string } | null }>; allowed_users: { figma_handle: string | null; avatar_url: string | null } | null; versions: Array<{ id: string; version: number; width: number; height: number; file_size: number; created_at: string }> }
 interface SessionResponse { data: { authenticated: boolean; user?: { id: string; role: string } } }
@@ -49,8 +49,8 @@ watch(() => [props.assetId, thumbnailPreviewUrl.value], () => {
 watch(() => previewData.value?.data, async (preview) => {
   if (!preview || preview.id !== props.assetId || !import.meta.client) return
   const requestedAssetId = props.assetId
-  if (asset.value?.mime_type.startsWith('video/')) {
-    displayedPreviewUrl.value = preview.url
+  if (resolvedMimeType.value?.startsWith('video/')) {
+    if (!thumbnailPreviewUrl.value) displayedPreviewUrl.value = preview.url
     return
   }
   const image = new Image()
@@ -63,6 +63,7 @@ watch(() => previewData.value?.data, async (preview) => {
   if (props.assetId === requestedAssetId && image.complete && image.naturalWidth > 0) displayedPreviewUrl.value = preview.url
 }, { immediate: true })
 const resolvedPreviewUrl = computed(() => displayedPreviewUrl.value || thumbnailPreviewUrl.value)
+const resolvedMimeType = computed(() => props.mimeTypes[props.assetId] || (asset.value?.id === props.assetId ? asset.value.mime_type : null))
 const role = computed(() => session.value?.data.user?.role)
 const canEdit = computed(() => ['editor', 'admin'].includes(role.value ?? '') || (role.value === 'contributor' && asset.value?.uploaded_by === session.value?.data.user?.id))
 const canApprove = computed(() => ['editor', 'admin'].includes(role.value ?? ''))
@@ -81,6 +82,11 @@ const previousAssetId = computed(() => assetIndex.value > 0 ? props.assetIds[ass
 const nextAssetId = computed(() => assetIndex.value >= 0 && assetIndex.value < props.assetIds.length - 1 ? props.assetIds[assetIndex.value + 1] : undefined)
 const previousPreviewUrl = computed(() => previousAssetId.value ? props.previewUrls[previousAssetId.value] : undefined)
 const nextPreviewUrl = computed(() => nextAssetId.value ? props.previewUrls[nextAssetId.value] : undefined)
+const mobileSlides = computed(() => [
+  previousAssetId.value && previousPreviewUrl.value ? { id: previousAssetId.value, position: 'previous', url: previousPreviewUrl.value, mimeType: props.mimeTypes[previousAssetId.value], alt: '' } : null,
+  resolvedPreviewUrl.value ? { id: props.assetId, position: 'current', url: resolvedPreviewUrl.value, mimeType: resolvedMimeType.value ?? undefined, alt: `Preview of ${asset.value?.title ?? 'asset'}` } : null,
+  nextAssetId.value && nextPreviewUrl.value ? { id: nextAssetId.value, position: 'next', url: nextPreviewUrl.value, mimeType: props.mimeTypes[nextAssetId.value], alt: '' } : null
+].filter((slide): slide is NonNullable<typeof slide> => Boolean(slide)))
 const boardId = ref('')
 const boardPickerOpen = ref(false)
 const addingBoardId = ref('')
@@ -92,11 +98,13 @@ const gestureY = ref(0)
 const gestureActive = ref(false)
 const gestureSettling = ref(false)
 const gestureAxis = ref<'x' | 'y' | ''>('')
+const allowsOpeningViewTransition = ref(true)
 let gesturePointerId: number | undefined
 let gestureStartX = 0
 let gestureStartY = 0
 let swipeNavigationTarget = ''
 let swipeTimer: ReturnType<typeof setTimeout> | undefined
+let openingViewTransitionTimer: ReturnType<typeof setTimeout> | undefined
 let previousBodyOverflow = ''
 let previousRootOverflow = ''
 let scrollLocked = false
@@ -169,11 +177,13 @@ onMounted(() => {
   dialog.value?.showModal()
   document.addEventListener('pointerdown', handleMoreMenuPointerDown)
   void loadFullPreview()
+  openingViewTransitionTimer = setTimeout(() => { allowsOpeningViewTransition.value = false }, 400)
 })
 onBeforeUnmount(() => {
   clearTimeout(closeTimer)
   clearTimeout(swipeTimer)
   clearTimeout(skeletonTimer)
+  clearTimeout(openingViewTransitionTimer)
   mobileQuery?.removeEventListener('change', updateMobile)
   document.removeEventListener('pointerdown', handleMoreMenuPointerDown)
   unlockPageScroll()
@@ -299,8 +309,7 @@ const handleAssetNavigationKey = (event: KeyboardEvent) => {
 }
 const gestureStyle = computed(() => ({
   transform: `translate3d(0, ${Math.max(0, gestureY.value)}px, 0)`,
-  opacity: String(Math.max(.42, 1 - Math.max(0, gestureY.value) / 320)),
-  '--swipe-x': `${gestureX.value}px`
+  opacity: String(Math.max(.42, 1 - Math.max(0, gestureY.value) / 320))
 }))
 const assetVisualStyle = computed(() => {
   if (isMobile.value) return gestureStyle.value
@@ -313,8 +322,14 @@ const assetVisualStyle = computed(() => {
   }
   return background
 })
+const currentPreviewStyle = computed(() => isMobile.value ? { transform: `translate3d(${gestureX.value}px, 0, 0)` } : undefined)
+const previousPreviewStyle = computed(() => ({ transform: `translate3d(calc(-100% + ${gestureX.value}px), 0, 0)` }))
+const nextPreviewStyle = computed(() => ({ transform: `translate3d(calc(100% + ${gestureX.value}px), 0, 0)` }))
+const mobileSlideStyle = (position: string) => position === 'previous' ? previousPreviewStyle.value : position === 'next' ? nextPreviewStyle.value : currentPreviewStyle.value
 const startGesture = (event: PointerEvent) => {
   if (event.pointerType !== 'touch' || editing.value || gestureSettling.value) return
+  allowsOpeningViewTransition.value = false
+  clearTimeout(openingViewTransitionTimer)
   gesturePointerId = event.pointerId
   gestureStartX = event.clientX
   gestureStartY = event.clientY
@@ -411,19 +426,21 @@ watch(() => props.assetId, id => {
           asset.</strong><button @click="refresh()">Try again</button></div>
       <main v-if="asset" ref="overlayContent" class="overlay-content">
         <section ref="assetVisual" class="asset-visual"
-          :class="{ 'skeleton-visual': !resolvedPreviewUrl, 'is-dragging': isMobile && gestureActive }"
+          :class="{ 'skeleton-visual': !resolvedPreviewUrl, 'is-dragging': isMobile && gestureActive, 'allows-opening-view-transition': allowsOpeningViewTransition }"
           :style="assetVisualStyle" aria-describedby="mobile-gesture-hint" @pointerdown="startGesture"
           @pointermove="moveGesture" @pointerup="finishGesture" @pointercancel="resetGesture"
           @transitionend="finishSwipeTransition"><span id="mobile-gesture-hint" class="sr-only">Swipe left or right to
             browse assets. Pull down to close.</span><button class="pull-handle" type="button"
-            aria-label="Close asset details" @pointerdown.stop @click="close" /><img
-            v-if="isMobile && previousPreviewUrl" :key="`previous-${previousAssetId}`" class="swipe-preview previous-preview" :src="previousPreviewUrl"
-            alt="" draggable="false">
-          <AssetMedia v-if="resolvedPreviewUrl" :key="`current-${assetId}`" class="current-preview" :src="resolvedPreviewUrl"
-            :mime-type="asset.mime_type" :alt="`Preview of ${asset.title}`" loading="eager" fetchpriority="high"
-            draggable="false" /><img
-            v-if="isMobile && nextPreviewUrl" :key="`next-${nextAssetId}`" class="swipe-preview next-preview" :src="nextPreviewUrl" alt=""
-            draggable="false"><button class="details-hint" type="button" aria-label="Show asset details"
+            aria-label="Close asset details" @pointerdown.stop @click="close" />
+          <template v-if="isMobile">
+            <AssetMedia v-for="slide in mobileSlides" :key="slide.id"
+              :class="[`${slide.position}-preview`, { 'swipe-preview': slide.position !== 'current' }]"
+              :src="slide.url" :style="mobileSlideStyle(slide.position)" :mime-type="slide.mimeType"
+              :alt="slide.alt" loading="eager" fetchpriority="high" draggable="false" />
+          </template>
+          <AssetMedia v-else-if="resolvedPreviewUrl" class="current-preview" :src="resolvedPreviewUrl"
+            :mime-type="resolvedMimeType" :alt="`Preview of ${asset.title}`" loading="eager" fetchpriority="high" draggable="false" />
+          <button class="details-hint" type="button" aria-label="Show asset details"
             @pointerdown.stop @click="revealDetails"><svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="m6 9 6 6 6-6" />
             </svg><span>Details</span></button><button v-if="previousAssetId && !editing"
@@ -1424,9 +1441,7 @@ li span {
     background: transparent;
     clip-path: none;
     touch-action: none;
-    user-select: none;
-    contain: paint;
-    isolation: isolate
+    user-select: none
   }
 
   .asset-visual :is(img, video) {
@@ -1434,32 +1449,32 @@ li span {
     border-radius: var(--radius-mobile);
     object-fit: contain;
     object-position: 50% calc(50% - 2dvh);
-    backface-visibility: hidden;
     pointer-events: none;
     transition: transform .22s cubic-bezier(.2, 0, 0, 1)
   }
 
-  .asset-visual.is-dragging img {
+  .asset-visual.is-dragging :is(img, video) {
     transition-duration: 0s
   }
 
   .asset-visual .current-preview {
-    z-index: 2;
-    transform: translate3d(var(--swipe-x), 0, 0);
+    transform: translate3d(0, 0, 0)
+  }
+
+  .asset-visual.allows-opening-view-transition .current-preview {
     view-transition-name: asset-preview
   }
 
   .asset-visual .swipe-preview {
-    z-index: 1;
     display: block
   }
 
   .asset-visual .previous-preview {
-    transform: translate3d(calc(-100% + var(--swipe-x)), 0, 0)
+    transform: translate3d(-100%, 0, 0)
   }
 
   .asset-visual .next-preview {
-    transform: translate3d(calc(100% + var(--swipe-x)), 0, 0)
+    transform: translate3d(100%, 0, 0)
   }
 
   .pull-handle {

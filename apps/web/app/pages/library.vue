@@ -660,6 +660,7 @@ const selectedAssetPreviewUrl = computed(() => {
   return selected?.previewUrl ?? ''
 })
 const assetPreviewUrls = computed(() => Object.fromEntries(displayedAssets.value.map(asset => [asset.id, asset.previewUrl])))
+const assetMimeTypes = computed(() => Object.fromEntries(displayedAssets.value.map(asset => [asset.id, asset.mime_type])))
 const closeAsset = () => replaceLibraryQuery({ asset: undefined })
 const navigateAsset = (id: string) => router.replace({ path: '/library', query: { ...route.query, asset: id } })
 const handleAssetDeleted = (id: string) => {
@@ -983,7 +984,7 @@ onBeforeUnmount(() => {
       </div>
     </main>
     <AssetOverlay v-if="selectedAssetId" :asset-id="selectedAssetId" :asset-ids="displayedAssets.map(asset => asset.id)"
-      :preview-url="selectedAssetPreviewUrl" :preview-urls="assetPreviewUrls" @close="closeAsset"
+      :preview-url="selectedAssetPreviewUrl" :preview-urls="assetPreviewUrls" :mime-types="assetMimeTypes" @close="closeAsset"
       @deleted="handleAssetDeleted" @navigate="navigateAsset" @renamed="handleAssetRenamed" />
   </div>
 </template>
