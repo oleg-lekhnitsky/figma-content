@@ -13,29 +13,6 @@ const folderTemplates = (folder: Folder) => props.templates.filter(item => item.
 const visibleTemplates = computed(() => openFolder.value ? folderTemplates(openFolder.value) : [])
 const folderLabel = computed(() => folders.find(folder => folder.id === openFolder.value)?.label || 'Presets')
 const previewing = ref<string | null>(null)
-const isLightweightPreview = ref(false)
-const visiblePreviewIds = ref<string[]>([])
-const activeMobilePreview = ref<string | null>(null)
-let mobilePreviewTimer: ReturnType<typeof setInterval> | undefined
-const updatePreviewVisibility = (templateId: string, visible: boolean) => {
-  if (!isLightweightPreview.value) return
-  const next = visible
-    ? [...new Set([...visiblePreviewIds.value, templateId])]
-    : visiblePreviewIds.value.filter(id => id !== templateId)
-  visiblePreviewIds.value = next
-  if (!activeMobilePreview.value || !next.includes(activeMobilePreview.value)) activeMobilePreview.value = next[0] || null
-}
-const advanceMobilePreview = () => {
-  const ids = visiblePreviewIds.value
-  if (ids.length < 2) return
-  const currentIndex = ids.indexOf(activeMobilePreview.value || '')
-  activeMobilePreview.value = ids[(currentIndex + 1) % ids.length] || ids[0] || null
-}
-onMounted(() => {
-  isLightweightPreview.value = window.matchMedia('(max-width: 640px), (pointer: coarse)').matches
-  if (isLightweightPreview.value) mobilePreviewTimer = setInterval(advanceMobilePreview, 2200)
-})
-onBeforeUnmount(() => clearInterval(mobilePreviewTimer))
 const startPreview = (event: PointerEvent, templateId: string) => {
   if (event.pointerType === 'mouse') previewing.value = templateId
 }
@@ -83,9 +60,7 @@ const containPanelTouch = (event: TouchEvent) => {
         <button v-for="template in visibleTemplates" :key="template.id" class="video-template-preset" type="button"
           :aria-pressed="modelValue === template.id" @pointerenter="startPreview($event, template.id)"
           @pointerleave="stopPreview" @click="$emit('update:modelValue', template.id)">
-          <VideoPresetPreview :template="template" :assets="assets"
-            :previewing="previewing === template.id || (isLightweightPreview && activeMobilePreview === template.id)"
-            :auto-preview="false" @visibility-change="updatePreviewVisibility" />
+          <VideoPresetPreview :template="template" :assets="assets" :previewing="previewing === template.id" />
           <strong>{{ template.name }}</strong>
         </button>
       </div>

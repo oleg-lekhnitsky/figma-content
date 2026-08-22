@@ -5,8 +5,7 @@ import type { VideoTemplate } from '~/types/video-composer'
 import VideoLivePresetPreview from '~/components/video-composer/VideoLivePresetPreview.vue'
 import VideoPresetFrame from '~/components/video-composer/VideoPresetFrame.vue'
 
-const props = withDefaults(defineProps<{ template: VideoTemplate; assets: AssetMasonryItem[]; previewing?: boolean; autoPreview?: boolean }>(), { autoPreview: true })
-const emit = defineEmits<{ visibilityChange: [templateId: string, visible: boolean] }>()
+const props = defineProps<{ template: VideoTemplate; assets: AssetMasonryItem[]; previewing?: boolean }>()
 const previewStyle = computed<CSSProperties>(() => ({ '--preview-duration': `${Math.max(1.2, Math.min(4, props.template.preset?.secondsPerSlide || 2))}s`, '--preview-tilt': `${(props.template.preset?.tilt || props.template.preset?.rotationZ || 0) * .35}deg`, '--preview-spin': `${props.template.preset?.spin || 0}deg` } as CSSProperties))
 const previewClasses = computed(() => [`is-${props.template.collection}`, `is-${props.template.preset?.direction || 'up'}`, `is-${props.template.preset?.scaleStyle || 'bloom'}`, `grow-${props.template.preset?.growFrom || 'center'}`, `effect-${props.template.preset?.flickerEffect || 'off'}`, `drift-${props.template.preset?.driftDirection || 'up'}`])
 const frameUrl = ref('')
@@ -25,7 +24,7 @@ const placeholderAssets: AssetMasonryItem[] = placeholderShades.map((shade, inde
   height: 400
 }))
 const previewAssets = computed(() => placeholderAssets)
-const isLiveActive = computed(() => Boolean(props.previewing) || (props.autoPreview && renderLightweightPreview.value && isVisible.value))
+const isLiveActive = computed(() => Boolean(props.previewing) || (renderLightweightPreview.value && isVisible.value))
 watch(() => props.previewing, value => { if (!value) liveReady.value = false })
 watch(isLiveActive, value => { if (!value) liveReady.value = false })
 let visibilityObserver: IntersectionObserver | undefined
@@ -34,18 +33,11 @@ onMounted(() => {
   renderLightweightPreview.value = lightweight
   renderGeneratedFrame.value = !lightweight
   if (lightweight && previewRoot.value) {
-    visibilityObserver = new IntersectionObserver(([entry]) => {
-      isVisible.value = Boolean(entry?.isIntersecting)
-      emit('visibilityChange', props.template.id, isVisible.value)
-      if (entry?.isIntersecting && !props.autoPreview) renderGeneratedFrame.value = true
-    }, { rootMargin: '80px 0px', threshold: .01 })
+    visibilityObserver = new IntersectionObserver(([entry]) => { isVisible.value = Boolean(entry?.isIntersecting) }, { rootMargin: '80px 0px', threshold: .01 })
     visibilityObserver.observe(previewRoot.value)
   }
 })
-onBeforeUnmount(() => {
-  visibilityObserver?.disconnect()
-  if (isVisible.value) emit('visibilityChange', props.template.id, false)
-})
+onBeforeUnmount(() => visibilityObserver?.disconnect())
 </script>
 
 <template>

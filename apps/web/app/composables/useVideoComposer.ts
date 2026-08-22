@@ -514,8 +514,13 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     const isScale=template.value.collection==='scale'
     const isSwipeDepth=template.value.collection==='swipe-depth'
     const usesPlaneCount=isCarousel3d||isGrid||isOrbit||isGlobe||isScale||isSwipeDepth
-    const configuredGridColumns=Math.max(1,Math.round(settings.value.flipGridColumns))
-    const configuredGridRows=Math.max(1,Math.round(settings.value.flipGridRows))
+    const requestedGridColumns=Math.max(1,Math.round(settings.value.flipGridColumns))
+    const requestedGridRows=Math.max(1,Math.round(settings.value.flipGridRows))
+    // Preset thumbnails are only 360px wide and cannot reveal the full editor
+    // lattice. Keep their Grid scenes representative without allocating up to
+    // 480 meshes per visible mobile thumbnail.
+    const configuredGridColumns=runtimeOptions.maxPreviewDimension?Math.min(8,requestedGridColumns):requestedGridColumns
+    const configuredGridRows=runtimeOptions.maxPreviewDimension?Math.min(8,requestedGridRows):requestedGridRows
     // Render one recycling row beyond each vertical edge. These repeated assets
     // keep the canvas covered while a complete row advances upward.
     const requestedPlaneCount=isGrid?Math.min(480,configuredGridColumns*(configuredGridRows+2)):settings.value.visibleCount
