@@ -15,7 +15,7 @@
   --filter-clear-icon-stroke: 2.1;
   --filter-clear-divider-color: rgb(255 255 255 / .25);
   --filter-caption-size: 1.0rem;
-  --filter-title-size: clamp(2.0rem, 2vw, 2.75rem);
+  --filter-title-size: clamp(1.5rem, 1.5vw, 2.75rem);
   --filter-pill-radius: 999rem;
   --filter-focus-width: .125rem;
   --filter-chevron-size: .4375rem;
@@ -598,6 +598,7 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
   width: auto;
   min-height: var(--filter-option-height);
   flex: 0 0 auto;
+  height: min-content;
   padding: var(--filter-option-padding);
   border: var(--filter-hairline) solid var(--filter-overlay-border-color);
   border-radius: var(--filter-pill-radius);

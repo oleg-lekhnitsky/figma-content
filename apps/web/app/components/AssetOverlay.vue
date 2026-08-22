@@ -2,7 +2,7 @@
 import { Figma, Heart, MoreH, Search, X } from 'reicon-vue'
 import { toTitleCase } from '~/utils/text'
 
-const props = withDefaults(defineProps<{ assetId: string; assetIds?: string[]; previewUrl?: string; previewUrls?: Record<string, string>; mimeTypes?: Record<string, string> }>(), { assetIds: () => [], previewUrl: '', previewUrls: () => ({}), mimeTypes: () => ({}) })
+const props = withDefaults(defineProps<{ assetId: string; assetIds?: string[]; previewUrl?: string; previewUrls?: Record<string, string>; mimeTypes?: Record<string, string | null | undefined> }>(), { assetIds: () => [], previewUrl: '', previewUrls: () => ({}), mimeTypes: () => ({}) })
 const emit = defineEmits<{ close: []; deleted: [id: string]; navigate: [id: string]; renamed: [id: string, title: string] }>()
 interface AssetDetail { id: string; uploaded_by: string; title: string; description: string | null; width: number; height: number; file_size: number; mime_type: string; status: string; version: number; created_at: string; updated_at: string; figma_url: string; language: string | null; content_type: string | null; project_id: string | null; campaign_id: string | null; projects: { name: string } | null; campaigns: { name: string } | null; asset_tags: Array<{ tags: { id: string; name: string } | null }>; allowed_users: { figma_handle: string | null; avatar_url: string | null } | null; versions: Array<{ id: string; version: number; width: number; height: number; file_size: number; created_at: string }> }
 interface SessionResponse { data: { authenticated: boolean; user?: { id: string; role: string } } }

@@ -217,17 +217,17 @@ const showAllAssets = () => {
       <button class="button-secondary video-mobile-header-export" type="button" :disabled="exporting || !activeAssets.length" :aria-label="exporting ? 'Rendering video' : 'Export video'" @click="renderVideo"><span>{{ exporting ? 'Rendering…' : 'Export' }}</span></button>
     </header>
     <main class="video-composer-center">
-      <VideoPreviewStage :key="template.renderer" :safe-area="settings.safeArea" @ready="handleStageReady" />
+      <VideoPreviewStage :key="template.renderer" :safe-area="settings.safeArea" :playing="playing" @ready="handleStageReady" @toggle="togglePlayback" />
     </main>
     <nav class="video-mobile-toolbar" aria-label="Video editing tools">
       <button type="button" aria-controls="video-mobile-templates" :aria-expanded="mobilePanel === 'templates'" @click="openMobilePanel('templates', $event)">Templates</button>
-      <button type="button" aria-controls="video-mobile-scene" :aria-expanded="mobilePanel === 'scene'" @click="openMobilePanel('scene', $event)">Scene</button>
+      <button type="button" aria-controls="video-mobile-scene" :aria-expanded="mobilePanel === 'scene'" @click="openMobilePanel('scene', $event)">Settings</button>
       <button type="button" aria-controls="video-mobile-canvas" :aria-expanded="mobilePanel === 'canvas'" @click="openMobilePanel('canvas', $event)">Canvas</button>
       <button type="button" aria-controls="video-mobile-assets" :aria-expanded="mobilePanel === 'assets'" @click="openMobilePanel('assets', $event)">Assets</button>
     </nav>
     <button v-if="mobilePanel" class="video-mobile-backdrop" type="button" aria-label="Close video settings" @click="closeMobilePanel" />
     <VideoTemplateBrowser id="video-mobile-templates" v-model="settings.templateId" class="video-mobile-panel" :class="{ 'is-mobile-open': mobilePanel === 'templates' }" :role="mobilePanel === 'templates' ? 'dialog' : undefined" :aria-modal="mobilePanel === 'templates' || undefined" aria-label="Choose a video template" :templates="videoTemplates" :assets="activeAssets" />
-    <VideoSceneInspector id="video-mobile-scene" v-model="settings" class="video-mobile-panel" :class="{ 'is-mobile-open': mobilePanel === 'scene' }" :role="mobilePanel === 'scene' ? 'dialog' : undefined" :aria-modal="mobilePanel === 'scene' || undefined" aria-label="Scene settings" :template="template" />
+    <VideoSceneInspector id="video-mobile-scene" v-model="settings" class="video-mobile-panel" :class="{ 'is-mobile-open': mobilePanel === 'scene' }" :role="mobilePanel === 'scene' ? 'dialog' : undefined" :aria-modal="mobilePanel === 'scene' || undefined" aria-label="Video settings" :template="template" />
     <aside class="video-composer-right">
       <VideoCanvasInspector id="video-mobile-canvas" v-model="settings" class="video-mobile-panel" :class="{ 'is-mobile-open': mobilePanel === 'canvas' }" :role="mobilePanel === 'canvas' ? 'dialog' : undefined" :aria-modal="mobilePanel === 'canvas' || undefined" aria-label="Canvas settings" />
       <section id="video-mobile-assets" class="video-panel video-assets-panel video-mobile-panel" :class="{ 'is-mobile-open': mobilePanel === 'assets' }" :role="mobilePanel === 'assets' ? 'dialog' : undefined" :aria-modal="mobilePanel === 'assets' || undefined" aria-label="Video assets">
@@ -273,6 +273,7 @@ const showAllAssets = () => {
   --video-text-secondary: color-mix(in srgb, var(--filter-overlay-panel-color) 72%, transparent);
   --video-range-label-color: color-mix(in srgb, var(--filter-overlay-panel-color) 88%, transparent);
   --video-range-value-color: color-mix(in srgb, var(--filter-overlay-panel-color) 76%, transparent);
+  --video-control-height: 40px;
   --video-inspector-section-gap: calc(var(--space)*.75);
   --video-inspector-control-gap: .5rem;
   --video-inspector-pair-gap: calc(var(--space)/2);
@@ -353,7 +354,7 @@ const showAllAssets = () => {
   align-content: start;
   gap: calc(var(--space)/4);
   height: auto;
-  min-height: 0;
+  min-height: max-content;
   max-height: none;
   margin: 0;
   padding: 0;
@@ -368,21 +369,29 @@ const showAllAssets = () => {
 
 .video-assets-panel :deep(.video-panel-scroll) {
   display: grid;
-  grid-template-rows: auto auto auto auto;
+  grid-template-rows: repeat(4, max-content);
+  align-content: start;
   overflow-x: hidden;
   overflow-y: auto
 }
 
 .video-assets-panel li {
+  box-sizing: border-box;
   display: grid;
   grid-template-columns: 24px 38px minmax(0, 1fr) 32px;
   align-items: center;
   gap: calc(var(--space)/2);
   min-height: 44px;
-  border-radius: calc(var(--radius)/2);
+  padding: 3px 6px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--filter-overlay-panel-color) 7%, transparent);
   font-size: var(--video-type-body);
   font-weight: var(--video-weight-strong);
   transition: opacity 150ms ease-out, background-color 150ms ease-out
+}
+
+.video-assets-panel li:hover {
+  background: color-mix(in srgb, var(--filter-overlay-panel-color) 11%, transparent)
 }
 
 .video-asset-mobile-order {
@@ -399,7 +408,7 @@ const showAllAssets = () => {
 
 .video-assets-panel li:has(.video-asset-handle:focus-visible),
 .video-assets-panel li:has(.video-asset-visibility:focus-visible) {
-  background: rgb(255 255 255/.1)
+  background: color-mix(in srgb, var(--filter-overlay-panel-color) 14%, transparent)
 }
 
 .video-asset-thumbnail {
@@ -454,8 +463,32 @@ const showAllAssets = () => {
 }
 
 .video-assets-show-all {
-  min-height: 40px;
-  margin-top: calc(var(--space)/2)
+  width: 100%;
+  min-height: var(--video-control-height);
+  margin-top: calc(var(--space)/2);
+  padding: 0 12px;
+  border: 0;
+  border-radius: calc(var(--radius)*1.5);
+  color: inherit;
+  background: color-mix(in srgb, var(--filter-overlay-panel-color) 7%, transparent);
+  font-size: var(--video-type-body);
+  font-weight: var(--video-weight-strong);
+  transition-property: background-color, transform;
+  transition-duration: 120ms;
+  transition-timing-function: ease-out
+}
+
+.video-assets-show-all:hover {
+  background: color-mix(in srgb, var(--filter-overlay-panel-color) 11%, transparent)
+}
+
+.video-assets-show-all:active {
+  transform: scale(.96)
+}
+
+.video-assets-show-all:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px
 }
 
 .sr-only {
@@ -537,13 +570,17 @@ const showAllAssets = () => {
   touch-action: manipulation;
   padding: calc(var(--space)/4);
   border: 1px solid transparent;
-  border-radius: calc(var(--radius)/2);
-  background: transparent;
+  border-radius: calc(var(--radius)*1.5);
+  background: color-mix(in srgb, var(--filter-overlay-panel-color) 7%, transparent);
   color: inherit;
   text-align: left;
   transition-property: background-color, border-color, transform;
   transition-duration: 150ms;
   transition-timing-function: ease-out
+}
+
+:deep(.video-template-list>button:hover) {
+  background: color-mix(in srgb, var(--filter-overlay-panel-color) 11%, transparent)
 }
 
 :deep(.video-template-list>button:active) {
@@ -552,7 +589,7 @@ const showAllAssets = () => {
 
 :deep(.video-template-list>button[aria-pressed=true]) {
   border-color: rgb(255 255 255/.62);
-  background: rgb(255 255 255/.12)
+  background: color-mix(in srgb, var(--filter-overlay-panel-color) 14%, transparent)
 }
 
 :deep(.video-template-featured) {
@@ -623,13 +660,14 @@ const showAllAssets = () => {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  padding: 0;
+  padding: calc(var(--space)/2) calc(var(--space)*.75);
 }
 
 :deep(.video-template-folder h3) {
   margin: 0;
   font-size: var(--filter-title-size);
   font-weight: 500;
+  letter-spacing: -.04em;
   line-height: 1;
   text-align: left
 }
@@ -722,6 +760,56 @@ const showAllAssets = () => {
   margin-top: var(--video-inspector-control-gap)
 }
 
+:deep(.video-choice-row:not(:has(button:nth-child(6)))) {
+  box-sizing: border-box;
+  width: 100%;
+  height: var(--video-control-height) !important;
+  min-height: var(--video-control-height) !important;
+  max-height: var(--video-control-height) !important;
+  flex-wrap: nowrap;
+  gap: 2px;
+  padding: 4px;
+  border-radius: calc(var(--radius)*1.5);
+  background: color-mix(in srgb, var(--filter-overlay-panel-color) 7%, transparent)
+}
+
+:deep(.video-choice-row:not(:has(button:nth-child(6))) button) {
+  min-width: 0;
+  height: calc(var(--video-control-height) - 8px) !important;
+  min-height: calc(var(--video-control-height) - 8px) !important;
+  max-height: calc(var(--video-control-height) - 8px) !important;
+  flex: 1 1 0;
+  padding: 0 8px;
+  padding-block: 0 !important;
+  border: 0;
+  border-radius: calc(var(--radius)*1.5 - 4px);
+  color: var(--video-text-muted);
+  background: transparent;
+  box-shadow: none;
+  transition-property: color, background-color, transform;
+  transition-duration: 120ms;
+  transition-timing-function: ease-out
+}
+
+:deep(.video-choice-row:not(:has(button:nth-child(6))) button:hover) {
+  color: var(--filter-overlay-panel-color);
+  background: color-mix(in srgb, var(--filter-overlay-panel-color) 7%, transparent)
+}
+
+:deep(.video-choice-row:not(:has(button:nth-child(6))) button[aria-pressed=true]) {
+  color: var(--filter-overlay-primary-color);
+  background: var(--filter-overlay-primary-background)
+}
+
+:deep(.video-choice-row:not(:has(button:nth-child(6))) button:active) {
+  transform: scale(.96)
+}
+
+:deep(.video-choice-row:not(:has(button:nth-child(6))) button:focus-visible) {
+  outline: 2px solid currentColor;
+  outline-offset: -2px
+}
+
 :deep(.video-inspector fieldset>.video-control-pair) {
   margin-top: var(--video-inspector-control-gap)
 }
@@ -786,12 +874,13 @@ const showAllAssets = () => {
   display: flex;
   align-items: center;
   gap: 7px;
-  width: max-content;
+  width: 100%;
   max-width: 100%;
-  height: calc(1em + var(--filter-option-padding) + var(--filter-option-padding) + var(--filter-hairline) + var(--filter-hairline));
-  padding: 4px var(--filter-option-padding);
-  border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
-  border-radius: 999px;
+  height: var(--video-control-height);
+  padding: 4px 10px;
+  border: 0;
+  border-radius: calc(var(--radius)*1.5);
+  background: color-mix(in srgb, var(--filter-overlay-panel-color) 7%, transparent);
   color: var(--video-range-value-color)
 }
 
@@ -840,10 +929,12 @@ const showAllAssets = () => {
   bottom: calc(100% + 6px);
   left: 0;
   display: grid;
-  width: 210px;
-  gap: 10px;
-  padding: 8px;
-  border-radius: 16px;
+  box-sizing: border-box;
+  width: 100%;
+  gap: var(--video-inspector-control-gap);
+  padding: calc(var(--video-inspector-control-gap)*2);
+  padding-bottom: calc(var(--video-inspector-control-gap)*2.5);
+  border-radius: calc(var(--radius) + var(--video-inspector-control-gap)*2);
   background: var(--filter-overlay-panel-background);
   backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation));
   -webkit-backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation));
@@ -871,7 +962,7 @@ const showAllAssets = () => {
   flex: 0 0 28px;
   padding: 0;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--radius);
   place-items: center;
   background: color-mix(in srgb, currentColor 8%, transparent);
   color: inherit;
@@ -888,7 +979,7 @@ const showAllAssets = () => {
   position: relative;
   height: 150px;
   overflow: hidden;
-  border-radius: 10px;
+  border-radius: var(--radius);
   background:
     linear-gradient(to top, #000, transparent),
     linear-gradient(to right, #fff, transparent),
@@ -948,7 +1039,7 @@ const showAllAssets = () => {
 :deep(.video-inspector label:has(> .video-range-input)) {
   position: relative;
   display: block;
-  min-height: 34px
+  min-height: var(--video-control-height)
 }
 
 :deep(.video-inspector label:has(> .video-range-input)>span) {
@@ -957,7 +1048,7 @@ const showAllAssets = () => {
   inset: 0;
   display: flex;
   align-items: center;
-  min-height: 34px;
+  min-height: var(--video-control-height);
   padding: 0 8px 0 10px;
   color: var(--video-range-label-color);
   font-size: var(--video-type-body);
@@ -975,7 +1066,8 @@ const showAllAssets = () => {
   overflow: hidden;
   border-radius: 6px;
   color: var(--video-range-value-color);
-  text-overflow: ellipsis
+  text-overflow: ellipsis;
+  
 }
 
 :deep(.video-control-pair) {
@@ -1023,6 +1115,24 @@ const showAllAssets = () => {
   border-radius: var(--radius)
 }
 
+:deep(.video-stage-controls) {
+  position: relative;
+  grid-area: 1 / 1;
+  max-width: 100%;
+  max-height: 100%;
+  min-width: 0;
+  min-height: 0;
+  touch-action: manipulation
+}
+
+:deep(.video-canvas-wrap) {
+  grid-area: 1 / 1
+}
+
+:deep(.video-stage-play) {
+  display: none
+}
+
 :deep(.video-safe-area) {
   position: absolute;
   inset: 10%;
@@ -1036,15 +1146,27 @@ const showAllAssets = () => {
   min-height: var(--filter-action-height);
   padding: 0 var(--filter-action-padding);
   border: 0;
-  border-radius: var(--filter-pill-radius);
-  background: var(--filter-overlay-primary-background);
-  color: var(--filter-overlay-primary-color);
+  border-radius: calc(var(--radius)*1.5);
+  background: color-mix(in srgb, var(--filter-overlay-panel-color) 7%, transparent);
+  color: inherit;
   font-size: var(--filter-action-font-size);
-  font-weight: 600
+  font-weight: 600;
+  transition-property: background-color, transform;
+  transition-duration: 120ms;
+  transition-timing-function: ease-out
+}
+
+:deep(.video-reset:hover) {
+  background: color-mix(in srgb, var(--filter-overlay-panel-color) 11%, transparent)
 }
 
 :deep(.video-reset:active) {
   transform: scale(.96)
+}
+
+:deep(.video-reset:focus-visible) {
+  outline: 2px solid currentColor;
+  outline-offset: 2px
 }
 
 :deep(.video-timeline) {
@@ -1391,7 +1513,8 @@ const showAllAssets = () => {
     display: grid;
     place-items: center;
     padding: 0;
-    touch-action: manipulation
+    touch-action: manipulation;
+    pointer-events: auto
   }
 
   :deep(.video-timeline) {
@@ -1556,11 +1679,71 @@ const showAllAssets = () => {
   }
 
   :deep(.video-timeline) {
-    grid-template-columns: 44px auto minmax(48px, 1fr);
+    grid-template-columns: auto minmax(48px, 1fr);
     gap: calc(var(--space)/1);
     border-radius: var(--radius-mobile);
     background: none;
     backdrop-filter: none;
+  }
+
+  :deep(.video-timeline-play) {
+    display: none
+  }
+
+  :deep(.video-stage-play) {
+    position: absolute;
+    z-index: 3;
+    top: 50%;
+    left: 50%;
+    width: 56px;
+    min-height: 56px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    color: #fff;
+    background: rgb(0 0 0 / .32);
+    box-shadow: 0 2px 12px rgb(0 0 0 / .22), inset 0 0 0 1px rgb(255 255 255 / .12);
+    backdrop-filter: blur(16px) saturate(125%);
+    -webkit-backdrop-filter: blur(16px) saturate(125%);
+    translate: -50% -50%;
+    transition-property: scale, background-color, opacity;
+    transition-duration: 150ms;
+    transition-timing-function: cubic-bezier(.2, 0, 0, 1);
+    touch-action: manipulation
+  }
+
+  :deep(.video-stage-play.is-hidden) {
+    opacity: 0;
+    pointer-events: none
+  }
+
+  :deep(.video-stage-play:active) {
+    scale: .96
+  }
+
+  :deep(.video-stage-play:focus-visible) {
+    outline: 2px solid #fff;
+    outline-offset: 3px
+  }
+
+  :deep(.video-stage-play-icon) {
+    position: absolute;
+    display: grid;
+    place-items: center;
+    opacity: 0;
+    scale: .25;
+    filter: blur(4px);
+    transition-property: opacity, scale, filter;
+    transition-duration: 150ms;
+    transition-timing-function: cubic-bezier(.2, 0, 0, 1)
+  }
+
+  :deep(.video-stage-play-icon.active) {
+    opacity: 1;
+    scale: 1;
+    filter: blur(0)
   }
 
   :deep(.video-timeline-time),
@@ -1593,13 +1776,23 @@ const showAllAssets = () => {
     margin-top: 0
   }
 
-  :deep(.video-template-list > button) {
-    padding: 0
-  }
-
   :deep(.video-inspector label:has(> .video-range-input)),
   :deep(.video-inspector label:has(> .video-range-input)>span) {
-    min-height: var(--range-control-height-mobile)
+    min-height: var(--range-control-height-mobile);
+    
+  }
+
+  :deep(.video-choice-row:not(:has(button:nth-child(6)))) {
+    height: var(--range-control-height-mobile) !important;
+    min-height: var(--range-control-height-mobile) !important;
+    max-height: var(--range-control-height-mobile) !important
+  }
+
+  :deep(.video-choice-row:not(:has(button:nth-child(6))) button) {
+    height: calc(var(--range-control-height-mobile) - 8px) !important;
+    min-height: calc(var(--range-control-height-mobile) - 8px) !important;
+    max-height: calc(var(--range-control-height-mobile) - 8px) !important;
+    padding-block: 0 !important
   }
 
   :deep(.video-control-pair) {
@@ -1610,6 +1803,10 @@ const showAllAssets = () => {
     min-height: var(--range-control-height-mobile);
     display: grid;
     align-items: center
+  }
+
+  :deep(.video-hex-color-field) {
+    height: var(--range-control-height-mobile)
   }
 
   :deep(.video-color-hue input[type=range]) {
@@ -1642,7 +1839,9 @@ const showAllAssets = () => {
 
   .video-assets-panel li {
     grid-template-columns: 38px minmax(0, 1fr) 88px 44px;
-    min-height: 52px
+    min-height: 52px;
+    padding: 4px 8px;
+    border-radius: calc(var(--radius)*1.5)
   }
 
   .video-asset-handle {
@@ -1675,6 +1874,10 @@ const showAllAssets = () => {
   .video-asset-mobile-order button:disabled {
     opacity: .28
   }
+
+  .video-assets-show-all {
+    min-height: var(--range-control-height-mobile)
+  }
 }
 
 @media (max-width:640px) and (prefers-reduced-motion: reduce) {
@@ -1686,6 +1889,25 @@ const showAllAssets = () => {
   .video-composer-right > :deep(.video-mobile-panel.is-mobile-open),
   .video-composer-right > .video-mobile-panel.is-mobile-open {
     animation: none
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  :deep(.video-hex-color-field) {
+    height: var(--range-control-height-mobile)
+  }
+
+  :deep(.video-choice-row:not(:has(button:nth-child(6)))) {
+    height: var(--range-control-height-mobile) !important;
+    min-height: var(--range-control-height-mobile) !important;
+    max-height: var(--range-control-height-mobile) !important
+  }
+
+  :deep(.video-choice-row:not(:has(button:nth-child(6))) button) {
+    height: calc(var(--range-control-height-mobile) - 8px) !important;
+    min-height: calc(var(--range-control-height-mobile) - 8px) !important;
+    max-height: calc(var(--range-control-height-mobile) - 8px) !important;
+    padding-block: 0 !important
   }
 }
 </style>

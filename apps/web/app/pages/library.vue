@@ -510,8 +510,7 @@ const closeView = () => {
 }
 const openVideo = () => {
   const update = () => { videoAssets.value = [...displayedAssets.value]; compactFiltersVisible.value = false; searchExpanded.value = false; filtersExpanded.value = false; viewExpanded.value = false; boardSettingsExpanded.value = false; videoExpanded.value = true }
-  if (supportsFilterMorph()) void morphPanel('video', update, 'opening', true)
-  else update()
+  update()
 }
 const closeVideo = () => {
   const update = () => { videoExpanded.value = false }
@@ -971,6 +970,7 @@ onBeforeUnmount(() => {
         <div v-else-if="displayedAssets.length === 0" class="state"><strong>{{ selectedBoardId ? 'No matching assets on this board' : hasFilters ? 'No matching assets' : 'No assets yet' }}</strong><span>{{ selectedBoardId ? 'Try another board or change your search.' : hasFilters ? 'Change your search or clear the filters.' : 'Upload frames from the Figma plugin to build this library.' }}</span><button v-if="!selectedBoardId && hasFilters" type="button"
             @click="clearFilters">Clear filters</button></div>
         <AssetMasonry v-else :key="selectedBoardId || 'all'" :assets="displayedAssets" :hidden="cardsHidden"
+          :play-videos="!videoExpanded"
           :stable-columns="false" :animate-changes="!cardsHidden" :can-approve="canApprove && !arrangeExpanded"
           :editable-titles="canRenameAssets && !arrangeExpanded" :view-settings="libraryView"
           :interactive="!arrangeExpanded" :reorderable="arrangeExpanded" :selectable="arrangeExpanded"

@@ -44,14 +44,21 @@ const carousel3dPresets: VideoTemplate[] = carousel3dPresetDefinitions.map(([num
   return { id:`carousel-3d-${number}`,name:`Carousel 3D ${number}`,description:'Editable 3D carousel preset.',renderer:'webgl',collection:'carousel-3d',thumbnail:carousel3dThumb,preset:values }
 })
 
-const gridDefaults: Partial<VideoComposerSettings> = { visibleCount:35,flipGridColumns:7,flipGridRows:5,flipGridGap:24,planeSize:100,centerScale:2.1,secondsPerSlide:2.4,delaySeconds:.8,cycles:6,loop:true,cornerRadius:8,offsetX:0,offsetY:0,easing:'smooth',backgroundColor:'#111111',fit:'cover',driftDirection:'left',driftAmount:16,gridMoveDistance:300,gridStaggerCurve:'linear' }
+const gridDefaults: Partial<VideoComposerSettings> = { visibleCount:35,flipGridColumns:7,flipGridRows:5,flipGridGap:24,planeSize:100,centerScale:2.1,secondsPerSlide:2.4,delaySeconds:.8,cycles:6,loop:true,cornerRadius:8,offsetX:0,offsetY:0,easing:'smooth',backgroundColor:'#111111',fit:'cover',driftDirection:'left',driftAmount:16,gridMoveDistance:300,gridStaggerCurve:'linear',gridLayout:'flat',gridTubeBend:'outside',gridTubeMotion:'continuous',gridTubeStepRotation:20,gridTubeEmphasisStyle:'stable',gridCameraZoom:100,gridTubeStagger:0,gridScatter:0,gridRotationVariance:0,gridScaleVariance:0,gridEmphasis:'none',gridEmphasisAmount:0,gridEmphasisCurve:'smooth' }
 const gridThumb = 'linear-gradient(90deg,transparent 0 7%,#d8d8d8 8% 29%,transparent 30% 35%,#aaa 36% 63%,transparent 64% 69%,#777 70% 92%,transparent 93%),linear-gradient(0deg,transparent 0 7%,#777 8% 29%,transparent 30% 35%,#d8d8d8 36% 63%,transparent 64% 69%,#aaa 70% 92%,transparent 93%),#090909'
 const gridPresetDefinitions: Array<readonly [string, Partial<VideoComposerSettings>, readonly [number,number,number,number]]> = [
   ['01',{},[.76,0,.24,1]],
   ['02',{ flipGridColumns:8,flipGridRows:5,flipGridGap:12,planeSize:82,centerScale:2.4,secondsPerSlide:1.8,delaySeconds:.45,driftDirection:'up',driftAmount:20 },[.86,.14,.14,.86]],
-  ['03',{ flipGridColumns:6,flipGridRows:6,flipGridGap:38,planeSize:115,centerScale:1.8,secondsPerSlide:3.5,delaySeconds:1.2,driftDirection:'right',driftAmount:12 },[.25,.25,.75,.75]]
+  ['03',{ flipGridColumns:6,flipGridRows:6,flipGridGap:38,planeSize:115,centerScale:1.8,secondsPerSlide:3.5,delaySeconds:1.2,driftDirection:'right',driftAmount:12 },[.25,.25,.75,.75]],
+  ['04',{ gridLayout:'tube',gridTubeBend:'outside',flipGridColumns:18,flipGridRows:13,flipGridGap:24,planeSize:108,secondsPerSlide:6,cycles:2,driftDirection:'left' },[.25,.25,.75,.75]],
+  ['05',{ gridLayout:'tube',gridTubeBend:'inside',flipGridColumns:18,flipGridRows:13,flipGridGap:30,planeSize:112,secondsPerSlide:7,cycles:2,driftDirection:'right' },[.25,.25,.75,.75]],
+  ['06',{ gridLayout:'tube',gridTubeBend:'outside',flipGridColumns:14,flipGridRows:11,flipGridGap:18,planeSize:105,secondsPerSlide:5,cycles:2,driftDirection:'up' },[.25,.25,.75,.75]],
+  ['07',{ gridLayout:'tube',gridTubeBend:'inside',flipGridColumns:16,flipGridRows:12,flipGridGap:34,planeSize:115,secondsPerSlide:6.5,cycles:2,driftDirection:'down' },[.25,.25,.75,.75]]
 ]
-const gridPresets: VideoTemplate[] = gridPresetDefinitions.map(([number,settings,bezier]) => ({ id:`grid-${number}`,name:`Grid ${number}`,description:'Oversized WebGL grid with periodic image focus.',renderer:'webgl',collection:'grid',thumbnail:gridThumb,bezier,preset:{...gridDefaults,...settings} }))
+const gridPresets: VideoTemplate[] = gridPresetDefinitions.map(([number,settings,bezier]) => {
+  const curved=settings.gridLayout==='tube'
+  return { id:`grid-${number}`,name:`Grid ${number}`,description:curved?'Continuously curved image grid.':'Oversized WebGL grid with periodic image focus.',renderer:'webgl',collection:'grid',thumbnail:gridThumb,bezier,preset:{...gridDefaults,...settings} }
+})
 
 const orbitDefaults: Partial<VideoComposerSettings> = { visibleCount:7,cycles:1,loop:true,cycleDegrees:360,secondsPerSlide:8,delaySeconds:0,reverse:false,planeSize:370,rotationX:0,rotationY:0,rotationZ:0,orbitRadius:420,perspective:100,cornerRadius:0,fade:0,offsetX:0,offsetY:0,easing:'sweep' }
 const orbitPresetDefinitions: Array<readonly [string, string, Partial<VideoComposerSettings>, readonly [number,number,number,number]]> = [

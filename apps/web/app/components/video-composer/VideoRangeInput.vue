@@ -33,7 +33,7 @@ const style = computed<CSSProperties>(() => ({
   --video-range-handle-hover: color-mix(in srgb, var(--filter-overlay-panel-color) 46%, transparent);
   display: block;
   width: 100%;
-  height: 34px;
+  height: var(--video-control-height, 40px);
   margin: 0;
   border: 0;
   border-radius: calc(var(--radius));
@@ -63,7 +63,7 @@ const style = computed<CSSProperties>(() => ({
 .video-range-input::-webkit-slider-thumb {
   width: 2px;
   height: 16px;
-  margin-top: 9px;
+  margin-top: calc((var(--video-control-height, 40px) - 16px) / 2);
   border: 0;
   border-radius: 1px;
   appearance: none;
@@ -106,10 +106,14 @@ const style = computed<CSSProperties>(() => ({
 
 @media (hover: none), (pointer: coarse) {
   .video-range-input {
+    
     height: var(--range-control-height-mobile);
+    min-height: max-content;
     touch-action: none;
     -webkit-user-select: none;
-    user-select: none
+    user-select: none;
+    border-radius: calc(var(--radius)*1.5);
+    
   }
 
   .video-range-input::-webkit-slider-thumb {

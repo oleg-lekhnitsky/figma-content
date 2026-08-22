@@ -77,11 +77,27 @@ export interface VideoComposerSettings {
   driftAmount: number
   gridMoveDistance: number
   gridStaggerCurve: VideoEasing
+  gridLayout: 'flat' | 'tube'
+  gridTubeBend: 'outside' | 'inside'
+  gridTubeMotion: 'continuous' | 'stepped'
+  gridTubeStepRotation: number
+  gridTubeEmphasisStyle: 'stable' | 'rings'
+  gridCameraZoom: number
+  gridTubeStagger: number
+  gridScatter: number
+  gridRotationVariance: number
+  gridScaleVariance: number
+  gridEmphasis: 'none' | 'center' | 'edges'
+  gridEmphasisAmount: number
+  gridEmphasisCurve: VideoEasing
   delaySeconds: number
   fps: 15 | 25 | 30 | 60
   safeArea: boolean
   exportMotionBlur: boolean
+  backgroundType: 'solid' | 'gradient'
   backgroundColor: string
+  backgroundGradientColor: string
+  backgroundGradientAngle: number
   globeMinScale: number
   globeMaxScale: number
   globeAxis: 'x' | 'y' | 'z'

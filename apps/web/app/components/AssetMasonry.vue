@@ -1,6 +1,6 @@
 <script setup lang="ts" generic="T extends AssetMasonryItem">
 import type { RouteLocationRaw } from 'vue-router'
-import { Heart } from 'reicon-vue'
+import { Figma, Heart } from 'reicon-vue'
 import type { BoardViewSettings } from '@content-library/shared'
 import type { AssetMasonryItem } from '../types/asset-masonry'
 
@@ -25,6 +25,7 @@ const props = withDefaults(defineProps<{
   animateChanges?: boolean
   canApprove?: boolean
   editableTitles?: boolean
+  playVideos?: boolean
   viewSettings?: BoardViewSettings
 }>(), {
   interactive: false,
@@ -39,7 +40,8 @@ const props = withDefaults(defineProps<{
   stableColumns: false,
   animateChanges: false,
   canApprove: false,
-  editableTitles: false
+  editableTitles: false,
+  playVideos: true
 })
 const emit = defineEmits<{
   toggleSelection: [asset: T]
@@ -76,12 +78,14 @@ let quickActionsPointerId: number | undefined
 let quickActionsStartX = 0
 let quickActionsStartY = 0
 let suppressNextOpenId: string | null = null
+let suppressNextOpenTimer: ReturnType<typeof setTimeout> | undefined
 let activeViewTransition: { finished: Promise<void>; skipTransition?: () => void } | undefined
 const assetLink = (id: string): RouteLocationRaw => ({ path: '/library', query: { ...route.query, asset: id } })
 const openAsset = (event: MouseEvent, id: string) => {
   if (suppressNextOpenId === id) {
     event.preventDefault()
     event.stopPropagation()
+    clearTimeout(suppressNextOpenTimer)
     suppressNextOpenId = null
     return
   }
@@ -115,8 +119,13 @@ const cancelQuickActionsHold = () => {
   quickActionsTimer = undefined
   quickActionsPointerId = undefined
 }
+const suppressNextOpen = (id: string) => {
+  clearTimeout(suppressNextOpenTimer)
+  suppressNextOpenId = id
+  suppressNextOpenTimer = setTimeout(() => { suppressNextOpenId = null }, 800)
+}
 const startQuickActionsHold = (event: PointerEvent, asset: T) => {
-  if (event.pointerType !== 'touch' || !props.interactive || (!asset.figma_url && !props.canApprove) || props.reorderable) return
+  if (event.pointerType !== 'touch' || !event.isPrimary || event.button !== 0 || !props.interactive || (!asset.figma_url && !props.canApprove) || props.reorderable) return
   cancelQuickActionsHold()
   if (quickActionsAssetId.value !== asset.id) quickActionsAssetId.value = null
   quickActionsPointerId = event.pointerId
@@ -125,8 +134,15 @@ const startQuickActionsHold = (event: PointerEvent, asset: T) => {
   quickActionsTimer = setTimeout(() => {
     quickActionsTimer = undefined
     quickActionsAssetId.value = asset.id
-    suppressNextOpenId = asset.id
+    suppressNextOpen(asset.id)
   }, 500)
+}
+const openQuickActionsContextMenu = (event: MouseEvent, asset: T) => {
+  if (!props.interactive || (!asset.figma_url && !props.canApprove) || props.reorderable) return
+  event.preventDefault()
+  cancelQuickActionsHold()
+  quickActionsAssetId.value = asset.id
+  suppressNextOpen(asset.id)
 }
 const moveQuickActionsHold = (event: PointerEvent) => {
   if (event.pointerId !== quickActionsPointerId) return
@@ -304,6 +320,7 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   cancelQuickActionsHold()
+  clearTimeout(suppressNextOpenTimer)
   cancelAnimationFrame(measureFrame)
   cancelAnimationFrame(revealFrame)
   cancelAnimationFrame(mediaRevealFrame)
@@ -323,15 +340,16 @@ onBeforeUnmount(() => {
       @pointerdown="startMouseDrag($event, index)" @pointermove="movePointerDrag" @pointerup="finishPointerDrag"
       @pointercancel="cancelPointerDrag" @lostpointercapture="handlePointerCaptureLost">
       <div
-        class="preview" :class="{ 'is-loading': !loadedImages.has(asset.id) }"
+        class="preview" :class="{ 'is-loading': !loadedImages.has(asset.id), 'has-context-actions': interactive && !reorderable && Boolean(asset.figma_url || canApprove) }"
         :style="{ aspectRatio: `${asset.width} / ${asset.height}` }"
         @pointerdown="startQuickActionsHold($event, asset)" @pointermove="moveQuickActionsHold"
-        @pointerup="finishQuickActionsHold" @pointercancel="cancelQuickActionsHold">
+        @pointerup="finishQuickActionsHold" @pointercancel="cancelQuickActionsHold"
+        @contextmenu="openQuickActionsContextMenu($event, asset)">
         <NuxtLink v-if="interactive" class="preview-link" :to="assetLink(asset.id)" :aria-label="`View ${asset.title}`" @click="openAsset($event, asset.id)">
-          <AssetMedia :class="{ 'is-loaded': loadedImages.has(asset.id) }" :data-asset-id="asset.id" :src="asset.previewUrl" :srcset="asset.preview2xUrl ? `${asset.previewUrl} 640w, ${asset.preview2xUrl} 1280w` : undefined" :sizes="previewSizes" :single-resolution-media="preview1xMedia" :mime-type="asset.mime_type" :width="asset.width" :height="asset.height" :alt="`Preview of ${asset.title}`" :loading="index < 7 ? 'eager' : 'lazy'" :fetchpriority="index < 7 ? 'high' : 'auto'" @load="markImageLoaded(asset.id)" />
+          <AssetMedia :class="{ 'is-loaded': loadedImages.has(asset.id) }" :data-asset-id="asset.id" :src="asset.previewUrl" :srcset="asset.preview2xUrl ? `${asset.previewUrl} 640w, ${asset.preview2xUrl} 1280w` : undefined" :sizes="previewSizes" :single-resolution-media="preview1xMedia" :mime-type="asset.mime_type" :width="asset.width" :height="asset.height" :alt="`Preview of ${asset.title}`" :loading="index < 7 ? 'eager' : 'lazy'" :fetchpriority="index < 7 ? 'high' : 'auto'" :autoplay="playVideos" @load="markImageLoaded(asset.id)" />
         </NuxtLink>
-        <AssetMedia v-else :class="{ 'is-loaded': loadedImages.has(asset.id) }" :data-asset-id="asset.id" :src="asset.previewUrl" :srcset="asset.preview2xUrl ? `${asset.previewUrl} 640w, ${asset.preview2xUrl} 1280w` : undefined" :sizes="previewSizes" :single-resolution-media="preview1xMedia" :mime-type="asset.mime_type" :width="asset.width" :height="asset.height" :alt="asset.title" :loading="index < 7 ? 'eager' : 'lazy'" :fetchpriority="index < 7 ? 'high' : 'auto'" @load="markImageLoaded(asset.id)" />
-        <div v-if="interactive && (asset.figma_url || canApprove)" class="card-quick-actions"><a v-if="asset.figma_url" class="figma-button" :href="asset.figma_url" target="_blank" rel="noopener noreferrer" @pointerdown.stop>Open in Figma</a><button v-if="canApprove" class="card-approval-toggle" type="button" :aria-pressed="asset.status === 'approved'" :aria-label="asset.status === 'approved' ? `Remove approval from ${asset.title}` : `Approve ${asset.title}`" :title="asset.status === 'approved' ? 'Remove approval' : 'Approve'" @pointerdown.stop @click.stop="emit('toggleApproval', asset)"><Heart :size="16" :weight="asset.status === 'approved' ? 'Filled' : 'Outline'" aria-hidden="true" /></button></div>
+        <AssetMedia v-else :class="{ 'is-loaded': loadedImages.has(asset.id) }" :data-asset-id="asset.id" :src="asset.previewUrl" :srcset="asset.preview2xUrl ? `${asset.previewUrl} 640w, ${asset.preview2xUrl} 1280w` :undefined" :sizes="previewSizes" :single-resolution-media="preview1xMedia" :mime-type="asset.mime_type" :width="asset.width" :height="asset.height" :alt="asset.title" :loading="index < 7 ? 'eager' : 'lazy'" :fetchpriority="index < 7 ? 'high' : 'auto'" :autoplay="playVideos" @load="markImageLoaded(asset.id)" />
+        <div v-if="interactive && (asset.figma_url || canApprove)" class="card-quick-actions" role="menu" :aria-label="`Actions for ${asset.title}`"><a v-if="asset.figma_url" class="figma-button" role="menuitem" :href="asset.figma_url" target="_blank" rel="noopener noreferrer" aria-label="Open in Figma" title="Open in Figma" @pointerdown.stop><Figma :size="16" aria-hidden="true" /></a><button v-if="canApprove" class="card-approval-toggle" type="button" role="menuitemcheckbox" :aria-checked="asset.status === 'approved'" :aria-label="asset.status === 'approved' ? `Remove approval from ${asset.title}` : `Approve ${asset.title}`" :title="asset.status === 'approved' ? 'Remove approval' : 'Approve'" @pointerdown.stop @click.stop="emit('toggleApproval', asset)"><Heart :size="16" :weight="asset.status === 'approved' ? 'Filled' : 'Outline'" aria-hidden="true" /></button></div>
         <div class="preview-actions"><slot name="previewActions" :asset="asset" /></div>
         <button v-if="selectable" class="selection-control" type="button" :class="{ active: isSelected(asset.id) }" :aria-label="`${isSelected(asset.id) ? 'Deselect' : 'Select'} ${asset.title}`" :aria-pressed="isSelected(asset.id)" @click="emit('toggleSelection', asset)" />
         <button
@@ -374,7 +392,7 @@ onBeforeUnmount(() => {
 .card-title-input{box-sizing:border-box;display:block;width:100%;min-width:0;overflow:hidden;padding:0;border:0;border-bottom:1px solid transparent;border-radius:0;color:inherit;background:transparent;font:inherit;font-weight:inherit;letter-spacing:inherit;line-height:inherit;text-overflow:ellipsis;white-space:nowrap}.card-title-input:focus{border-bottom-color:currentColor;outline:0;text-overflow:clip}.card-title-input:focus-visible{outline:0}
 .card-quick-actions{position:absolute;z-index:2;left:50%;bottom:10px;display:flex;align-items:center;gap:calc(var(--space)/4);visibility:hidden;transform:translate(-50%,8px) scale(.96);pointer-events:none;transition:transform 150ms cubic-bezier(.2,0,0,1);transition-behavior:allow-discrete}
 .figma-button,.card-approval-toggle{min-height:32px;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:999px;color:var(--material-tinted-fg);background:var(--material-tinted-bg);font-size:var(--font-size-label);text-decoration:none;white-space:nowrap;box-shadow:none;-webkit-backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));transition:scale 150ms,background-color 150ms cubic-bezier(.2,0,0,1)}
-.figma-button{padding:0 13px}.card-approval-toggle{width:32px;min-width:32px;padding:0}
+.figma-button,.card-approval-toggle{width:32px;min-width:32px;padding:0}
 .preview-actions{position:absolute;z-index:3;right:10px;bottom:10px;left:10px;display:flex;justify-content:center;opacity:0;transform:translateY(8px);pointer-events:none;transition:opacity 150ms,transform 150ms cubic-bezier(.2,0,0,1)}
 .selection-control.selection-control{position:absolute;z-index:3;top:10px;right:10px;width:24px;height:24px;min-height:24px;padding:0;border:1px solid rgb(0 0 0/.35);border-radius:50%;background:rgb(255 255 255/.9);box-shadow:0 1px 4px rgb(0 0 0/.12);opacity:0;transition:opacity 120ms,scale 150ms,background-color 150ms,border-color 150ms}.selection-control.active{border-color:var(--color-fg);background:var(--color-fg);opacity:1}.selection-control:hover{border-color:var(--color-fg)}.selection-control:active{scale:.9}
 .touch-reorder-handle{position:absolute;z-index:4;top:10px;left:10px;width:36px;height:36px;min-height:36px;display:none;place-items:center;padding:0;border-radius:50%;color:var(--material-tinted-fg);background:var(--material-tinted-bg);font-size:23px;line-height:1;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation))}.touch-reorder-handle span{translate:0 -1px;pointer-events:none}
@@ -395,6 +413,6 @@ onBeforeUnmount(() => {
 @media(max-width:1280px){.asset-masonry.custom-view:not(.column-layout){grid-template-columns:repeat(clamp(1,calc(4 + var(--board-column-offset,0)),6),minmax(0,1fr))}}
 @media(max-width:900px){.asset-masonry.custom-view:not(.column-layout){grid-template-columns:repeat(clamp(1,calc(3 + var(--board-column-offset,0)),5),minmax(0,1fr))}}
 @media(max-width:520px){.asset-masonry.custom-view:not(.column-layout){grid-template-columns:repeat(clamp(1,calc(2 + var(--board-column-offset,0)),4),minmax(0,1fr))}}
-@media(hover:none),(pointer:coarse){.selection-control.selection-control{opacity:1}.preview{-webkit-touch-callout:none}.asset-card.has-quick-actions .card-quick-actions,.asset-card:focus-within .card-quick-actions{visibility:visible;transform:translate(-50%,0) scale(1);pointer-events:auto}.figma-button,.card-approval-toggle{min-height:44px}.figma-button{padding-inline:18px}.card-approval-toggle{width:44px;min-width:44px}.preview-actions{opacity:1;transform:none;pointer-events:auto}.touch-reorder-handle{display:grid}.preview-link,.preview-link:hover,.preview-link:active,.preview-link:focus{opacity:1}.preview :is(img,video){filter:none}}
+@media(hover:none),(pointer:coarse){.selection-control.selection-control{opacity:1}.preview.has-context-actions{-webkit-touch-callout:none}.asset-card.has-quick-actions .card-quick-actions,.asset-card:focus-within .card-quick-actions{visibility:visible;transform:translate(-50%,0) scale(1);pointer-events:auto}.figma-button,.card-approval-toggle{width:44px;min-width:44px;min-height:44px}.preview-actions{opacity:1;transform:none;pointer-events:auto}.touch-reorder-handle{display:grid}.preview-link,.preview-link:hover,.preview-link:active,.preview-link:focus{opacity:1}.preview :is(img,video){filter:none}}
 @media(prefers-reduced-motion:reduce){.asset-masonry.is-arranging .asset-card .preview{animation:none}.asset-card{opacity:1;transform:none;transition:none}.preview :is(img,video),.preview :deep(.asset-media-picture img){opacity:1;transform:none;transition:none}.figma-button{transition-duration:.01ms;transform:translate(-50%,0)}.preview-actions{transition:none}.figma-button:active{scale:1}}
 </style>

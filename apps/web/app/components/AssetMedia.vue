@@ -1,6 +1,6 @@
 <script setup lang="ts">
 defineOptions({ inheritAttrs: false })
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   src: string
   srcset?: string
   sizes?: string
@@ -11,12 +11,19 @@ withDefaults(defineProps<{
   alt?: string
   loading?: 'eager' | 'lazy'
   fetchpriority?: 'high' | 'low' | 'auto'
-}>(), { srcset: undefined, sizes: undefined, singleResolutionMedia: undefined, mimeType: null, width: undefined, height: undefined, alt: '', loading: 'lazy', fetchpriority: 'auto' })
+  autoplay?: boolean
+}>(), { srcset: undefined, sizes: undefined, singleResolutionMedia: undefined, mimeType: null, width: undefined, height: undefined, alt: '', loading: 'lazy', fetchpriority: 'auto', autoplay: true })
 defineEmits<{ load: [] }>()
+const video = ref<HTMLVideoElement>()
+watch(() => props.autoplay, shouldPlay => {
+  if (!video.value) return
+  if (shouldPlay) void video.value.play().catch(() => undefined)
+  else video.value.pause()
+})
 </script>
 
 <template>
-  <video v-if="mimeType?.startsWith('video/')" v-bind="$attrs" :src="src" :width="width" :height="height" autoplay muted loop playsinline preload="metadata" :aria-label="alt || undefined" @loadeddata="$emit('load')" />
+  <video v-if="mimeType?.startsWith('video/')" ref="video" v-bind="$attrs" :src="src" :width="width" :height="height" :autoplay="autoplay" muted loop playsinline preload="metadata" :aria-label="alt || undefined" @loadeddata="$emit('load')" />
   <template v-else>
     <picture v-if="singleResolutionMedia" class="asset-media-picture">
       <source :media="singleResolutionMedia" :srcset="src">
