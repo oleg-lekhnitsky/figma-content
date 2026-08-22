@@ -33,7 +33,10 @@ onMounted(() => {
   renderLightweightPreview.value = lightweight
   renderGeneratedFrame.value = !lightweight
   if (lightweight && previewRoot.value) {
-    visibilityObserver = new IntersectionObserver(([entry]) => { isVisible.value = Boolean(entry?.isIntersecting) }, { rootMargin: '80px 0px', threshold: .01 })
+    visibilityObserver = new IntersectionObserver(([entry]) => {
+      isVisible.value = Boolean(entry?.isIntersecting)
+      if (entry?.isIntersecting && !props.autoPreview) renderGeneratedFrame.value = true
+    }, { rootMargin: '80px 0px', threshold: .01 })
     visibilityObserver.observe(previewRoot.value)
   }
 })
