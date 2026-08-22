@@ -325,21 +325,22 @@ textarea {
   overscroll-behavior: contain;
 }
 .app-dropdown-menu-content {
-  --menu-inset: calc(var(--space) / 3);
-  --menu-row-gap: calc(var(--space) / 12);
-  --menu-row-height: calc(var(--control-height) * 0.75);
+  --menu-inset: calc(var(--space) / 4);
+  --menu-row-gap: calc(var(--space) / 15);
+  --menu-row-height: calc(var(--control-height) * .75);
   --menu-radius: calc(var(--radius) * 0.75);
   width: 100%;
   min-width: min-content;
   display: grid;
   gap: var(--menu-row-gap);
-  padding: calc(var(--space)/1.5);
+  padding: calc(var(--space)/2.5);
   overflow: hidden;
-  border-radius: calc(var(--radius)*2);
+  border-radius: calc(var(--radius)*1.5);
 
 }
 .app-dropdown-menu-content [role^='menuitem'] {
   border-radius: calc(calc(var(--radius)*1.5) - var(--menu-inset));
+  padding: var(--menu-inset) calc(var(--menu-inset) * 3);
 }
 .app-dropdown-menu-content [role^='menuitem']:is(:hover, :focus-visible) {
   opacity: 1;

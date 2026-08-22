@@ -575,9 +575,7 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
   margin: 0;
 }
 
-.selection-panel--filter-overlay .filter-option-group h3,
-.selection-panel--filter-overlay .video-mobile-panel.is-mobile-open .video-panel-scroll legend,
-.selection-panel--filter-overlay .video-mobile-panel.is-mobile-open .video-hex-color > label {
+.selection-panel--filter-overlay .filter-option-group h3 {
   margin: 0;
   color: var(--color-surface);
   font-size: var(--filter-caption-size);
@@ -633,7 +631,60 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
   background: var(--filter-overlay-primary-background);
 }
 
+.selection-panel--filter-overlay .filter-option-list--segmented {
+  box-sizing: border-box;
+  width: 100%;
+  flex-wrap: nowrap;
+  gap: 2px;
+  padding: 4px;
+  border-radius: var(--filter-pill-radius);
+  background: color-mix(in srgb, var(--filter-overlay-panel-color) 7%, transparent);
+}
+
+.selection-panel--filter-overlay .filter-option-list--segmented > button {
+  min-width: 0;
+  flex: 1 1 0;
+  padding-inline: 8px;
+  border: 0;
+  border-radius: calc(var(--filter-pill-radius) - 4px);
+  color: color-mix(in srgb, var(--filter-overlay-panel-color) 58%, transparent);
+  background: transparent;
+  box-shadow: none;
+  transition-property: color, background-color, transform;
+  transition-duration: 120ms;
+  transition-timing-function: ease-out;
+}
+
+.selection-panel--filter-overlay .filter-option-list--segmented > button:is(:hover, :focus-visible) {
+  color: var(--filter-overlay-panel-color);
+  background: color-mix(in srgb, var(--filter-overlay-panel-color) 7%, transparent);
+}
+
+.selection-panel--filter-overlay .filter-option-list--segmented > button[aria-pressed='true'] {
+  color: var(--filter-overlay-primary-color);
+  background: var(--filter-overlay-primary-background);
+}
+
+.selection-panel--filter-overlay .filter-option-list--segmented > button:active {
+  transform: scale(.96);
+}
+
+.selection-panel--filter-overlay .filter-option-list--segmented:has(> button:nth-child(5)) > button {
+  padding-inline: 2px;
+  font-size: max(10px, calc(var(--filter-option-font-size) - 2px));
+}
+
 @media (max-width: 640px) {
+  .selection-panel--filter-overlay .video-mobile-panel.is-mobile-open .video-panel-scroll legend,
+  .selection-panel--filter-overlay .video-mobile-panel.is-mobile-open .video-hex-color > label {
+    margin: 0;
+    color: var(--color-surface);
+    font-size: var(--filter-caption-size);
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1;
+  }
+
   .selection-panel--filter-overlay .video-mobile-panel.is-mobile-open .video-panel-scroll {
     --filter-overlay-group-gap: var(--filter-sheet-group-gap-mobile);
     height: 100%;
@@ -647,6 +698,11 @@ body:has(.selection-panel--filter-overlay) { overflow: hidden; }
 
   .selection-panel--filter-overlay .video-mobile-panel.is-mobile-open :is(.video-choice-row, fieldset > .video-control-pair) {
     margin-top: var(--space);
+  }
+
+  .selection-panel--filter-overlay .video-mobile-panel.is-mobile-open .video-control-pair {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--space);
   }
 
   .selection-panel--filter-overlay .video-mobile-panel.is-mobile-open .video-hex-color {

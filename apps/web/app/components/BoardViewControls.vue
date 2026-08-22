@@ -29,26 +29,26 @@ const columnOptions: Array<{ value: BoardViewSettings['columns']; label: string 
       <h2 class="filter-overlay-title">Board view</h2>
     <section class="filter-option-group" role="group" aria-labelledby="board-view-card-text">
       <h3 id="board-view-card-text">Card text</h3>
-      <div class="filter-option-list">
+      <div class="filter-option-list filter-option-list--segmented">
         <button type="button" :aria-pressed="modelValue.showText" :disabled="disabled" @click="update('showText', true)">Show</button>
         <button type="button" :aria-pressed="!modelValue.showText" :disabled="disabled" @click="update('showText', false)">Hide</button>
       </div>
     </section>
     <section class="filter-option-group" role="group" aria-labelledby="board-view-corners">
       <h3 id="board-view-corners">Corners</h3>
-      <div class="filter-option-list">
+      <div class="filter-option-list filter-option-list--segmented">
         <button v-for="option in radiusOptions" :key="option.value" type="button" :aria-pressed="modelValue.radius === option.value" :disabled="disabled" @click="update('radius', option.value)">{{ option.label }}</button>
       </div>
     </section>
     <section class="filter-option-group" role="group" aria-labelledby="board-view-spacing">
       <h3 id="board-view-spacing">Spacing</h3>
-      <div class="filter-option-list">
+      <div class="filter-option-list filter-option-list--segmented">
         <button v-for="option in gapOptions" :key="option.value" type="button" :aria-pressed="modelValue.gap === option.value" :disabled="disabled" @click="update('gap', option.value)">{{ option.label }}</button>
       </div>
     </section>
     <section class="filter-option-group" role="group" aria-labelledby="board-view-columns">
       <h3 id="board-view-columns">Columns</h3>
-      <div class="filter-option-list">
+      <div class="filter-option-list filter-option-list--segmented">
         <button v-for="option in columnOptions" :key="option.value" type="button" :aria-pressed="modelValue.columns === option.value" :disabled="disabled" @click="update('columns', option.value)">{{ option.label }}</button>
       </div>
       </section>

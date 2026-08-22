@@ -660,7 +660,7 @@ const showAllAssets = () => {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  padding: calc(var(--space)/2) calc(var(--space)*.75);
+  padding: calc(var(--space)*.625) calc(var(--space)*.75);
 }
 
 :deep(.video-template-folder h3) {
@@ -1060,14 +1060,16 @@ const showAllAssets = () => {
 :deep(.video-inspector label:has(> .video-range-input) output) {
   display: inline-flex;
   align-items: center;
-  max-width: 45%;
+  max-width: 50%;
+  flex: 0 1 auto;
+  min-width: 0;
   min-height: 20px;
-  padding: 0 6px;
+  margin-left: auto;
+  padding-left: 4px;
   overflow: hidden;
   border-radius: 6px;
   color: var(--video-range-value-color);
   text-overflow: ellipsis;
-  
 }
 
 :deep(.video-control-pair) {
@@ -1412,8 +1414,18 @@ const showAllAssets = () => {
 
   }
 
+  :deep(.video-template-list > .video-template-folder) {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: calc(var(--space)*1.5) calc(var(--space)*1.5);
+}
+
   .board-video-composer {
     --video-mobile-sheet-height: min(48dvh, 32rem);
+    --video-input-gap-mobile: calc(var(--space) / .75);
+    --video-type-body: var(--font-size-body);
+    --video-control-height: var(--range-control-height-mobile);
     position: relative;
     box-sizing: border-box;
     height: calc(100dvh - var(--space));
@@ -1636,7 +1648,9 @@ const showAllAssets = () => {
     display: none
   }
 
+  .board-video-composer > :deep(.video-inspector.video-mobile-panel.is-mobile-open > .video-panel-scroll),
   .video-composer-right > :deep(.video-inspector.video-mobile-panel.is-mobile-open > .video-panel-scroll) {
+    gap: var(--video-input-gap-mobile);
     overflow-x: hidden;
     overflow-y: auto
   }
@@ -1776,6 +1790,26 @@ const showAllAssets = () => {
     margin-top: 0
   }
 
+  :deep(.video-template-browser > .video-panel-scroll > header h2) {
+    font-size: 1.75rem;
+  }
+
+  :deep(.video-template-folder h3) {
+    font-size: 1.625rem;
+  }
+
+  :deep(.video-template-list strong) {
+    font-size: var(--font-size-control);
+  }
+
+  :deep(.video-template-featured strong) {
+    font-size: var(--font-size-body);
+  }
+
+  :deep(.video-template-list small) {
+    font-size: var(--font-size-label);
+  }
+
   :deep(.video-inspector label:has(> .video-range-input)),
   :deep(.video-inspector label:has(> .video-range-input)>span) {
     min-height: var(--range-control-height-mobile);
@@ -1795,8 +1829,31 @@ const showAllAssets = () => {
     padding-block: 0 !important
   }
 
+  :deep(.video-choice-row:has(button:nth-child(6))) {
+    gap: calc(var(--space)/2);
+  }
+
+  :deep(.video-choice-row:has(button:nth-child(6)) button) {
+    min-height: var(--range-control-height-mobile);
+    padding: 0 var(--filter-option-padding);
+    font-size: var(--font-size-body);
+  }
+
+  :deep(.video-reset) {
+    min-height: var(--range-control-height-mobile);
+    font-size: var(--font-size-control);
+  }
+
+  :deep(.video-toggle) {
+    width: 100%;
+    min-height: var(--range-control-height-mobile);
+    padding: 0 var(--filter-action-padding);
+    font-size: var(--font-size-control);
+  }
+
   :deep(.video-control-pair) {
-    grid-template-columns: minmax(0, 1fr)
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--video-input-gap-mobile)
   }
 
   :deep(.video-color-hue) {

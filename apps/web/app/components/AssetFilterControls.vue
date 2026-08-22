@@ -77,7 +77,7 @@ const sortOptions = [
       </section>
       <section v-if="showStatus" class="filter-option-group">
         <h3>Status</h3>
-        <div class="filter-option-list"><button type="button" :aria-pressed="status === ''" @click="emit('update:status', '')">All</button><button type="button" :aria-pressed="status === 'approved'" @click="emit('update:status', 'approved')">Approved</button><button type="button" :aria-pressed="status === 'draft'" @click="emit('update:status', 'draft')">Draft</button></div>
+        <div class="filter-option-list filter-option-list--segmented"><button type="button" :aria-pressed="status === ''" @click="emit('update:status', '')">All</button><button type="button" :aria-pressed="status === 'approved'" @click="emit('update:status', 'approved')">Approved</button><button type="button" :aria-pressed="status === 'draft'" @click="emit('update:status', 'draft')">Draft</button></div>
       </section>
       <section class="filter-option-group">
         <h3>Projects</h3>
