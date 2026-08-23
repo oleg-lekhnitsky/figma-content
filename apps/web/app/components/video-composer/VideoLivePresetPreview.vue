@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { AssetMasonryItem } from '~/types/asset-masonry'
 import type { VideoTemplate } from '~/types/video-composer'
+import { defaultVideoBackground } from '~/utils/video-background'
 
 const props = defineProps<{ template: VideoTemplate; assets: AssetMasonryItem[]; transparentBackground?: boolean }>()
 const emit = defineEmits<{ ready: [] }>()
@@ -12,7 +13,7 @@ const { settings, setCanvas, seek } = useVideoComposer(assetRef, previewTitle, p
 onMounted(async() => {
   if (props.template.preset) Object.assign(settings.value, props.template.preset)
   settings.value.format = 'portrait-3-4'
-  settings.value.backgroundColor = '#090909'
+  Object.assign(settings.value, defaultVideoBackground)
   if (canvas.value) setCanvas(canvas.value)
   await nextTick()
   const startTime=props.template.collection === 'scale' ? Math.max(.05,Math.min(

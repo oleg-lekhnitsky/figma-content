@@ -123,7 +123,7 @@ const handleBoardCreated = async (boardId: string) => {
 const projects = computed(() => projectData.value?.data.projects ?? [])
 const tags = computed(() => tagData.value?.data.tags ?? [])
 const collections = computed(() => boardData.value?.data.collections ?? [])
-const boards = computed(() => collections.value.filter(board => board.purpose !== 'case' && board.purpose !== 'portfolio'))
+const boards = computed(() => collections.value)
 const selectedBoardId = computed(() => typeof route.query.board === 'string' ? route.query.board : '')
 const selectedBoard = computed(() => collections.value.find(board => board.id === selectedBoardId.value))
 const selectedDynamicBoard = computed(() => selectedBoard.value?.mode === 'dynamic' ? selectedBoard.value : null)
@@ -289,7 +289,7 @@ const hydrateDynamicBoardFilters = (board: BoardSummary | null | undefined) => {
   dynamicBoardFilters.dateFrom = filters?.dateFrom?.slice(0, 10) ?? ''
   dynamicBoardFilters.dateTo = filters?.dateTo?.slice(0, 10) ?? ''
 }
-const defaultBoardView: BoardViewSettings = { showText: true, radius: 'default', gap: 'default', columns: 'auto' }
+const defaultBoardView: BoardViewSettings = { showText: true, radius: 'small', gap: 'default', columns: 'auto' }
 const libraryViewStorageKey = 'content-library:view-settings'
 const libraryView = ref<BoardViewSettings>({ ...defaultBoardView })
 const setLibraryView = (next: BoardViewSettings) => {
@@ -303,7 +303,7 @@ const { data: selectedBoardData, status: selectedBoardStatus, error: selectedBoa
   const availableAssets = data.value?.data.assets ?? []
   const availableById = new Map(availableAssets.map(asset => [asset.id, asset]))
   const localAssets = (board?.assetIds ?? []).map(id => availableById.get(id)).filter((asset): asset is AssetCard => Boolean(asset))
-  if (board?.mode !== 'dynamic' && localAssets.length === board?.assetIds.length) return { boardId, assets: localAssets }
+  if (board?.purpose !== 'portfolio' && board?.mode !== 'dynamic' && localAssets.length === board?.assetIds.length) return { boardId, assets: localAssets }
   const response = await $fetch<BoardContent>(`/api/shares/${boardId}/content`)
   return { boardId, assets: response.data.assets }
 }, { watch: [selectedBoardId] })
@@ -348,6 +348,10 @@ const cardsHidden = ref(false)
 const leavingAssets = shallowRef<AssetCard[] | null>(null)
 const masonryAssets = computed(() => leavingAssets.value ?? displayedAssets.value)
 let boardTransition = 0
+const resetMobileBoardScroll = () => {
+  if (!window.matchMedia('(max-width: 520px)').matches) return
+  window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+}
 const selectBoard = async (boardId: string) => {
   if (boardId === selectedBoardId.value) return
   const transition = ++boardTransition
@@ -369,6 +373,7 @@ const selectBoard = async (boardId: string) => {
   leavingAssets.value = null
   await nextTick()
   document.querySelector<HTMLElement>('.board-tabs button[aria-pressed="true"]')?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+  resetMobileBoardScroll()
   requestAnimationFrame(() => {
     if (transition === boardTransition) cardsHidden.value = false
   })
@@ -570,16 +575,34 @@ let loadMoreObserver: IntersectionObserver | undefined
 let liveRefreshTimer: ReturnType<typeof setTimeout> | undefined
 let assetPollTimer: ReturnType<typeof setInterval> | undefined
 let assetEvents: EventSource | undefined
+const mediaResourceKey = (value: string | null | undefined) => {
+  if (!value) return ''
+  try {
+    const url = new URL(value, 'http://local')
+    return `${url.origin === 'http://local' ? '' : url.origin}${url.pathname}`
+  } catch {
+    return value.split(/[?#]/, 1)[0] ?? value
+  }
+}
+const preserveMountedPreview = (previous: string | null | undefined, incoming: string | null | undefined) => (
+  previous && incoming && mediaResourceKey(previous) === mediaResourceKey(incoming) ? previous : incoming
+)
+const reconcileAssetMedia = (incoming: AssetCard, previous?: AssetCard): AssetCard => previous ? {
+  ...incoming,
+  previewUrl: preserveMountedPreview(previous.previewUrl, incoming.previewUrl) ?? incoming.previewUrl,
+  preview2xUrl: preserveMountedPreview(previous.preview2xUrl, incoming.preview2xUrl)
+} : incoming
 watch(() => data.value?.data, (next) => {
   if (!next) return
   const incoming = next.assets ?? []
   if (next.page <= 1) {
     if (incoming.map(asset => `${asset.id}:${asset.updated_at}`).join('|') === assets.value.map(asset => `${asset.id}:${asset.updated_at}`).join('|')) return
-    assets.value = incoming
+    const previous = new Map(assets.value.map(asset => [asset.id, asset]))
+    assets.value = incoming.map(asset => reconcileAssetMedia(asset, previous.get(asset.id)))
     return
   }
   const merged = new Map(assets.value.map(asset => [asset.id, asset]))
-  for (const asset of incoming) merged.set(asset.id, asset)
+  for (const asset of incoming) merged.set(asset.id, reconcileAssetMedia(asset, merged.get(asset.id)))
   assets.value = [...merged.values()]
 }, { immediate: true })
 const submitters = computed(() => data.value?.data.submitters ?? [])
@@ -711,7 +734,7 @@ watch([selectedBoardId, arrangeExpanded], ([, arranging]) => {
 onMounted(() => {
   try {
     const savedView = JSON.parse(localStorage.getItem(libraryViewStorageKey) ?? 'null') as Partial<BoardViewSettings> | null
-    if (savedView) libraryView.value = { ...defaultBoardView, ...savedView }
+    if (savedView) libraryView.value = { ...defaultBoardView, ...savedView, radius: savedView.radius === 'default' ? 'small' : savedView.radius ?? defaultBoardView.radius }
   } catch { localStorage.removeItem(libraryViewStorageKey) }
   lastScrollY = window.scrollY
   window.addEventListener('resize', resizeSelectedBoardTitle)

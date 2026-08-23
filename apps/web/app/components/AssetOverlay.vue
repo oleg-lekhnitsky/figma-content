@@ -11,9 +11,6 @@ interface Option { id: string; name: string }
 const dialog = ref<HTMLDialogElement>()
 const overlayContent = ref<HTMLElement>()
 const assetVisual = ref<HTMLElement>()
-const assetMore = ref<HTMLElement>()
-const assetMoreTrigger = ref<HTMLButtonElement>()
-const assetMoreMenu = ref<HTMLElement>()
 const assetTitleInput = ref<HTMLTextAreaElement>()
 const moreOpen = ref(false)
 const { data, error, refresh } = await useLazyFetch<{ data: { asset: AssetDetail } }>(() => `/api/assets/${props.assetId}`)
@@ -43,8 +40,12 @@ watch(asset, async next => {
 }, { immediate: true })
 const thumbnailPreviewUrl = computed(() => props.previewUrl || props.previewUrls[props.assetId] || '')
 const displayedPreviewUrl = ref(thumbnailPreviewUrl.value)
+const pendingFullPreviewUrl = ref('')
+const isMobile = ref(false)
+const allowsOpeningViewTransition = ref(true)
 watch(() => [props.assetId, thumbnailPreviewUrl.value], () => {
   displayedPreviewUrl.value = thumbnailPreviewUrl.value
+  pendingFullPreviewUrl.value = ''
 }, { immediate: true, flush: 'sync' })
 watch(() => previewData.value?.data, async (preview) => {
   if (!preview || preview.id !== props.assetId || !import.meta.client) return
@@ -60,7 +61,12 @@ watch(() => previewData.value?.data, async (preview) => {
   }).catch(() => undefined)
   image.src = preview.url
   try { await image.decode() } catch { await loaded }
-  if (props.assetId === requestedAssetId && image.complete && image.naturalWidth > 0) displayedPreviewUrl.value = preview.url
+  if (props.assetId !== requestedAssetId || !image.complete || image.naturalWidth <= 0) return
+  if (isMobile.value && allowsOpeningViewTransition.value && thumbnailPreviewUrl.value) {
+    pendingFullPreviewUrl.value = preview.url
+    return
+  }
+  displayedPreviewUrl.value = preview.url
 }, { immediate: true })
 const resolvedPreviewUrl = computed(() => displayedPreviewUrl.value || thumbnailPreviewUrl.value)
 const resolvedMimeType = computed(() => props.mimeTypes[props.assetId] || (asset.value?.id === props.assetId ? asset.value.mime_type : null))
@@ -92,13 +98,11 @@ const boardPickerOpen = ref(false)
 const addingBoardId = ref('')
 const editing = ref(false); const title = ref(''); const description = ref(''); const projectId = ref(''); const campaignId = ref(''); const tagsText = ref(''); const language = ref(''); const contentType = ref(''); const actionError = ref(''); const actionMessage = ref(''); const downloading = ref(false); const saving = ref(false); const titleSaving = ref(false); const approvalBusy = ref(false)
 const isClosing = ref(false)
-const isMobile = ref(false)
 const gestureX = ref(0)
 const gestureY = ref(0)
 const gestureActive = ref(false)
 const gestureSettling = ref(false)
 const gestureAxis = ref<'x' | 'y' | ''>('')
-const allowsOpeningViewTransition = ref(true)
 let gesturePointerId: number | undefined
 let gestureStartX = 0
 let gestureStartY = 0
@@ -111,32 +115,6 @@ let scrollLocked = false
 let closeTimer: ReturnType<typeof setTimeout> | undefined
 let mobileQuery: MediaQueryList | undefined
 const updateMobile = () => { isMobile.value = mobileQuery?.matches ?? false }
-const closeMoreMenu = (restoreFocus = false) => {
-  moreOpen.value = false
-  if (restoreFocus) void nextTick(() => assetMoreTrigger.value?.focus())
-}
-const handleMoreMenuPointerDown = (event: PointerEvent) => {
-  if (moreOpen.value && !assetMore.value?.contains(event.target as Node)) closeMoreMenu()
-}
-const menuItems = () => [...(assetMoreMenu.value?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') ?? [])]
-const handleMoreMenuKeydown = (event: KeyboardEvent) => {
-  const items = menuItems()
-  if (!items.length) return
-  const current = items.indexOf(document.activeElement as HTMLButtonElement)
-  let next = current
-  if (event.key === 'ArrowDown') next = (current + 1) % items.length
-  else if (event.key === 'ArrowUp') next = (current - 1 + items.length) % items.length
-  else if (event.key === 'Home') next = 0
-  else if (event.key === 'End') next = items.length - 1
-  else return
-  event.preventDefault()
-  items[next]?.focus()
-}
-watch(moreOpen, async open => {
-  if (!open) return
-  await nextTick()
-  menuItems()[0]?.focus()
-})
 const resetEditor = () => {
   if (!asset.value) return
   title.value = asset.value.title
@@ -175,9 +153,14 @@ onMounted(() => {
   mobileQuery.addEventListener('change', updateMobile)
   lockPageScroll()
   dialog.value?.showModal()
-  document.addEventListener('pointerdown', handleMoreMenuPointerDown)
   void loadFullPreview()
-  openingViewTransitionTimer = setTimeout(() => { allowsOpeningViewTransition.value = false }, 400)
+  openingViewTransitionTimer = setTimeout(() => {
+    allowsOpeningViewTransition.value = false
+    if (pendingFullPreviewUrl.value) {
+      displayedPreviewUrl.value = pendingFullPreviewUrl.value
+      pendingFullPreviewUrl.value = ''
+    }
+  }, 400)
 })
 onBeforeUnmount(() => {
   clearTimeout(closeTimer)
@@ -185,7 +168,6 @@ onBeforeUnmount(() => {
   clearTimeout(skeletonTimer)
   clearTimeout(openingViewTransitionTimer)
   mobileQuery?.removeEventListener('change', updateMobile)
-  document.removeEventListener('pointerdown', handleMoreMenuPointerDown)
   unlockPageScroll()
 })
 const finishClose = () => {
@@ -410,7 +392,9 @@ watch(() => props.assetId, id => {
       @cancel.prevent="cancelOverlay" @keydown="handleAssetNavigationKey">
       <main v-if="showInitialSkeleton" class="overlay-content overlay-loading"
         :class="{ 'is-revealing': skeletonRevealing }" role="status" aria-label="Loading asset details">
-        <section class="asset-visual" :class="{ 'skeleton-visual': !resolvedPreviewUrl }" aria-hidden="true">
+        <section class="asset-visual"
+          :class="{ 'skeleton-visual': !resolvedPreviewUrl, 'allows-opening-view-transition': allowsOpeningViewTransition }"
+          aria-hidden="true">
           <AssetMedia v-if="resolvedPreviewUrl" class="current-preview" :src="resolvedPreviewUrl" alt="" />
         </section>
         <aside class="skeleton-panel" aria-hidden="true">
@@ -426,7 +410,7 @@ watch(() => props.assetId, id => {
           asset.</strong><button @click="refresh()">Try again</button></div>
       <main v-if="asset" ref="overlayContent" class="overlay-content">
         <section ref="assetVisual" class="asset-visual"
-          :class="{ 'skeleton-visual': !resolvedPreviewUrl, 'is-dragging': isMobile && gestureActive, 'allows-opening-view-transition': allowsOpeningViewTransition }"
+          :class="{ 'skeleton-visual': !resolvedPreviewUrl, 'is-dragging': isMobile && gestureActive, 'allows-opening-view-transition': allowsOpeningViewTransition && !showInitialSkeleton }"
           :style="assetVisualStyle" aria-describedby="mobile-gesture-hint" @pointerdown="startGesture"
           @pointermove="moveGesture" @pointerup="finishGesture" @pointercancel="resetGesture"
           @transitionend="finishSwipeTransition"><span id="mobile-gesture-hint" class="sr-only">Swipe left or right to
@@ -497,23 +481,24 @@ watch(() => props.assetId, id => {
               <a
               class="button-secondary action-button" :href="asset.figma_url" target="_blank"
               rel="noopener noreferrer" aria-label="Open in Figma" title="Open in Figma"><Figma class="figma-mark" :size="18" aria-hidden="true" /></a>
-            <div ref="assetMore" class="asset-more" @keydown.esc.stop.prevent="closeMoreMenu(true)">
-              <button ref="assetMoreTrigger" class="button-secondary" type="button" aria-label="More asset actions" aria-haspopup="menu"
-                :aria-expanded="moreOpen" @click="moreOpen = !moreOpen">
-                <MoreH :size="20" aria-hidden="true" />
-              </button>
-              <Transition name="asset-menu">
-                <div v-if="moreOpen" ref="assetMoreMenu" class="asset-more-menu" role="menu"
-                  aria-label="Asset actions" @keydown="handleMoreMenuKeydown"><button role="menuitem" type="button"
-                    :disabled="downloading" @click="closeMoreMenu(); download()">{{ downloading ? 'Preparing…' :
-                    'Download' }}</button><button v-if="canEdit" role="menuitem" type="button"
-                    @click="closeMoreMenu(); startEditing()">Edit details</button><button
-                    v-if="canEdit && asset.status !== 'archived'" role="menuitem" type="button"
-                    @click="closeMoreMenu(); patchAsset({ status: 'archived' })">Archive</button><button
-                    v-if="role === 'admin'" class="danger-button" role="menuitem" type="button"
-                    @click="closeMoreMenu(); remove()">Delete asset</button></div>
-              </Transition>
-            </div>
+            <AppDropdownMenu
+              v-model:open="moreOpen"
+              class="asset-more"
+              align="end"
+              :teleport-to="dialog || 'body'"
+            >
+              <template #trigger="{ triggerProps }">
+                <button v-bind="triggerProps" class="button-secondary" type="button" aria-label="More asset actions">
+                  <MoreH :size="20" aria-hidden="true" />
+                </button>
+              </template>
+              <template #default>
+                <button role="menuitem" type="button" :disabled="downloading" :aria-disabled="downloading" @click="download()">{{ downloading ? 'Preparing…' : 'Download' }}</button>
+                <button v-if="canEdit" role="menuitem" type="button" @click="startEditing()">Edit details</button>
+                <button v-if="canEdit && asset.status !== 'archived'" role="menuitem" type="button" @click="patchAsset({ status: 'archived' })">Archive</button>
+                <button v-if="role === 'admin'" role="menuitem" type="button" @click="remove()">Delete</button>
+              </template>
+            </AppDropdownMenu>
           </div>
           <p v-if="actionError" class="error" role="alert">{{ actionError }}</p>
           <p v-if="actionMessage" class="success" role="status">{{ actionMessage }}</p>
@@ -1011,85 +996,6 @@ h1 {
   cursor: pointer
 }
 
-.asset-more-menu {
-  position: absolute;
-  z-index: 5;
-  right: 0;
-  top: calc(100% + var(--filter-action-gap));
-  min-width: 12rem;
-  display: grid;
-  gap: calc(var(--space) / 8);
-  padding: calc(var(--space) / 4);
-
-  border-radius: var(--radius);
-  color: var(--material-tinted-fg);
-  background: var(--material-tinted-bg);
-  box-shadow: 0 calc(var(--space) / 2) calc(var(--space) * 2) rgb(0 0 0/.14);
-  backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
-  -webkit-backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation))
-}
-
-.asset-more-menu>button {
-  width: 100%;
-  min-height: var(--control-height);
-  margin: 0;
-  padding-inline: calc(var(--space) / 2);
-  justify-content: flex-start;
-  border-radius: calc(var(--radius) - var(--space) / 4);
-  color: inherit;
-  background: transparent;
-  text-align: left;
-  opacity: 1;
-}
-
-.asset-more-menu>button:is(:hover,:focus-visible) {
-  color: inherit;
-  background: var(--material-tinted-hover-bg);
-  opacity: 1;
-}
-
-.asset-more-menu>.danger-button {
-  color: var(--color-danger);
-  background: transparent
-}
-
-.asset-more-menu>.danger-button:is(:hover,:focus-visible) {
-  color: var(--color-danger);
-  background: color-mix(in srgb, var(--color-danger) 14%, transparent)
-}
-
-.asset-menu-enter-active,
-.asset-menu-leave-active {
-  transition-property: opacity, translate, scale;
-  transition-duration: 120ms;
-  transition-timing-function: ease-out;
-  transform-origin: top right;
-}
-
-.asset-menu-enter-from,
-.asset-menu-leave-to {
-  opacity: 0;
-  translate: 0 calc(var(--space) / -4);
-  scale: .98;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .asset-menu-enter-active,
-  .asset-menu-leave-active {
-    transition-property: opacity;
-  }
-
-  .asset-menu-enter-from,
-  .asset-menu-leave-to {
-    translate: none;
-    scale: 1;
-  }
-}
-
-.danger-button {
-  color: var(--color-danger)
-}
-
 .error {
   color: var(--color-danger)
 }
@@ -1432,6 +1338,13 @@ li span {
     overscroll-behavior-x: none;
     overscroll-behavior-y: none;
     touch-action: pan-y
+  }
+
+  .overlay-loading {
+    position: absolute;
+    z-index: 2;
+    inset: 0;
+    pointer-events: none
   }
 
   .asset-visual {

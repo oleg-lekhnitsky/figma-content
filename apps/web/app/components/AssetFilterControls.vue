@@ -126,7 +126,10 @@ const sortOptions = [
       <section v-if="showAssetFilters" class="filter-option-group">
         <h3>Date</h3>
         <div v-if="useDatePresets" class="filter-option-list"><button v-for="option in dateOptions" :key="option.value" type="button" :aria-pressed="dateRange === option.value" @click="emit('update:dateRange', option.value)">{{ option.label }}</button></div>
-        <div v-if="!useDatePresets || dateRange === 'custom'" class="filter-date-range"><label><span>From</span><input :value="dateFrom" type="date" :max="dateTo || undefined" @input="emit('update:dateFrom', ($event.target as HTMLInputElement).value)"></label><label><span>To</span><input :value="dateTo" type="date" :min="dateFrom || undefined" @input="emit('update:dateTo', ($event.target as HTMLInputElement).value)"></label></div>
+        <div v-if="!useDatePresets || dateRange === 'custom'" class="filter-date-range">
+          <AppDatePicker :model-value="dateFrom" label="From" :max="dateTo" surface="field" @update:model-value="emit('update:dateFrom', $event)" />
+          <AppDatePicker :model-value="dateTo" label="To" :min="dateFrom" surface="field" @update:model-value="emit('update:dateTo', $event)" />
+        </div>
       </section>
       <section v-if="showSort" class="filter-option-group">
         <h3>Sort</h3>
@@ -140,12 +143,12 @@ const sortOptions = [
     <FilterMultiSelect :model-value="tagIds" label="Tags" :options="tags" @update:model-value="$emit('update:tagIds', $event)" />
     <template v-if="useDatePresets">
       <label class="filter-dropdown"><span class="sr-only">Date</span><select class="filter-dropdown-trigger" :value="dateRange" @change="$emit('update:dateRange', ($event.target as HTMLSelectElement).value)"><option value="all">All dates</option><option value="today">Today</option><option value="week">This week</option><option value="two-weeks">Last two weeks</option><option value="month">This month</option><option value="custom">Custom range</option></select><span class="filter-dropdown-chevron" aria-hidden="true" /></label>
-      <label v-if="dateRange === 'custom'" class="date-field"><span>From</span><input :value="dateFrom" type="date" :max="dateTo || undefined" @input="$emit('update:dateFrom', ($event.target as HTMLInputElement).value)"></label>
-      <label v-if="dateRange === 'custom'" class="date-field"><span>To</span><input :value="dateTo" type="date" :min="dateFrom || undefined" @input="$emit('update:dateTo', ($event.target as HTMLInputElement).value)"></label>
+      <AppDatePicker v-if="dateRange === 'custom'" :model-value="dateFrom" label="From" :max="dateTo" @update:model-value="$emit('update:dateFrom', $event)" />
+      <AppDatePicker v-if="dateRange === 'custom'" :model-value="dateTo" label="To" :min="dateFrom" @update:model-value="$emit('update:dateTo', $event)" />
     </template>
     <template v-else>
-      <label class="date-field"><span>From</span><input :value="dateFrom" type="date" :max="dateTo || undefined" @input="$emit('update:dateFrom', ($event.target as HTMLInputElement).value)"></label>
-      <label class="date-field"><span>To</span><input :value="dateTo" type="date" :min="dateFrom || undefined" @input="$emit('update:dateTo', ($event.target as HTMLInputElement).value)"></label>
+      <AppDatePicker :model-value="dateFrom" label="From" :max="dateTo" @update:model-value="$emit('update:dateFrom', $event)" />
+      <AppDatePicker :model-value="dateTo" label="To" :min="dateFrom" @update:model-value="$emit('update:dateTo', $event)" />
     </template>
     <label v-if="showSort" class="filter-dropdown"><span class="sr-only">Sort</span><select class="filter-dropdown-trigger" :value="sort" @change="$emit('update:sort', ($event.target as HTMLSelectElement).value)"><option value="newest">Newest</option><option value="oldest">Oldest</option><option value="updated">Recently updated</option><option value="title">Title</option><option value="dimensions">Dimensions</option><option value="submitter">Submitter</option></select><span class="filter-dropdown-chevron" aria-hidden="true" /></label>
       </template>

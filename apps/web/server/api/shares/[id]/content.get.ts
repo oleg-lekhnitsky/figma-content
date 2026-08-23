@@ -1,6 +1,7 @@
 import { publicCollectionFiltersSchema } from '@content-library/shared'
 import { getRouterParam } from 'h3'
 import { publicAssetsForCollection } from '../../../utils/public-collections'
+import { databaseError } from '../../../utils/app-error'
 import { requireBoardRole } from '../../../utils/boards'
 import { requireAuth } from '../../../utils/session'
 
@@ -14,6 +15,31 @@ export default defineEventHandler(async (event) => {
     ['owner', 'editor', 'contributor', 'viewer'],
     session.user.role
   )
+  if (collection.purpose === 'portfolio') {
+    const { data: links, error } = await useSupabaseAdmin().from('portfolio_edition_cases')
+      .select('public_collections!portfolio_edition_cases_case_id_fkey(id,organization_id,mode,filters)')
+      .eq('edition_id', id)
+      .eq('organization_id', session.user.organization_id)
+      .order('position')
+    if (error) throw databaseError('read portfolio boards', error)
+    const boardAssets = await Promise.all(links.map(async (link: {
+      public_collections: { id: string; organization_id: string; mode: 'dynamic' | 'static'; filters: unknown } | null
+    }) => {
+      const board = link.public_collections
+      if (!board) return []
+      return publicAssetsForCollection({
+        ...board,
+        filters: publicCollectionFiltersSchema.parse(board.filters)
+      })
+    }))
+    const uniqueAssets = new Map<string, Record<string, unknown>>()
+    for (const assets of boardAssets) {
+      for (const asset of assets as Array<{ id: string; [key: string]: unknown }>) {
+        if (!uniqueAssets.has(asset.id)) uniqueAssets.set(asset.id, asset)
+      }
+    }
+    return { data: { assets: [...uniqueAssets.values()] } }
+  }
   const assets = await publicAssetsForCollection({
     id: collection.id,
     organization_id: collection.organization_id,

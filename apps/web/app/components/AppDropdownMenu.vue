@@ -6,13 +6,15 @@ const props = withDefaults(defineProps<{
   gutter?: number
   align?: 'start' | 'end'
   contentClass?: string
+  teleportTo?: string | HTMLElement
 }>(), {
   open: false,
   width: 'content',
   offset: undefined,
   gutter: undefined,
   align: 'start',
-  contentClass: ''
+  contentClass: '',
+  teleportTo: 'body'
 })
 
 const emit = defineEmits<{ 'update:open': [value: boolean] }>()
@@ -22,7 +24,7 @@ let typeaheadTimer: ReturnType<typeof setTimeout> | undefined
 
 const setOpen = (value: boolean) => emit('update:open', value)
 
-const items = () => Array.from(content.value?.querySelectorAll<HTMLElement>('[role^="menuitem"]:not([aria-disabled="true"])') ?? [])
+const items = () => Array.from(content.value?.querySelectorAll<HTMLElement>('[role^="menuitem"]:not([aria-disabled="true"]):not(:disabled)') ?? [])
 
 const focusItem = (index: number) => {
   const availableItems = items()
@@ -60,12 +62,12 @@ const handleMenuKeydown = (event: KeyboardEvent) => {
 
 const handleMenuClick = (event: MouseEvent, close: (restoreFocus?: boolean) => void) => {
   const item = (event.target as HTMLElement).closest<HTMLElement>('[role^="menuitem"]')
-  if (!item || item.getAttribute('aria-disabled') === 'true' || item.dataset.menuClose === 'false') return
+  if (!item || item.matches(':disabled') || item.getAttribute('aria-disabled') === 'true' || item.dataset.menuClose === 'false') return
   close(false)
 }
 
 const handlePointerMove = (event: PointerEvent) => {
-  const item = (event.target as HTMLElement).closest<HTMLElement>('[role^="menuitem"]:not([aria-disabled="true"])')
+  const item = (event.target as HTMLElement).closest<HTMLElement>('[role^="menuitem"]:not([aria-disabled="true"]):not(:disabled)')
   if (item && document.activeElement !== item) item.focus({ preventScroll: true })
 }
 
@@ -95,6 +97,7 @@ onBeforeUnmount(() => clearTimeout(typeaheadTimer))
     :offset="offset"
     :gutter="gutter"
     :align="align"
+    :teleport-to="teleportTo"
     haspopup="menu"
     @update:open="setOpen"
   >

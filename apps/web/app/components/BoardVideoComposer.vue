@@ -2,6 +2,7 @@
 import type { AssetMasonryItem } from '~/types/asset-masonry'
 import { ArrowDown, ArrowUp, ChevronLeft, Download3, Eye, EyeOff, Menu4 } from 'reicon-vue'
 import { videoTemplates } from '~/utils/video-templates'
+import { readStoredVideoBackground, storeVideoBackground } from '~/utils/video-background'
 import VideoCanvasInspector from '~/components/video-composer/VideoCanvasInspector.vue'
 import VideoPreviewStage from '~/components/video-composer/VideoPreviewStage.vue'
 import VideoSceneInspector from '~/components/video-composer/VideoSceneInspector.vue'
@@ -31,6 +32,7 @@ let mobileSheetReleaseVelocity = 0
 let mobileSheetMoved = false
 let mobileSheetCloseTimer: ReturnType<typeof setTimeout> | undefined
 let stageMotionFrame: number | undefined
+let stopBackgroundPersistence: (() => void) | undefined
 const openMobilePanel = async (panel: MobilePanel, event: MouseEvent) => {
   clearTimeout(mobileSheetCloseTimer)
   mobileSheetDragY.value = 0
@@ -164,9 +166,24 @@ const handlePlaybackShortcut = (event: KeyboardEvent) => {
   event.preventDefault()
   togglePlayback()
 }
-onMounted(() => window.addEventListener('keydown', handlePlaybackShortcut))
+onMounted(() => {
+  window.addEventListener('keydown', handlePlaybackShortcut)
+  const storedBackground = readStoredVideoBackground()
+  if (storedBackground) Object.assign(settings.value, storedBackground)
+  stopBackgroundPersistence = watch(
+    () => ({
+      backgroundType: settings.value.backgroundType,
+      backgroundColor: settings.value.backgroundColor,
+      backgroundGradientColor: settings.value.backgroundGradientColor,
+      backgroundGradientAngle: settings.value.backgroundGradientAngle
+    }),
+    storeVideoBackground,
+    { deep: true }
+  )
+})
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handlePlaybackShortcut)
+  stopBackgroundPersistence?.()
   clearTimeout(mobileSheetCloseTimer)
   if (stageMotionFrame !== undefined) cancelAnimationFrame(stageMotionFrame)
 })

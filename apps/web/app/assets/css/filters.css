@@ -92,6 +92,7 @@ html { scrollbar-gutter: stable; }
 }
 
 .asset-filter-controls > .filter-sheet-content > label,
+.asset-filter-controls > .filter-sheet-content > .date-field,
 .filter-dropdown {
   position: relative;
   width: max-content;
@@ -144,6 +145,19 @@ button.filter-dropdown-trigger { display: flex; align-items: center; white-space
   appearance: auto;
 }
 
+.asset-filter-controls > .filter-sheet-content > .date-field > .app-popover .app-date-picker-trigger {
+  width: auto;
+  max-width: var(--filter-control-max-width);
+  height: var(--filter-control-height);
+  min-height: var(--filter-control-height);
+  padding: var(--filter-date-input-padding-top) calc(var(--space) / 2) 0;
+  border: 0;
+  border-radius: var(--filter-pill-radius);
+  color: var(--color-fg);
+  background: var(--color-surface);
+  font-size: var(--filter-control-font-size);
+}
+
 .filter-dropdown-chevron {
   position: absolute;
   top: 50%;
@@ -163,6 +177,11 @@ button.filter-dropdown-trigger { display: flex; align-items: center; white-space
   .asset-filter-controls > .filter-sheet-content > label > input,
   .filter-dropdown,
   .filter-dropdown-trigger.filter-dropdown-trigger { height: var(--filter-control-height-mobile); min-height: var(--filter-control-height-mobile); }
+  .filter-dropdown-trigger.filter-dropdown-trigger {
+    padding-inline-start: var(--filter-option-padding);
+    padding-inline-end: calc(var(--filter-option-padding) * 2 + var(--filter-chevron-size));
+  }
+  .filter-dropdown .filter-dropdown-chevron { right: var(--filter-option-padding); }
   .asset-filter-controls > .filter-sheet-content > .search-field { flex: 1 1 auto; }
   .asset-filter-controls > .filter-sheet-content > .search-field > input { width: 100%; max-width: none; font-size: var(--font-size-body); }
 }
@@ -548,7 +567,7 @@ body:has(.selection-panel.selection-panel--filter-overlay) { overflow: hidden; }
 
 .selection-panel--filter-overlay .filter-option-group :is(h3, .filter-option-label) {
   margin: 0;
-  color: var(--color-surface);
+  color: var(--filter-overlay-panel-color);
   font-size: var(--filter-caption-size);
   font-weight: 700;
   letter-spacing: 0;
@@ -836,8 +855,8 @@ button.panel-dropdown-trigger:focus-visible {
   gap: var(--filter-date-range-gap);
 }
 
-.selection-panel--filter-overlay .filter-date-range label { display: grid; gap: var(--filter-date-label-gap); }
-.selection-panel--filter-overlay .filter-date-range span {
+.selection-panel--filter-overlay .filter-date-range :is(label, .app-date-picker) { display: grid; gap: var(--filter-date-label-gap); }
+.selection-panel--filter-overlay .filter-date-range > :is(label, .app-date-picker) > span {
   color: var(--filter-overlay-muted-color);
   font-size: var(--filter-caption-size);
 }
@@ -897,6 +916,29 @@ button.panel-dropdown-trigger:focus-visible {
 }
 
 .selection-panel--filter-overlay .asset-filter-controls > .filter-sheet-content > .date-field > input { padding: var(--filter-overlay-date-input-padding-top) 0 0; }
+.selection-panel--filter-overlay .asset-filter-controls > .filter-sheet-content > .date-field:not(.app-date-picker--field) > .app-popover .app-date-picker-trigger {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  min-height: 0;
+  padding: var(--filter-overlay-date-input-padding-top) 0 0;
+  border: 0;
+  border-radius: 0;
+  color: var(--filter-overlay-panel-color);
+  background: transparent;
+}
+.selection-panel--filter-overlay .filter-date-range > .app-date-picker--field > .app-popover .app-date-picker-trigger {
+  width: 100%;
+  max-width: none;
+  height: var(--filter-action-height);
+  min-height: var(--filter-action-height);
+  padding: 0 var(--filter-option-padding);
+  border: 0;
+  border-radius: calc(var(--radius) * 1.5);
+  color: var(--filter-overlay-panel-color);
+  background: color-mix(in srgb, var(--filter-overlay-panel-color) 7%, transparent);
+  font-size: var(--filter-action-font-size);
+}
 .selection-panel--filter-overlay .filter-dropdown-chevron { right: var(--filter-overlay-chevron-inset); }
 .selection-panel--filter-overlay .panel-dropdown-trigger .filter-dropdown-chevron { right: var(--filter-option-padding); }
 
@@ -1032,6 +1074,7 @@ button.panel-dropdown-trigger:focus-visible {
 
   .selection-panel--filter-overlay .asset-filter-controls .filter-option-list:not(.filter-option-list--segmented) > button {
     min-width: var(--range-control-height-mobile);
+    padding-inline: var(--filter-action-padding);
   }
 
   .selection-panel--filter-overlay .submitter-avatar {
@@ -1130,6 +1173,11 @@ button.panel-dropdown-trigger:focus-visible {
   .selection-panel--filter-overlay .asset-filter-controls > .filter-sheet-content > label > select,
   .selection-panel--filter-overlay .asset-filter-controls > .filter-sheet-content > .filter-dropdown-trigger {
     font-size: var(--filter-overlay-field-font-size-mobile);
+  }
+
+  .selection-panel--filter-overlay .panel-dropdown-trigger.panel-dropdown-trigger {
+    padding-inline-start: var(--filter-option-padding);
+    padding-inline-end: calc(var(--filter-option-padding) * 2 + var(--filter-chevron-size));
   }
 }
 

@@ -19,7 +19,7 @@ export default defineEventHandler(async (event) => {
       .select('case_id,position,public_collections!portfolio_edition_cases_case_id_fkey(id,title,mode,layout,view_settings,filters,organization_id)')
       .eq('edition_id', collection.id).order('position')
     if (linksError) throw databaseError('read published portfolio cases', linksError)
-    cases = await Promise.all(links.map(async (link: { public_collections: {id:string;title:string;mode:'static';layout:string;view_settings:unknown;filters:unknown;organization_id:string} | null }) => {
+    cases = await Promise.all(links.map(async (link: { public_collections: {id:string;title:string;mode:'dynamic'|'static';layout:string;view_settings:unknown;filters:unknown;organization_id:string} | null }) => {
       const item = link.public_collections
       if (!item) throw appError(404, 'CASE_NOT_FOUND', 'A portfolio case is unavailable.')
       return { id:item.id, title:item.title, layout:item.layout, viewSettings:boardViewSettingsSchema.parse(item.view_settings ?? {}), assets:await publicAssetsForCollection({ ...item, filters:publicCollectionFiltersSchema.parse(item.filters) }) }

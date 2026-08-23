@@ -103,7 +103,6 @@ onBeforeUnmount(() => {
         <li v-for="member in members" :key="member.user_id"><span><strong>{{ member.allowed_users?.email ?? member.allowed_users?.figma_handle ?? 'Workspace member' }}</strong><small>{{ member.role }}</small></span><button v-if="canManageMembers && member.role !== 'owner'" type="button" :disabled="busy" @click="$emit('removeMember', member.user_id)">Remove</button></li>
       </ul>
       <p v-else>No board members yet.</p>
-      <button v-if="canManageMembers" class="panel-secondary-action" type="button" :aria-expanded="addingMember" @click="addingMember = !addingMember">{{ addingMember ? 'Cancel' : 'Add member' }}</button>
       <Transition name="member-form">
         <form v-if="canManageMembers && addingMember" class="member-form" @submit.prevent="submitMember">
           <input v-model="memberEmail" class="panel-field" required type="email" autocomplete="email" placeholder="Member email">
@@ -120,6 +119,7 @@ onBeforeUnmount(() => {
           <button class="panel-primary-action" type="submit" :disabled="busy">Add member</button>
         </form>
       </Transition>
+      <button v-if="canManageMembers" class="panel-secondary-action" type="button" :aria-expanded="addingMember" @click="addingMember = !addingMember">{{ addingMember ? 'Cancel' : 'Add member' }}</button>
     </section>
 
     <section v-if="canManageMembers" class="board-setting-group danger-zone">

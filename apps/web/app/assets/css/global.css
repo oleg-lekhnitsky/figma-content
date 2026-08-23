@@ -331,7 +331,7 @@ textarea {
   --menu-row-height: calc(var(--control-height) * .75);
   --menu-radius: calc(var(--radius) * 0.75);
   width: 100%;
-  min-width: min-content;
+  min-width: max-content;
   display: grid;
   gap: var(--menu-row-gap);
   padding: calc(var(--space)/2.5);
@@ -340,8 +340,21 @@ textarea {
 
 }
 .app-dropdown-menu-content [role^='menuitem'] {
+  width: 100%;
+  min-height: var(--menu-row-height);
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  margin: 0;
   border-radius: calc(calc(var(--radius)*1.5) - var(--menu-inset));
   padding: var(--menu-inset) calc(var(--menu-inset) * 3);
+  color: inherit;
+  background: transparent;
+  font-size: var(--font-size-label);
+  line-height: 1;
+  white-space: nowrap;
+  text-align: start;
+  opacity: 1;
 }
 .app-dropdown-menu-content [role^='menuitem']:is(:hover, :focus-visible) {
   opacity: 1;

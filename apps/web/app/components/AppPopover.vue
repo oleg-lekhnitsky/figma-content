@@ -8,13 +8,15 @@ const props = withDefaults(defineProps<{
   gutter?: number
   align?: 'start' | 'end'
   haspopup?: boolean | 'menu' | 'listbox' | 'tree' | 'grid' | 'dialog'
+  teleportTo?: string | HTMLElement
 }>(), {
   open: false,
   width: 'content',
   offset: undefined,
   gutter: undefined,
   align: 'start',
-  haspopup: true
+  haspopup: true,
+  teleportTo: 'body'
 })
 
 const emit = defineEmits<{ 'update:open': [value: boolean] }>()
@@ -134,7 +136,7 @@ defineExpose({ close, position })
         onKeydown: handleTriggerKeydown
       }"
     />
-    <Teleport to="body">
+    <Teleport :to="teleportTo">
       <div
         v-if="open"
         :id="contentId"

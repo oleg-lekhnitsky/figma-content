@@ -12,13 +12,17 @@ export default defineEventHandler(async (event) => {
   if (collection.purpose !== 'portfolio') throw createError({ statusCode: 409, statusMessage: 'This board is not a portfolio edition.' })
   const db = useSupabaseAdmin()
   const { data: cases, error } = await db.from('public_collections')
-    .select('id,title,purpose,mode,filters,organization_id').eq('organization_id', session.user.organization_id).eq('purpose', 'case').order('created_at')
+    .select('id,title,purpose,mode,filters,organization_id')
+    .eq('organization_id', session.user.organization_id)
+    .neq('purpose', 'portfolio')
+    .neq('id', id)
+    .order('created_at')
   if (error) throw databaseError('list portfolio cases', error)
   const { data: links, error: linkError } = await db.from('portfolio_edition_cases')
     .select('case_id,position').eq('edition_id', id).eq('organization_id', session.user.organization_id).order('position')
   if (linkError) throw databaseError('read portfolio case order', linkError)
   const selectedIds = links.map((link: { case_id: string }) => link.case_id)
-  const enriched = await Promise.all(cases.map(async (item: { id:string; title:string; purpose:'case'; mode:'static'; filters:unknown; organization_id:string }) => ({
+  const enriched = await Promise.all(cases.map(async (item: { id:string; title:string; purpose:'showcase'|'review'|'case'; mode:'dynamic'|'static'; filters:unknown; organization_id:string }) => ({
     id: item.id,
     title: item.title,
     ...await boardPreviewForCollection({ ...item, filters: publicCollectionFiltersSchema.parse(item.filters) })

@@ -105,14 +105,28 @@ const currentFilterLabels = computed(() => {
   return labels
 })
 const loadCollections = async () => {
-  const [shareResponse, projectResponse, tagResponse] = await Promise.all([
-    $fetch<ListResponse>('/api/shares'),
+  const shareResponse = await $fetch<ListResponse>('/api/shares')
+  collections.value = shareResponse.data.collections
+}
+let createOptionsRequest: Promise<void> | undefined
+const loadCreateOptions = () => {
+  if (projects.value.length || tags.value.length) return Promise.resolve()
+  if (createOptionsRequest) return createOptionsRequest
+  createOptionsRequest = Promise.all([
     $fetch<OptionsResponse<'projects'>>('/api/projects'),
     $fetch<OptionsResponse<'tags'>>('/api/tags')
-  ])
-  collections.value = shareResponse.data.collections.filter(collection => collection.purpose !== 'case' && collection.purpose !== 'portfolio')
-  projects.value = projectResponse.data.projects
-  tags.value = tagResponse.data.tags
+  ]).then(([projectResponse, tagResponse]) => {
+    projects.value = projectResponse.data.projects
+    tags.value = tagResponse.data.tags
+  }).finally(() => { createOptionsRequest = undefined })
+  return createOptionsRequest
+}
+const hydrateCreateOptions = async () => {
+  try {
+    await loadCreateOptions()
+  } catch {
+    if (createPanelOpen.value) errorMessage.value = 'Unable to load project and tag options. Try again.'
+  }
 }
 const open = async () => {
   if (opening.value) return
@@ -173,30 +187,18 @@ const openCreate = async () => {
   opening.value = true
   message.value = ''
   errorMessage.value = ''
-  try {
-    await loadCollections()
-    await showCreate(false)
-  } catch {
-    errorMessage.value = 'Unable to load board settings. Check your connection and try again.'
-    emit('openChange', false)
-  } finally {
-    opening.value = false
-  }
+  await showCreate(false)
+  opening.value = false
+  void hydrateCreateOptions()
 }
 const openCreateFromCurrentView = async () => {
   if (opening.value) return
   opening.value = true
   message.value = ''
   errorMessage.value = ''
-  try {
-    await loadCollections()
-    await showCreate(true)
-  } catch {
-    errorMessage.value = 'Unable to load board settings. Check your connection and try again.'
-    emit('openChange', false)
-  } finally {
-    opening.value = false
-  }
+  await showCreate(true)
+  opening.value = false
+  void hydrateCreateOptions()
 }
 defineExpose({ openCreate, openCreateFromCurrentView })
 const showList = async () => {
@@ -342,7 +344,20 @@ type="button"
       :actions-visible="true" @submit="createCollection">
       <template #before>
         <section class="filter-option-group"><h3 id="create-title-label">{{ props.portfolioOnly ? 'Portfolio name' : 'Board name' }}</h3><input ref="titleInput" v-model="title" class="panel-field" name="title" required maxlength="120" aria-labelledby="create-title-label"></section>
-        <section v-if="!props.portfolioOnly" class="filter-option-group" aria-labelledby="create-board-submissions"><h3 id="create-board-submissions">Collect submissions</h3><div class="filter-option-list filter-option-list--segmented"><button type="button" :aria-pressed="!collectsSubmissions" @click="collectsSubmissions = false">Off</button><button type="button" :aria-pressed="collectsSubmissions" @click="collectsSubmissions = true">On</button></div><p class="board-type-summary">{{ collectsSubmissions ? 'Invited contributors can add work to this board.' : 'Build the board from approved work in your library.' }}</p></section>
+        <section
+          v-if="!props.portfolioOnly"
+          class="filter-option-group"
+          role="group"
+          aria-labelledby="create-board-submissions"
+          aria-describedby="create-board-submissions-summary"
+        >
+          <h3 id="create-board-submissions">Collect submissions</h3>
+          <div class="filter-option-list filter-option-list--segmented">
+            <button type="button" :aria-pressed="!collectsSubmissions" @click="collectsSubmissions = false">Off</button>
+            <button type="button" :aria-pressed="collectsSubmissions" @click="collectsSubmissions = true">On</button>
+          </div>
+          <p id="create-board-submissions-summary" class="board-type-summary">{{ collectsSubmissions ? 'Invited contributors can add work to this board.' : 'Build the board from approved work in your library.' }}</p>
+        </section>
         <section v-if="purpose === 'portfolio'" class="filter-option-group" aria-labelledby="create-portfolio-type"><h3 id="create-portfolio-type">Portfolio type</h3><div class="filter-option-list filter-option-list--segmented"><button type="button" :aria-pressed="portfolioKind === 'main'" @click="portfolioKind = 'main'">Main portfolio</button><button type="button" :aria-pressed="portfolioKind === 'client'" @click="portfolioKind = 'client'">Client version</button></div><p class="board-type-summary">{{ portfolioKind === 'main' ? 'Your main selection of work.' : 'A tailored selection for one recipient.' }}</p></section>
         <section v-if="purpose === 'portfolio' && portfolioKind === 'client'" class="filter-option-group"><h3 id="create-client-label">Client or recipient</h3><input v-model="portfolioClient" class="panel-field" name="portfolio-client" required maxlength="120" placeholder="Acme Studio" aria-labelledby="create-client-label"></section>
         <section v-if="purpose === 'portfolio'" class="filter-option-group"><h3 id="create-introduction-label">Introduction</h3><textarea v-model="introduction" class="panel-field" name="introduction" rows="3" maxlength="2000" placeholder="A short note about this selection" aria-labelledby="create-introduction-label" /></section>
@@ -350,7 +365,7 @@ type="button"
         <section v-if="purpose === 'showcase'" class="filter-option-group" aria-labelledby="create-board-updates"><h3 id="create-board-updates">Updates</h3><div class="filter-option-list filter-option-list--segmented"><button type="button" :aria-pressed="mode === 'static'" @click="mode = 'static'">Manual</button><button type="button" :aria-pressed="mode === 'dynamic'" @click="mode = 'dynamic'">Automatic</button></div><p class="board-type-summary">{{ mode === 'dynamic' ? 'Choose filters below. New approved items that match them appear automatically.' : usingCurrentFilters ? 'Create a fixed snapshot from the current view.' : 'Start with an empty board and add work manually.' }}</p></section>
       </template>
       <section v-if="purpose === 'review'" class="filter-option-group"><h3 id="create-review-month-label">Submission month</h3><input v-model="reviewMonth" class="panel-field" type="month" required name="review-month" aria-labelledby="create-review-month-label"></section>
-      <section v-if="purpose === 'review'" class="filter-option-group"><h3 id="create-deadline-label">Submission deadline (optional)</h3><input v-model="submissionDeadline" class="panel-field" type="date" name="submission-deadline" aria-labelledby="create-deadline-label"></section>
+      <section v-if="purpose === 'review'" class="filter-option-group"><AppDatePicker v-model="submissionDeadline" label="Submission deadline (optional)" surface="field" /></section>
       <section class="board-setting-group"><p class="board-type-summary">{{ purpose === 'review' ? 'This board starts private. Add contributors after creating it.' : purpose === 'portfolio' ? 'Your portfolio starts private. Add work and publish when it is ready.' : 'This board starts private. Publish it when it is ready.' }}</p></section>
       <section v-if="errorMessage" class="board-setting-group"><p class="board-type-summary error" role="alert">{{ errorMessage }}</p></section>
       <template #actions><button class="filter-create-board" type="submit" :disabled="busy">{{ busy ? 'Creating…' : purpose === 'portfolio' ? 'Create portfolio' : 'Create board' }}</button><button type="button" class="clear-filters-button" @click="props.portfolioOnly ? close() : showList()">Cancel</button></template>

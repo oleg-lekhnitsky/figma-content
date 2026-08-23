@@ -154,6 +154,11 @@ const finishQuickActionsHold = (event: PointerEvent) => {
   if (event.pointerId !== quickActionsPointerId) return
   cancelQuickActionsHold()
 }
+const preventNativeCardSelection = (event: Event) => {
+  if (!window.matchMedia('(hover: none), (pointer: coarse)').matches) return
+  if ((event.target as HTMLElement).closest('input,textarea,[contenteditable="true"]')) return
+  event.preventDefault()
+}
 const commitTitle = (asset: T, event: Event) => {
   const input = event.currentTarget as HTMLInputElement
   const title = input.value.trim()
@@ -262,8 +267,10 @@ const measureCards = () => {
     const styles = getComputedStyle(root)
     const rowHeight = Number.parseFloat(styles.gridAutoRows) || 1
     const rowGap = Number.parseFloat(styles.rowGap) || 0
+    const seamless = effectiveViewSettings.value?.gap === 'none'
     for (const card of root.querySelectorAll<HTMLElement>('.asset-card')) {
-      const rows = String(Math.ceil((card.offsetHeight + rowGap) / (rowHeight + rowGap)))
+      const exactRows = (card.getBoundingClientRect().height + rowGap) / (rowHeight + rowGap)
+      const rows = String(Math.max(1, seamless ? Math.floor(exactRows) : Math.ceil(exactRows)))
       if (card.style.getPropertyValue('--card-rows') !== rows) card.style.setProperty('--card-rows', rows)
     }
     root.classList.add('is-masonry')
@@ -391,11 +398,12 @@ onBeforeUnmount(() => {
   <section ref="masonry" class="asset-masonry" :class="{ 'cards-hidden': !layoutReady, 'cards-leaving': hidden, 'column-layout': layout === 'column', 'stable-columns': stableColumns, 'custom-view': effectiveViewSettings, 'hide-text': effectiveViewSettings && !effectiveViewSettings.showText, 'is-arranging': reorderable }" :style="viewStyle" :aria-label="label">
     <article
       v-for="(asset, index) in renderedAssets" :key="asset.id" class="asset-card"
-      :class="{ 'is-priority': index < 7, 'is-loaded': loadedImages.has(asset.id), 'is-selected': isSelected(asset.id), 'is-dragging': draggedId === asset.id, 'is-pointer-dragging': pointerDragging && draggedId === asset.id, 'is-drop-target': dropIndex === index && draggedId !== asset.id, 'has-quick-actions': quickActionsAssetId === asset.id }"
+      :class="{ 'is-priority': index < 7, 'is-selected': isSelected(asset.id), 'is-dragging': draggedId === asset.id, 'is-pointer-dragging': pointerDragging && draggedId === asset.id, 'is-drop-target': dropIndex === index && draggedId !== asset.id, 'has-quick-actions': quickActionsAssetId === asset.id }"
       :data-asset-id="asset.id"
       :style="{ '--media-stagger': `${Math.min(index * 35, 280)}ms` }"
       @pointerdown="startMouseDrag($event, index)" @pointermove="movePointerDrag" @pointerup="finishPointerDrag"
-      @pointercancel="cancelPointerDrag" @lostpointercapture="handlePointerCaptureLost">
+      @pointercancel="cancelPointerDrag" @lostpointercapture="handlePointerCaptureLost"
+      @selectstart="preventNativeCardSelection" @dragstart="preventNativeCardSelection">
       <div
         class="preview" :class="{ 'is-loading': !loadedImages.has(asset.id), 'has-context-actions': interactive && !reorderable && Boolean(asset.figma_url || canApprove) }"
         :style="{ aspectRatio: `${asset.width} / ${asset.height}` }"
@@ -435,7 +443,7 @@ onBeforeUnmount(() => {
 .asset-masonry.stable-columns .asset-card:nth-child(7n + 1){grid-column:1}.asset-masonry.stable-columns .asset-card:nth-child(7n + 2){grid-column:2}.asset-masonry.stable-columns .asset-card:nth-child(7n + 3){grid-column:3}.asset-masonry.stable-columns .asset-card:nth-child(7n + 4){grid-column:4}.asset-masonry.stable-columns .asset-card:nth-child(7n + 5){grid-column:5}.asset-masonry.stable-columns .asset-card:nth-child(7n + 6){grid-column:6}.asset-masonry.stable-columns .asset-card:nth-child(7n){grid-column:7}
 .asset-masonry.column-layout{--column-viewport-margin:clamp(24px,6vh,64px);width:min(760px,100%);margin-inline:auto;grid-template-columns:minmax(0,1fr);row-gap:0}.asset-masonry.column-layout .asset-card{padding-bottom:var(--section-gap)}.asset-masonry.column-layout .preview{height:auto;aspect-ratio:auto!important;overflow:visible;clip-path:none;background:transparent}.asset-masonry.column-layout .preview :is(img,video){width:auto;height:auto;max-width:100%;max-height:calc(100vh - var(--column-viewport-margin)*2);max-height:calc(100dvh - var(--column-viewport-margin)*2);margin-inline:auto;border-radius:var(--radius);object-fit:contain}.asset-masonry.column-layout .card-body{flex-direction:column;align-items:center;justify-content:center;text-align:center}
 .asset-masonry.column-layout .preview :deep(.asset-media-picture img){width:auto;height:auto;max-width:100%;max-height:calc(100vh - var(--column-viewport-margin)*2);max-height:calc(100dvh - var(--column-viewport-margin)*2);margin-inline:auto;border-radius:var(--radius);object-fit:contain}
-.asset-card{position:relative;min-width:0;padding-bottom:calc(var(--space)*2);color:inherit;background:transparent;opacity:0;transform:translateY(16px);transition-property:opacity,transform;transition-duration:.18s,.22s;transition-delay:var(--media-stagger,0ms);transition-timing-function:ease-out,cubic-bezier(.2,0,0,1)}.asset-card.is-loaded{opacity:1;transform:translateY(0)}.asset-masonry.is-masonry .asset-card{grid-row-end:span var(--card-rows)}
+.asset-card{position:relative;min-width:0;padding-bottom:calc(var(--space)*2);color:inherit;background:transparent;opacity:0;transform:translateY(16px);transition-property:opacity,transform;transition-duration:.18s,.22s;transition-delay:var(--media-stagger,0ms);transition-timing-function:ease-out,cubic-bezier(.2,0,0,1)}.asset-masonry:not(.cards-hidden) .asset-card{opacity:1;transform:translateY(0)}.asset-masonry.is-masonry .asset-card{grid-row-end:span var(--card-rows)}
 .asset-masonry.is-arranging .asset-card{cursor:grab}.asset-masonry.is-arranging .asset-card:active{cursor:grabbing}.asset-card.is-dragging{opacity:.35}.asset-card.is-pointer-dragging{pointer-events:none}.asset-card.is-drop-target .preview{box-shadow:0 0 0 3px var(--color-accent)}
 .asset-masonry.is-arranging .preview :is(img,video){-webkit-user-drag:none;-webkit-user-select:none;user-select:none}
 .asset-masonry.is-arranging .asset-card .preview{animation:arrange-wiggle 170ms ease-in-out infinite alternate;transform-origin:50% 45%}.asset-masonry.is-arranging .asset-card:nth-child(2n) .preview{animation-duration:190ms;animation-delay:-85ms;animation-direction:alternate-reverse}.asset-masonry.is-arranging .asset-card:nth-child(3n) .preview{animation-duration:155ms;animation-delay:-130ms}.asset-masonry.is-arranging .asset-card.is-dragging .preview{animation:none;rotate:0deg}@keyframes arrange-wiggle{from{rotate:-.7deg}to{rotate:.7deg}}
@@ -470,6 +478,6 @@ onBeforeUnmount(() => {
 @media(max-width:1280px){.asset-masonry.custom-view:not(.column-layout){grid-template-columns:repeat(clamp(1,calc(4 + var(--board-column-offset,0)),6),minmax(0,1fr))}}
 @media(max-width:900px){.asset-masonry.custom-view:not(.column-layout){grid-template-columns:repeat(clamp(1,calc(3 + var(--board-column-offset,0)),5),minmax(0,1fr))}}
 @media(max-width:520px){.asset-masonry.custom-view:not(.column-layout){grid-template-columns:repeat(clamp(1,calc(2 + var(--board-column-offset,0)),4),minmax(0,1fr))}}
-@media(hover:none),(pointer:coarse){.selection-control.selection-control{opacity:1}.preview.has-context-actions{-webkit-touch-callout:none}.asset-card.has-quick-actions .card-quick-actions,.asset-card:focus-within .card-quick-actions{visibility:visible;transform:translate(-50%,0) scale(1);pointer-events:auto}.figma-button,.card-approval-toggle{width:44px;min-width:44px;min-height:44px}.preview-actions{opacity:1;transform:none;pointer-events:auto}.touch-reorder-handle{display:grid}.preview-link,.preview-link:hover,.preview-link:active,.preview-link:focus{opacity:1}.preview :is(img,video){filter:none}}
+@media(hover:none),(pointer:coarse){.selection-control.selection-control{opacity:1}.asset-card{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}.asset-card :is(input,textarea,[contenteditable="true"]){-webkit-user-select:text;user-select:text}.preview,.preview *{-webkit-touch-callout:none}.preview :is(img,video),.preview :deep(.asset-media-picture img){-webkit-user-drag:none}.asset-card.has-quick-actions .card-quick-actions,.asset-card:focus-within .card-quick-actions{visibility:visible;transform:translate(-50%,0) scale(1);pointer-events:auto}.figma-button,.card-approval-toggle{width:44px;min-width:44px;min-height:44px}.preview-actions{opacity:1;transform:none;pointer-events:auto}.touch-reorder-handle{display:grid}.preview-link,.preview-link:hover,.preview-link:active,.preview-link:focus{opacity:1}.preview :is(img,video){filter:none}}
 @media(prefers-reduced-motion:reduce){.asset-masonry{transition:none}.asset-masonry.is-arranging .asset-card .preview{animation:none}.asset-card{opacity:1;transform:none;transition:none}.asset-masonry:is(.cards-hidden,.cards-leaving) .asset-card{visibility:hidden}.preview :is(img,video),.preview :deep(.asset-media-picture img){opacity:1;transform:none;transition:none}.figma-button{transition-duration:.01ms;transform:translate(-50%,0)}.preview-actions{transition:none}.figma-button:active{scale:1}}
 </style>

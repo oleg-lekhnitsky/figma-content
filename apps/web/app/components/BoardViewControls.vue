@@ -10,7 +10,7 @@ const update = <K extends keyof BoardViewSettings>(key: K, value: BoardViewSetti
 
 const radiusOptions: Array<{ value: BoardViewSettings['radius']; label: string }> = [
   { value: 'none', label: 'Square' }, { value: 'small', label: 'Subtle' },
-  { value: 'default', label: 'Rounded' }, { value: 'large', label: 'Soft' }
+  { value: 'large', label: 'Soft' }
 ]
 const gapOptions: Array<{ value: BoardViewSettings['gap']; label: string }> = [
   { value: 'none', label: 'None' }, { value: 'tight', label: 'Tight' },

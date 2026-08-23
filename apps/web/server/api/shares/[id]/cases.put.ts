@@ -17,7 +17,7 @@ export default defineEventHandler(async (event) => {
   if (collection.purpose !== 'portfolio') throw appError(409, 'NOT_PORTFOLIO', 'This board is not a portfolio edition.')
   const db = useSupabaseAdmin()
   if (parsed.data.caseIds.length) {
-    const { data: cases, error } = await db.from('public_collections').select('id').eq('organization_id', session.user.organization_id).eq('purpose', 'case').in('id', parsed.data.caseIds)
+    const { data: cases, error } = await db.from('public_collections').select('id').eq('organization_id', session.user.organization_id).neq('purpose', 'portfolio').in('id', parsed.data.caseIds)
     if (error) throw databaseError('validate portfolio cases', error)
     if (cases.length !== parsed.data.caseIds.length) throw appError(400, 'INVALID_CASE', 'One or more cases are unavailable.')
   }

@@ -17,15 +17,15 @@ useHead(() => ({ title: collection.value?.title ?? 'Shared collection' }))
     <header v-if="collection">
       <h1>{{ collection.title }}</h1>
       <div class="meta">
-        <span>{{ collection.purpose === 'portfolio' ? `${cases.length} ${cases.length === 1 ? 'case' : 'cases'}` : `${assets.length} ${assets.length === 1 ? 'item' : 'items'}` }}</span>
+        <span>{{ collection.purpose === 'portfolio' ? `${cases.length} ${cases.length === 1 ? 'board' : 'boards'}` : `${assets.length} ${assets.length === 1 ? 'item' : 'items'}` }}</span>
         <span>{{ collection.purpose === 'portfolio' ? (collection.portfolioKind === 'client' ? `Prepared for ${collection.portfolioClient}` : collection.organization?.name ?? 'Portfolio') : collection.mode === 'dynamic' ? 'Updates automatically' : `Updated ${new Date(collection.updatedAt).toLocaleDateString()}` }}</span>
       </div>
       <p v-if="collection.purpose === 'portfolio' && collection.introduction" class="introduction">{{ collection.introduction }}</p>
     </header>
     <div v-if="status === 'pending'" class="state" role="status">Loading collection…</div>
     <div v-else-if="error" class="state" role="alert"><strong>Collection unavailable</strong><span>The link may have expired or been disabled.</span></div>
-    <div v-else-if="collection?.purpose === 'portfolio' && cases.length === 0" class="state"><strong>No cases published yet</strong><span>This portfolio edition is still being prepared.</span></div>
-    <section v-else-if="collection?.purpose === 'portfolio'" class="portfolio-cases" aria-label="Portfolio cases"><article v-for="portfolioCase in cases" :key="portfolioCase.id"><h2>{{ portfolioCase.title }}</h2><BoardLayoutRenderer :assets="portfolioCase.assets" :layout="portfolioCase.layout" :view-settings="portfolioCase.viewSettings" :label="`${portfolioCase.title} case study`"><template #details="{asset}"><p v-if="asset.description">{{ asset.description }}</p></template></BoardLayoutRenderer></article></section>
+    <div v-else-if="collection?.purpose === 'portfolio' && cases.length === 0" class="state"><strong>No boards added yet</strong><span>This portfolio is still being prepared.</span></div>
+    <section v-else-if="collection?.purpose === 'portfolio'" class="portfolio-cases" aria-label="Portfolio boards"><article v-for="portfolioCase in cases" :key="portfolioCase.id"><h2>{{ portfolioCase.title }}</h2><BoardLayoutRenderer :assets="portfolioCase.assets" :layout="portfolioCase.layout" :view-settings="portfolioCase.viewSettings" :label="`${portfolioCase.title} board`"><template #details="{asset}"><p v-if="asset.description">{{ asset.description }}</p></template></BoardLayoutRenderer></article></section>
     <div v-else-if="assets.length === 0" class="state"><strong>No approved items yet</strong><span>This collection will show items when they are available.</span></div>
     <BoardLayoutRenderer v-else-if="collection" :assets="assets" :layout="collection.layout" :view-settings="collection.viewSettings" label="Shared assets"><template #details="{asset}"><p v-if="asset.description">{{ asset.description }}</p></template></BoardLayoutRenderer>
     <footer v-if="collection?.purpose === 'portfolio' && (collection.contactHeading || collection.contactLinks?.length)" class="portfolio-contact">
