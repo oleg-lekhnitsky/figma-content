@@ -7,11 +7,15 @@ const props = withDefaults(defineProps<{
   min?: string
   max?: string
   surface?: 'line' | 'field'
+  precision?: 'day' | 'month'
+  clearable?: boolean
 }>(), {
   modelValue: '',
   min: '',
   max: '',
-  surface: 'line'
+  surface: 'line',
+  precision: 'day',
+  clearable: true
 })
 
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
@@ -21,17 +25,24 @@ const calendar = ref<HTMLElement>()
 const labelId = useId()
 
 const parseDate = (value: string) => {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  const match = props.precision === 'month'
+    ? /^(\d{4})-(\d{2})$/.exec(value)
+    : /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
   if (!match) return undefined
-  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3] ?? 1))
   return Number.isNaN(date.getTime()) ? undefined : date
 }
 
-const toValue = (date: Date) => [
+const toDayValue = (date: Date) => [
   date.getFullYear(),
   String(date.getMonth() + 1).padStart(2, '0'),
   String(date.getDate()).padStart(2, '0')
 ].join('-')
+const toMonthValue = (date: Date) => [
+  date.getFullYear(),
+  String(date.getMonth() + 1).padStart(2, '0')
+].join('-')
+const toValue = (date: Date) => props.precision === 'month' ? toMonthValue(date) : toDayValue(date)
 
 const selectedDate = computed(() => parseDate(props.modelValue))
 const minDate = computed(() => parseDate(props.min))
@@ -40,11 +51,14 @@ const viewDate = ref(new Date())
 
 const dateFormatter = { format: (date: Date) => `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}.${date.getFullYear()}` }
 const monthFormatter = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' })
+const monthNameFormatter = new Intl.DateTimeFormat('en-US', { month: 'short' })
 const weekdayFormatter = new Intl.DateTimeFormat('en-US', { weekday: 'short' })
 const weekdays = Array.from({ length: 7 }, (_, index) => weekdayFormatter.format(new Date(2024, 0, index + 1)).replace('.', ''))
-const displayValue = computed(() => selectedDate.value ? dateFormatter.format(selectedDate.value) : 'Choose date')
+const displayValue = computed(() => selectedDate.value
+  ? props.precision === 'month' ? monthFormatter.format(selectedDate.value) : dateFormatter.format(selectedDate.value)
+  : props.precision === 'month' ? 'Choose month' : 'Choose date')
 
-const sameDay = (first?: Date, second?: Date) => Boolean(first && second && toValue(first) === toValue(second))
+const sameDay = (first?: Date, second?: Date) => Boolean(first && second && toDayValue(first) === toDayValue(second))
 const today = new Date()
 const isDisabled = (date: Date) => Boolean(
   (minDate.value && date < minDate.value) ||
@@ -62,7 +76,7 @@ const days = computed(() => {
     date.setDate(start.getDate() + index)
     return {
       date,
-      value: toValue(date),
+      value: toDayValue(date),
       inMonth: date.getMonth() === month,
       selected: sameDay(date, selectedDate.value),
       today: sameDay(date, today),
@@ -71,12 +85,31 @@ const days = computed(() => {
   })
 })
 
+const months = computed(() => Array.from({ length: 12 }, (_, month) => {
+  const date = new Date(viewDate.value.getFullYear(), month, 1)
+  return {
+    date,
+    value: toMonthValue(date),
+    label: monthNameFormatter.format(date),
+    selected: selectedDate.value?.getFullYear() === date.getFullYear() && selectedDate.value?.getMonth() === month,
+    current: today.getFullYear() === date.getFullYear() && today.getMonth() === month,
+    disabled: isDisabled(date)
+  }
+}))
+
 const initialTabDate = computed(() => {
   const selected = days.value.find(day => day.selected && !day.disabled)
   if (selected) return selected.value
   const current = days.value.find(day => day.today && day.inMonth && !day.disabled)
   if (current) return current.value
   return days.value.find(day => day.inMonth && !day.disabled)?.value
+})
+const initialTabMonth = computed(() => {
+  const selected = months.value.find(month => month.selected && !month.disabled)
+  if (selected) return selected.value
+  const current = months.value.find(month => month.current && !month.disabled)
+  if (current) return current.value
+  return months.value.find(month => !month.disabled)?.value
 })
 
 const canShowMonth = (offset: number) => {
@@ -88,6 +121,18 @@ const canShowMonth = (offset: number) => {
 const showMonth = (offset: number) => {
   if (!canShowMonth(offset)) return
   viewDate.value = new Date(viewDate.value.getFullYear(), viewDate.value.getMonth() + offset, 1)
+}
+
+const canShowYear = (offset: number) => {
+  const year = viewDate.value.getFullYear() + offset
+  const yearStart = new Date(year, 0, 1)
+  const yearEnd = new Date(year, 11, 31)
+  return !(minDate.value && yearEnd < minDate.value) && !(maxDate.value && yearStart > maxDate.value)
+}
+
+const showYear = (offset: number) => {
+  if (!canShowYear(offset)) return
+  viewDate.value = new Date(viewDate.value.getFullYear() + offset, viewDate.value.getMonth(), 1)
 }
 
 const select = (date: Date) => {
@@ -103,7 +148,16 @@ const focusDate = async (date: Date) => {
     viewDate.value = new Date(date.getFullYear(), date.getMonth(), 1)
     await nextTick()
   }
-  calendar.value?.querySelector<HTMLElement>(`[data-calendar-date="${toValue(date)}"]`)?.focus()
+  calendar.value?.querySelector<HTMLElement>(`[data-calendar-date="${toDayValue(date)}"]`)?.focus()
+}
+
+const focusMonth = async (date: Date) => {
+  if (isDisabled(date)) return
+  if (date.getFullYear() !== viewDate.value.getFullYear()) {
+    viewDate.value = new Date(date.getFullYear(), date.getMonth(), 1)
+    await nextTick()
+  }
+  calendar.value?.querySelector<HTMLElement>(`[data-calendar-month="${toMonthValue(date)}"]`)?.focus()
 }
 
 const handleDayKeydown = (event: KeyboardEvent, date: Date) => {
@@ -125,12 +179,27 @@ const handleDayKeydown = (event: KeyboardEvent, date: Date) => {
   focusDate(next)
 }
 
+const handleMonthKeydown = (event: KeyboardEvent, date: Date) => {
+  let offset: number | undefined
+  if (event.key === 'ArrowLeft') offset = -1
+  else if (event.key === 'ArrowRight') offset = 1
+  else if (event.key === 'ArrowUp') offset = -3
+  else if (event.key === 'ArrowDown') offset = 3
+  else if (event.key === 'Home') offset = -date.getMonth()
+  else if (event.key === 'End') offset = 11 - date.getMonth()
+  else if (event.key === 'PageUp') offset = -12
+  else if (event.key === 'PageDown') offset = 12
+  if (offset === undefined) return
+  event.preventDefault()
+  focusMonth(new Date(date.getFullYear(), date.getMonth() + offset, 1))
+}
+
 const setOpen = (value: boolean) => {
   open.value = value
   if (!value) return
   const initialDate = selectedDate.value ?? today
   viewDate.value = new Date(initialDate.getFullYear(), initialDate.getMonth(), 1)
-  nextTick(() => focusDate(initialDate))
+  nextTick(() => props.precision === 'month' ? focusMonth(initialDate) : focusDate(initialDate))
 }
 
 const clear = () => {
@@ -151,15 +220,31 @@ const clear = () => {
         </button>
       </template>
       <template #default>
-        <section ref="calendar" class="app-calendar" role="dialog" :aria-label="`${label} date`">
+        <section ref="calendar" class="app-calendar" role="dialog" :aria-label="`${label} ${precision}`">
           <header class="app-calendar-header">
-            <strong aria-live="polite">{{ monthFormatter.format(viewDate) }}</strong>
+            <strong aria-live="polite">{{ precision === 'month' ? viewDate.getFullYear() : monthFormatter.format(viewDate) }}</strong>
             <div class="app-calendar-nav">
-              <button type="button" :disabled="!canShowMonth(-1)" aria-label="Previous month" @click="showMonth(-1)"><ChevronLeft :size="20" :stroke-width="2" aria-hidden="true" /></button>
-              <button type="button" :disabled="!canShowMonth(1)" aria-label="Next month" @click="showMonth(1)"><ChevronRight :size="20" :stroke-width="2" aria-hidden="true" /></button>
+              <button type="button" :disabled="precision === 'month' ? !canShowYear(-1) : !canShowMonth(-1)" :aria-label="precision === 'month' ? 'Previous year' : 'Previous month'" @click="precision === 'month' ? showYear(-1) : showMonth(-1)"><ChevronLeft :size="20" :stroke-width="2" aria-hidden="true" /></button>
+              <button type="button" :disabled="precision === 'month' ? !canShowYear(1) : !canShowMonth(1)" :aria-label="precision === 'month' ? 'Next year' : 'Next month'" @click="precision === 'month' ? showYear(1) : showMonth(1)"><ChevronRight :size="20" :stroke-width="2" aria-hidden="true" /></button>
             </div>
           </header>
-          <div class="app-calendar-grid" role="grid" :aria-label="monthFormatter.format(viewDate)">
+          <div v-if="precision === 'month'" class="app-calendar-month-grid" role="grid" :aria-label="String(viewDate.getFullYear())">
+            <button
+              v-for="month in months"
+              :key="month.value"
+              type="button"
+              role="gridcell"
+              :data-calendar-month="month.value"
+              :tabindex="month.value === initialTabMonth ? 0 : -1"
+              :disabled="month.disabled"
+              :aria-selected="month.selected"
+              :aria-current="month.current ? 'date' : undefined"
+              :class="{ 'is-selected': month.selected, 'is-today': month.current }"
+              @click="select(month.date)"
+              @keydown="handleMonthKeydown($event, month.date)"
+            >{{ month.label }}</button>
+          </div>
+          <div v-else class="app-calendar-grid" role="grid" :aria-label="monthFormatter.format(viewDate)">
             <span v-for="weekday in weekdays" :key="weekday" class="app-calendar-weekday" role="columnheader">{{ weekday }}</span>
             <button
               v-for="day in days"
@@ -177,8 +262,9 @@ const clear = () => {
             >{{ day.date.getDate() }}</button>
           </div>
           <footer class="app-calendar-footer">
-            <button type="button" :disabled="!modelValue" @click="clear">Clear</button>
-            <button type="button" :disabled="isDisabled(today)" @click="select(today)">Today</button>
+            <button v-if="clearable" type="button" :disabled="!modelValue" @click="clear">Clear</button>
+            <span v-else />
+            <button type="button" :disabled="isDisabled(today)" @click="select(today)">{{ precision === 'month' ? 'This month' : 'Today' }}</button>
           </footer>
         </section>
       </template>
@@ -187,7 +273,11 @@ const clear = () => {
 </template>
 
 <style scoped>
-.app-date-picker { min-width: 0; }
+.app-date-picker {
+  min-width: 0;
+  display: grid;
+  gap: var(--space);
+}
 .app-date-picker-trigger {
   box-sizing: border-box;
   width: 100%;
@@ -239,7 +329,8 @@ const clear = () => {
 .app-calendar-header strong { font-size: var(--filter-action-font-size); }
 .app-calendar-nav { gap: var(--filter-option-gap); }
 .app-calendar-nav button,
-.app-calendar-grid button {
+.app-calendar-grid button,
+.app-calendar-month-grid button {
   width: var(--filter-option-height);
   min-width: var(--filter-option-height);
   height: var(--filter-option-height);
@@ -260,6 +351,16 @@ const clear = () => {
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: var(--filter-option-gap);
 }
+.app-calendar-month-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--filter-option-gap);
+}
+.app-calendar-month-grid button {
+  width: 100%;
+  min-width: 0;
+  border-radius: var(--filter-pill-radius);
+}
 .app-calendar-weekday {
   display: grid;
   place-items: center;
@@ -277,7 +378,9 @@ const clear = () => {
 }
 .app-calendar-grid button.is-outside { color: var(--filter-overlay-muted-color); }
 .app-calendar-grid button.is-today { box-shadow: inset 0 0 0 var(--filter-hairline) var(--filter-overlay-border-color); }
-.app-calendar-grid button.is-selected {
+.app-calendar-month-grid button.is-today { box-shadow: inset 0 0 0 var(--filter-hairline) var(--filter-overlay-border-color); }
+.app-calendar-grid button.is-selected,
+.app-calendar-month-grid button.is-selected {
   color: var(--filter-overlay-primary-color);
   background: var(--filter-overlay-primary-background);
   box-shadow: none;
@@ -298,6 +401,7 @@ const clear = () => {
 @media (hover: hover) {
   .app-calendar button:not(:disabled):hover { background: var(--filter-overlay-control-hover-background); }
   .app-calendar-grid button.is-selected:hover { background: var(--filter-overlay-primary-background); }
+  .app-calendar-month-grid button.is-selected:hover { background: var(--filter-overlay-primary-background); }
 }
 @media (max-width: 520px) {
   .app-calendar { padding: var(--filter-sheet-inline-padding-mobile); border-radius: calc(var(--radius-mobile) * 1.5); }

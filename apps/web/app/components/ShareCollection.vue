@@ -305,8 +305,7 @@ ref="dialog" class="share-dialog" aria-labelledby="share-title" @click.self="clo
     @close="unlockPageScroll">
     <div class="share-panel">
       <header v-if="view === 'list'">
-        <div class="dialog-heading"><button
-v-if="view === 'create' && !props.portfolioOnly" type="button" class="button-plain back-button" @click="showList">Back to boards</button><h2 id="share-title" class="display-title">{{ props.portfolioOnly ? 'Create portfolio' : view === 'list' ? 'My boards and shared with me' : 'Create board' }}</h2></div><button
+        <div class="dialog-heading"><h2 id="share-title" class="display-title">{{ props.portfolioOnly ? 'Create portfolio' : 'My boards and shared with me' }}</h2></div><button
 type="button"
           class="button-secondary button-icon close-button" aria-label="Close board settings" @click="close"><svg
             aria-hidden="true" viewBox="0 0 24 24">
@@ -364,7 +363,7 @@ type="button"
         <section v-if="usingCurrentFilters && purpose === 'showcase'" class="board-setting-group"><p class="board-type-summary"><strong>Starting with current filters</strong><br>{{ currentFilterLabels.join(' · ') || 'All dates' }}<br>{{ props.currentFilters?.status === 'draft' ? 'Draft status is not included because boards contain approved assets only.' : 'Boards contain approved assets only.' }}</p></section>
         <section v-if="purpose === 'showcase'" class="filter-option-group" aria-labelledby="create-board-updates"><h3 id="create-board-updates">Updates</h3><div class="filter-option-list filter-option-list--segmented"><button type="button" :aria-pressed="mode === 'static'" @click="mode = 'static'">Manual</button><button type="button" :aria-pressed="mode === 'dynamic'" @click="mode = 'dynamic'">Automatic</button></div><p class="board-type-summary">{{ mode === 'dynamic' ? 'Choose filters below. New approved items that match them appear automatically.' : usingCurrentFilters ? 'Create a fixed snapshot from the current view.' : 'Start with an empty board and add work manually.' }}</p></section>
       </template>
-      <section v-if="purpose === 'review'" class="filter-option-group"><h3 id="create-review-month-label">Submission month</h3><input v-model="reviewMonth" class="panel-field" type="month" required name="review-month" aria-labelledby="create-review-month-label"></section>
+      <section v-if="purpose === 'review'" class="filter-option-group"><AppDatePicker v-model="reviewMonth" label="Submission month" precision="month" :clearable="false" surface="field" /></section>
       <section v-if="purpose === 'review'" class="filter-option-group"><AppDatePicker v-model="submissionDeadline" label="Submission deadline (optional)" surface="field" /></section>
       <section class="board-setting-group"><p class="board-type-summary">{{ purpose === 'review' ? 'This board starts private. Add contributors after creating it.' : purpose === 'portfolio' ? 'Your portfolio starts private. Add work and publish when it is ready.' : 'This board starts private. Publish it when it is ready.' }}</p></section>
       <section v-if="errorMessage" class="board-setting-group"><p class="board-type-summary error" role="alert">{{ errorMessage }}</p></section>
