@@ -34,6 +34,7 @@
   --radius: 16px;
   --radius-mobile: calc(var(--radius) * 1.5);
   --control-height: 44px;
+  --button-padding-inline: 1.25rem;
   --range-control-height-mobile: 3.25rem;
   --page-padding: var(--space);
   --page-top: clamp(4rem, 9vw, 9rem);
@@ -128,12 +129,12 @@ textarea {
 button,
 .button {
   min-height: var(--control-height);
-  padding: 0 1.25rem;
+  padding: 0 var(--button-padding-inline);
   overflow: visible;
   border: 0;
   border-radius: 999px;
-  color: #fff;
-  background: #000;
+  color: var(--color-bg);
+  background: var(--color-fg);
   font-weight: inherit;
   cursor: pointer;
   transition-property: scale, opacity;

@@ -7,7 +7,7 @@ const emit = defineEmits<{ ready: [] }>()
 const canvas = ref<HTMLCanvasElement>()
 const assetRef = computed(() => props.assets)
 const previewTitle = ref('Preset preview')
-const { settings, setCanvas, drawAt, seek } = useVideoComposer(assetRef, previewTitle, props.template.id, { maxPreviewDimension:360, transparentBackground:props.transparentBackground === true })
+const { settings, setCanvas, seek } = useVideoComposer(assetRef, previewTitle, props.template.id, { maxPreviewDimension:360, transparentBackground:props.transparentBackground === true })
 
 onMounted(async() => {
   if (props.template.preset) Object.assign(settings.value, props.template.preset)
@@ -19,8 +19,7 @@ onMounted(async() => {
     settings.value.visibleCount*settings.value.staggerSeconds-.001,
     settings.value.secondsPerSlide*.6+settings.value.staggerSeconds
   )) : .001
-  seek(startTime)
-  await drawAt(startTime)
+  await seek(startTime)
   emit('ready')
 })
 </script>

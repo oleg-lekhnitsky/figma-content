@@ -2,10 +2,8 @@
 const props = withDefaults(defineProps<{
   open: boolean
   label: string
-  instant?: boolean
   dismissible?: boolean
 }>(), {
-  instant: false,
   dismissible: true
 })
 
@@ -95,10 +93,6 @@ watch(() => props.open, async (open) => {
     return
   }
   unlockPageScroll()
-  if (document.documentElement.dataset.filterTransition === 'closing') {
-    finishClose()
-    return
-  }
   closing.value = true
   closeTimer = setTimeout(finishClose, 400)
   await nextTick()
@@ -201,14 +195,13 @@ onBeforeUnmount(() => {
 
 <template>
   <Teleport to="body">
-    <Transition name="selection-panel" :css="!instant" @after-leave="emit('afterLeave')">
+    <Transition name="selection-panel" @after-leave="emit('afterLeave')">
       <div
         v-if="open"
         ref="drawerRoot"
         class="selection-panel selection-panel--wide selection-panel--filter-overlay"
         :class="{
           'selection-panel--filter-closing': closing,
-          'selection-panel--instant': instant,
           'selection-panel--sheet-dragging': dragging,
           'selection-panel--sheet-dismissing': dismissing
         }"
@@ -239,9 +232,7 @@ onBeforeUnmount(() => {
 }
 
 .selection-panel-enter-active,
-.selection-panel-leave-active { transition: opacity 150ms ease; }
-.selection-panel-enter-from,
-.selection-panel-leave-to { opacity: 0; }
+.selection-panel-leave-active { transition: none; }
 
 @media (max-width: 520px) {
   .selection-panel :deep(.asset-filter-controls) {
@@ -259,12 +250,12 @@ onBeforeUnmount(() => {
 }
 
 @keyframes selection-sheet-in {
-  from { translate: 0 2rem; opacity: 0; }
-  to { translate: 0 0; opacity: 1; }
+  from { translate: 0 2rem; }
+  to { translate: 0 0; }
 }
 
 @keyframes selection-sheet-out {
-  from { translate: 0 0; opacity: 1; }
-  to { translate: 0 1rem; opacity: 0; }
+  from { translate: 0 0; }
+  to { translate: 0 1rem; }
 }
 </style>

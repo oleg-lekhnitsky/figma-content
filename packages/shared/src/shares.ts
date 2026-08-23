@@ -35,6 +35,7 @@ export const createPublicCollectionSchema = z.object({
   title: z.string().trim().min(1).max(120),
   purpose: boardPurposeSchema.default('showcase'),
   mode: z.enum(['dynamic', 'static']),
+  contentStrategy: z.enum(['dynamic', 'snapshot', 'manual']).optional(),
   layout: boardLayoutSchema.default('masonry'),
   filters: publicCollectionFiltersSchema,
   expiresAt: z.iso.datetime({ offset: true }).nullable().default(null),
@@ -48,6 +49,9 @@ export const createPublicCollectionSchema = z.object({
 }).refine(value => !value.expiresAt || value.expiresAt > new Date().toISOString(), {
   message: 'Choose an expiry date in the future.',
   path: ['expiresAt']
+}).refine(value => !value.contentStrategy || (value.mode === 'dynamic' ? value.contentStrategy === 'dynamic' : value.contentStrategy !== 'dynamic'), {
+  message: 'Choose a content strategy that matches the board update mode.',
+  path: ['contentStrategy']
 }).refine(value => value.purpose !== 'review' || (value.mode === 'static' && value.reviewMonth), {
   message: 'Monthly review boards require a review month and manual collection.',
   path: ['reviewMonth']

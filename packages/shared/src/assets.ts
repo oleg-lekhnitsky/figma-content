@@ -52,6 +52,7 @@ export const assetListQuerySchema = z.object({
   contentType: z.string().trim().max(80).optional(),
   mine: z.enum(['true', 'false']).transform(value => value === 'true').optional(),
   uploadedBy: z.uuid().optional(),
+  uploadedBys: z.string().transform(value => value.split(',').filter(Boolean)).pipe(z.array(z.uuid()).max(50)).optional(),
   sort: z.enum(['newest', 'oldest', 'updated', 'title', 'dimensions', 'submitter']).default('newest'),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(60).default(24)

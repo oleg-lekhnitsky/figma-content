@@ -10,6 +10,8 @@ export default defineEventHandler(async (event) => {
   if (!parsed.success) throw appError(400, 'INVALID_COLLECTION', 'Check the collection settings and try again.', parsed.error.flatten())
   const input = parsed.data
   const filters = session.user.role === 'contributor' ? { ...input.filters, uploadedBy: session.user.id } : input.filters
+  const contentStrategy = input.contentStrategy
+    ?? (['review', 'portfolio', 'case'].includes(input.purpose) ? 'manual' : input.mode === 'dynamic' ? 'dynamic' : 'snapshot')
   const db = useSupabaseAdmin()
   const { data, error } = await db.from('public_collections').insert({
     organization_id: session.user.organization_id,
@@ -25,10 +27,10 @@ export default defineEventHandler(async (event) => {
     contact_links: input.purpose === 'portfolio' ? input.contactLinks : [],
     mode: input.mode,
     layout: input.layout,
-    content_strategy: ['review', 'portfolio', 'case'].includes(input.purpose) ? 'manual' : input.mode === 'dynamic' ? 'dynamic' : 'snapshot',
-    publication_enabled: input.purpose === 'showcase',
+    content_strategy: contentStrategy,
+    publication_enabled: false,
     filters,
-    expires_at: input.expiresAt
+    expires_at: null
   }).select('id,slug,title,purpose,portfolio_kind,portfolio_client,introduction,contact_heading,contact_links,review_month,submission_deadline,mode,filters,expires_at,publication_enabled,content_strategy,layout,created_at,updated_at').single()
   if (error) throw databaseError('create public collection', error)
   const { error: ownerError } = await db.from('public_collection_members').insert({
@@ -40,6 +42,6 @@ export default defineEventHandler(async (event) => {
     throw databaseError('create board owner', ownerError)
   }
   let itemCount: number | null = null
-  if (input.mode === 'static' && !['review', 'portfolio', 'case'].includes(input.purpose)) itemCount = await replaceCollectionSnapshot(data.id, session.user.organization_id, filters, session.user.id)
+  if (contentStrategy === 'snapshot') itemCount = await replaceCollectionSnapshot(data.id, session.user.organization_id, filters, session.user.id)
   return { data: { collection: { ...data, role: 'owner', itemCount } } }
 })

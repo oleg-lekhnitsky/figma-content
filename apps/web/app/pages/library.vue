@@ -22,6 +22,8 @@ interface BoardSummary {
   slug: string
   title: string
   purpose: 'showcase' | 'review' | 'portfolio' | 'case'
+  portfolio_kind?: 'main' | 'client' | null
+  portfolio_client?: string | null
   publication_enabled: boolean
   itemCount: number
   assetIds: string[]
@@ -50,7 +52,7 @@ const readFilterQuery = () => {
     status: ['approved', 'draft'].includes(requestedStatus) ? requestedStatus : '',
     projectIds: listQueryValues(route.query.projectIds),
     tagIds: listQueryValues(route.query.tagIds),
-    uploadedBy: firstQueryValue(route.query.uploadedBy),
+    uploadedBys: listQueryValues(route.query.uploadedBys ?? route.query.uploadedBy),
     dateRange: (dateRanges.includes(requestedDateRange as DateRange) ? requestedDateRange : 'all') as DateRange,
     dateFrom: firstQueryValue(route.query.dateFrom),
     dateTo: firstQueryValue(route.query.dateTo),
@@ -62,7 +64,7 @@ const search = ref(initialFilters.search)
 const status = ref(initialFilters.status)
 const projectIds = ref<string[]>(initialFilters.projectIds)
 const tagIds = ref<string[]>(initialFilters.tagIds)
-const uploadedBy = ref(initialFilters.uploadedBy)
+const uploadedBys = ref<string[]>(initialFilters.uploadedBys)
 const dateRange = ref<DateRange>(initialFilters.dateRange)
 const customDateFrom = ref(initialFilters.dateFrom)
 const customDateTo = ref(initialFilters.dateTo)
@@ -75,10 +77,7 @@ const arrangeExpanded = ref(false)
 const arrangeSelectedIds = ref<string[]>([])
 const arrangeRemoving = ref(false)
 const compactFiltersVisible = ref(true)
-const filtersMorphing = ref(false)
-const morphSource = ref<'filters' | 'view' | 'video' | 'settings' | null>(null)
 const searchExpanded = ref(false)
-const searchClosing = ref(false)
 const page = ref(1)
 const replaceLibraryQuery = (changes: Record<string, string | undefined>) => {
   const nextQuery = { ...route.query }
@@ -93,7 +92,8 @@ const persistedFilterQuery = computed(() => ({
   status: status.value || undefined,
   projectIds: projectIds.value.length ? projectIds.value.join(',') : undefined,
   tagIds: tagIds.value.length ? tagIds.value.join(',') : undefined,
-  uploadedBy: uploadedBy.value || undefined,
+  uploadedBys: uploadedBys.value.length ? uploadedBys.value.join(',') : undefined,
+  uploadedBy: undefined,
   dateRange: dateRange.value !== 'all' ? dateRange.value : undefined,
   dateFrom: dateRange.value === 'custom' ? customDateFrom.value || undefined : undefined,
   dateTo: dateRange.value === 'custom' ? customDateTo.value || undefined : undefined,
@@ -110,17 +110,22 @@ const dateFrom = computed(() => {
   return date.toISOString()
 })
 const dateTo = computed(() => dateRange.value === 'custom' && customDateTo.value ? new Date(`${customDateTo.value}T23:59:59.999`).toISOString() : '')
-const query = computed(() => ({ search: search.value, ...(status.value ? { status: status.value } : {}), ...(projectIds.value.length ? { projectIds: projectIds.value.join(',') } : {}), ...(tagIds.value.length ? { tagIds: tagIds.value.join(',') } : {}), ...(uploadedBy.value ? { uploadedBy: uploadedBy.value } : {}), ...(dateFrom.value ? { dateFrom: dateFrom.value } : {}), ...(dateTo.value ? { dateTo: dateTo.value } : {}), sort: sort.value, page: page.value }))
+const query = computed(() => ({ search: search.value, ...(status.value ? { status: status.value } : {}), ...(projectIds.value.length ? { projectIds: projectIds.value.join(',') } : {}), ...(tagIds.value.length ? { tagIds: tagIds.value.join(',') } : {}), ...(uploadedBys.value.length ? { uploadedBys: uploadedBys.value.join(',') } : {}), ...(dateFrom.value ? { dateFrom: dateFrom.value } : {}), ...(dateTo.value ? { dateTo: dateTo.value } : {}), sort: sort.value, page: page.value }))
 const { data, status: loadStatus, error, refresh } = await useLazyFetch<AssetList>('/api/assets', { query, watch: [query] })
 const { data: projectData } = await useLazyFetch<{ data: { projects: Project[] } }>('/api/projects')
 const { data: tagData } = await useLazyFetch<{ data: { tags: Tag[] } }>('/api/tags')
 const { data: boardData, refresh: refreshBoards } = await useLazyFetch<BoardList>('/api/shares')
 const boardCreator = ref<{ openCreate: () => Promise<void>; openCreateFromCurrentView: () => Promise<void> }>()
+const handleBoardCreated = async (boardId: string) => {
+  await refreshBoards()
+  await selectBoard(boardId)
+}
 const projects = computed(() => projectData.value?.data.projects ?? [])
 const tags = computed(() => tagData.value?.data.tags ?? [])
-const boards = computed(() => boardData.value?.data.collections.filter(board => board.purpose !== 'case') ?? [])
+const collections = computed(() => boardData.value?.data.collections ?? [])
+const boards = computed(() => collections.value.filter(board => board.purpose !== 'case' && board.purpose !== 'portfolio'))
 const selectedBoardId = computed(() => typeof route.query.board === 'string' ? route.query.board : '')
-const selectedBoard = computed(() => boards.value.find(board => board.id === selectedBoardId.value))
+const selectedBoard = computed(() => collections.value.find(board => board.id === selectedBoardId.value))
 const selectedDynamicBoard = computed(() => selectedBoard.value?.mode === 'dynamic' ? selectedBoard.value : null)
 const selectedStaticBoard = computed(() => selectedBoard.value?.mode === 'static' ? selectedBoard.value : null)
 const canArrangeSelectedBoard = computed(() => Boolean(selectedStaticBoard.value && ['owner', 'editor', 'admin'].includes(selectedStaticBoard.value.role)))
@@ -340,10 +345,19 @@ const displayedAssets = computed(() => {
 // otherwise replace this array and make WebGL dispose and rebuild every texture.
 const videoAssets = ref<AssetCard[]>([])
 const cardsHidden = ref(false)
+const leavingAssets = shallowRef<AssetCard[] | null>(null)
+const masonryAssets = computed(() => leavingAssets.value ?? displayedAssets.value)
 let boardTransition = 0
 const selectBoard = async (boardId: string) => {
   if (boardId === selectedBoardId.value) return
   const transition = ++boardTransition
+  leavingAssets.value = displayedAssets.value.map(asset => ({ ...asset }))
+  cardsHidden.value = true
+  await nextTick()
+  await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+  if (transition !== boardTransition) return
+  await new Promise(resolve => setTimeout(resolve, 240))
+  if (transition !== boardTransition) return
   viewExpanded.value = false
   videoExpanded.value = false
   boardSettingsExpanded.value = false
@@ -351,11 +365,8 @@ const selectBoard = async (boardId: string) => {
   filtersExpanded.value = false
   compactFiltersVisible.value = true
   searchExpanded.value = false
-  searchClosing.value = false
-  cardsHidden.value = true
-  await new Promise(resolve => setTimeout(resolve, 300))
-  if (transition !== boardTransition) return
   await replaceLibraryQuery({ board: boardId || undefined, asset: undefined })
+  leavingAssets.value = null
   await nextTick()
   document.querySelector<HTMLElement>('.board-tabs button[aria-pressed="true"]')?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
   requestAnimationFrame(() => {
@@ -453,99 +464,78 @@ const currentBoardFilters = computed(() => ({
   projectNames: selectedProjectNames.value,
   tagIds: tagIds.value,
   tagNames: selectedTagNames.value,
-  uploadedBy: uploadedBy.value || null,
+  uploadedBy: uploadedBys.value.length === 1 ? uploadedBys.value[0] ?? null : null,
   dateFrom: dateFrom.value,
   dateTo: dateTo.value || (dateRange.value !== 'all' ? new Date().toISOString() : ''),
   dateLabel: dateRangeLabel.value,
   status: status.value
 }))
-const hasFilters = computed(() => Boolean(search.value || status.value || projectIds.value.length || tagIds.value.length || uploadedBy.value || dateRange.value !== 'all'))
-const activeFilterCount = computed(() => [status.value, projectIds.value.length, tagIds.value.length, uploadedBy.value, dateRange.value !== 'all'].filter(Boolean).length)
+const hasFilters = computed(() => Boolean(search.value || status.value || projectIds.value.length || tagIds.value.length || uploadedBys.value.length || dateRange.value !== 'all'))
+const activeFilterCount = computed(() => [status.value, projectIds.value.length, tagIds.value.length, uploadedBys.value.length, dateRange.value !== 'all'].filter(Boolean).length)
 const dynamicBoardFilterCount = computed(() => [dynamicBoardFilters.search, dynamicBoardFilters.projectIds.length, dynamicBoardFilters.tagIds.length, dynamicBoardFilters.dateFrom || dynamicBoardFilters.dateTo].filter(Boolean).length)
 const clearFilters = () => {
   search.value = ''
   status.value = ''
   projectIds.value = []
   tagIds.value = []
-  uploadedBy.value = ''
+  uploadedBys.value = []
   dateRange.value = 'all'
   customDateFrom.value = ''
   customDateTo.value = ''
 }
-const supportsFilterMorph = () => import.meta.client
-  && window.matchMedia('(min-width: 761px)').matches
-  && 'startViewTransition' in document
-  && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
-const morphPanel = async (panel: 'filters' | 'view' | 'video' | 'settings', update: () => void, direction: 'opening' | 'closing', keepMorphMode = false) => {
-  const viewTransitionDocument = document as Document & { startViewTransition: (callback: () => Promise<void>) => { finished: Promise<void> } }
-  filtersMorphing.value = true
-  morphSource.value = panel
-  await nextTick()
-  document.documentElement.dataset.filterTransition = direction
-  const transition = viewTransitionDocument.startViewTransition(async () => { update(); await nextTick() })
-  try { await transition.finished } finally {
-    delete document.documentElement.dataset.filterTransition
-    morphSource.value = null
-    if (!keepMorphMode) filtersMorphing.value = false
-  }
-}
 const openFilters = () => {
-  const update = () => { compactFiltersVisible.value = false; searchExpanded.value = false; viewExpanded.value = false; videoExpanded.value = false; boardSettingsExpanded.value = false; filtersExpanded.value = true }
-  if (supportsFilterMorph()) void morphPanel('filters', update, 'opening', true)
-  else update()
+  compactFiltersVisible.value = false; searchExpanded.value = false; viewExpanded.value = false; videoExpanded.value = false; boardSettingsExpanded.value = false; filtersExpanded.value = true
 }
 const closeFilters = () => {
-  if (supportsFilterMorph()) void morphPanel('filters', () => { filtersExpanded.value = false; compactFiltersVisible.value = true }, 'closing')
-  else filtersExpanded.value = false
+  filtersExpanded.value = false
 }
 const openView = () => {
-  const update = () => { compactFiltersVisible.value = false; searchExpanded.value = false; filtersExpanded.value = false; videoExpanded.value = false; boardSettingsExpanded.value = false; viewExpanded.value = true }
-  if (supportsFilterMorph()) void morphPanel('view', update, 'opening', true)
-  else update()
+  compactFiltersVisible.value = false; searchExpanded.value = false; filtersExpanded.value = false; videoExpanded.value = false; boardSettingsExpanded.value = false; viewExpanded.value = true
 }
 const closeView = () => {
-  const update = () => { viewExpanded.value = false }
-  if (supportsFilterMorph()) void morphPanel('view', update, 'closing')
-  else update()
+  viewExpanded.value = false
 }
 const openVideo = () => {
   const update = () => { videoAssets.value = [...displayedAssets.value]; compactFiltersVisible.value = false; searchExpanded.value = false; filtersExpanded.value = false; viewExpanded.value = false; boardSettingsExpanded.value = false; videoExpanded.value = true }
   update()
 }
 const closeVideo = () => {
-  const update = () => { videoExpanded.value = false }
-  if (supportsFilterMorph()) void morphPanel('video', update, 'closing')
-  else update()
+  videoExpanded.value = false
 }
 const openBoardSettings = () => {
   boardSettingsFeedback.text = ''
   boardSettingsFeedback.error = false
-  const update = () => { compactFiltersVisible.value = false; searchExpanded.value = false; filtersExpanded.value = false; viewExpanded.value = false; videoExpanded.value = false; boardSettingsExpanded.value = true }
-  if (supportsFilterMorph()) void morphPanel('settings', update, 'opening', true)
-  else update()
+  compactFiltersVisible.value = false; searchExpanded.value = false; filtersExpanded.value = false; viewExpanded.value = false; videoExpanded.value = false; boardSettingsExpanded.value = true
   void loadSelectedBoardMembers()
 }
 const closeBoardSettings = () => {
-  const update = () => { boardSettingsExpanded.value = false }
-  if (supportsFilterMorph()) void morphPanel('settings', update, 'closing')
-  else update()
+  boardSettingsExpanded.value = false
+  if (route.query.panel === 'settings') void replaceLibraryQuery({ panel: undefined })
 }
+const boardCreatorExpanded = ref(false)
+const openBoardCreator = (fromCurrentView = false) => {
+  compactFiltersVisible.value = false
+  searchExpanded.value = false
+  filtersExpanded.value = false
+  viewExpanded.value = false
+  videoExpanded.value = false
+  boardSettingsExpanded.value = false
+  boardCreatorExpanded.value = true
+  if (fromCurrentView) void boardCreator.value?.openCreateFromCurrentView()
+  else void boardCreator.value?.openCreate()
+}
+watch([selectedBoard, () => route.query.panel], ([board, panel]) => {
+  if (board && panel === 'settings' && !boardSettingsExpanded.value) openBoardSettings()
+}, { immediate: true })
 const finishExpandedPanelClose = () => {
   if (!filtersExpanded.value && !viewExpanded.value && !videoExpanded.value && !boardSettingsExpanded.value) compactFiltersVisible.value = true
 }
-watch([filtersExpanded, viewExpanded, videoExpanded, boardSettingsExpanded], (expanded) => {
+watch([filtersExpanded, viewExpanded, videoExpanded, boardSettingsExpanded, boardCreatorExpanded], (expanded) => {
   if (expanded.every(value => !value)) compactFiltersVisible.value = true
 })
 const toggleSearch = () => {
-  if (searchExpanded.value) {
-    searchClosing.value = true
-    searchExpanded.value = false
-    return
-  }
-  searchClosing.value = false
-  searchExpanded.value = true
+  searchExpanded.value = !searchExpanded.value
 }
-const finishSearchClose = () => { searchClosing.value = false }
 const isoBoardDate = (value: string, end = false) => value ? new Date(`${value}T${end ? '23:59:59.999' : '00:00:00.000'}`).toISOString() : null
 let dynamicBoardSaveTimer: ReturnType<typeof setTimeout> | undefined
 watch(() => [dynamicBoardFilters.search, dynamicBoardFilters.projectIds.join(','), dynamicBoardFilters.tagIds.join(','), dynamicBoardFilters.dateFrom, dynamicBoardFilters.dateTo], () => {
@@ -596,7 +586,11 @@ const submitters = computed(() => data.value?.data.submitters ?? [])
 const visibleSubmitters = computed(() => submitters.value.slice(0, 5))
 const submitterName = (submitter: Submitter) => submitter.figma_handle || 'Unknown submitter'
 const submitterInitial = (submitter: Submitter) => submitterName(submitter).trim().charAt(0).toUpperCase() || '?'
-const toggleSubmitter = (submitterId: string) => { uploadedBy.value = uploadedBy.value === submitterId ? '' : submitterId }
+const toggleSubmitter = (submitterId: string) => {
+  uploadedBys.value = uploadedBys.value.includes(submitterId)
+    ? uploadedBys.value.filter(id => id !== submitterId)
+    : [...uploadedBys.value, submitterId]
+}
 const total = computed(() => data.value?.data.total ?? 0)
 const canLoadMore = computed(() => !selectedBoardId.value && loadStatus.value !== 'pending' && assets.value.length < total.value)
 const loadNextPage = () => {
@@ -686,7 +680,7 @@ const updateToolbar = () => {
 const refreshWhenVisible = () => {
   if (document.visibilityState === 'visible') void refresh()
 }
-watch([search, status, projectIds, tagIds, uploadedBy, dateRange, customDateFrom, customDateTo, sort], () => {
+watch([search, status, projectIds, tagIds, uploadedBys, dateRange, customDateFrom, customDateTo, sort], () => {
   page.value = 1
   void replaceLibraryQuery(persistedFilterQuery.value)
 }, { deep: true })
@@ -696,7 +690,7 @@ watch(() => route.query, () => {
   status.value = next.status
   if (projectIds.value.join(',') !== next.projectIds.join(',')) projectIds.value = next.projectIds
   if (tagIds.value.join(',') !== next.tagIds.join(',')) tagIds.value = next.tagIds
-  uploadedBy.value = next.uploadedBy
+  if (uploadedBys.value.join(',') !== next.uploadedBys.join(',')) uploadedBys.value = next.uploadedBys
   dateRange.value = next.dateRange
   customDateFrom.value = next.dateFrom
   customDateTo.value = next.dateTo
@@ -767,11 +761,11 @@ onBeforeUnmount(() => {
         <nav aria-label="Library controls">
           <NuxtLink class="button-secondary" to="/portfolio">Portfolio</NuxtLink><button v-if="canShare"
             class="button-secondary button-icon board-create-button" type="button" aria-label="Create board"
-            title="Create board" @click="boardCreator?.openCreate()">
+            title="Create board" @click="openBoardCreator()">
             <Plus :size="20" aria-hidden="true" />
           </button>
           <ShareCollection ref="boardCreator" hide-trigger :current-filters="currentBoardFilters"
-            @created="refreshBoards" />
+            @created="handleBoardCreated" @open-change="boardCreatorExpanded = $event" />
           <NuxtLink v-if="isAdmin" class="button-secondary" to="/admin/users">Admin</NuxtLink>
           <NuxtLink v-else-if="canManageProjects" class="button-secondary" to="/admin/projects">Projects</NuxtLink>
         </nav>
@@ -789,7 +783,7 @@ onBeforeUnmount(() => {
         </nav>
       </div>
 
-      <SelectionPanel :visible="viewExpanded" label="Library view" wide overlay raised :instant="filtersMorphing"
+      <SelectionPanel :visible="viewExpanded" label="Library view" wide overlay raised
         @close="closeView" @after-leave="finishExpandedPanelClose">
         <BoardViewControls :model-value="libraryView" @update:model-value="setLibraryView" />
         <button class="filter-panel-toggle is-expanded" type="button" aria-label="Hide view settings"
@@ -799,7 +793,7 @@ onBeforeUnmount(() => {
       </SelectionPanel>
 
       <SelectionPanel :visible="Boolean(selectedBoard && videoExpanded)" label="Create video" wide overlay raised
-        :instant="filtersMorphing" @close="closeVideo" @after-leave="finishExpandedPanelClose">
+        @close="closeVideo" @after-leave="finishExpandedPanelClose">
         <BoardVideoComposer v-if="selectedBoard" :assets="videoAssets" :board-title="selectedBoard.title" @close="closeVideo" />
         <button class="filter-panel-toggle is-expanded" type="button" aria-label="Close video creator"
           aria-expanded="true" @click="closeVideo">
@@ -808,8 +802,9 @@ onBeforeUnmount(() => {
       </SelectionPanel>
 
       <SelectionPanel :visible="Boolean(selectedBoard && boardSettingsExpanded)" label="Board settings" wide overlay
-        raised :instant="filtersMorphing" @close="closeBoardSettings" @after-leave="finishExpandedPanelClose">
+        raised @close="closeBoardSettings" @after-leave="finishExpandedPanelClose">
         <BoardSettingsControls v-if="selectedBoard" :title="selectedBoard.title" :purpose="selectedBoard.purpose"
+          :portfolio-kind="selectedBoard.portfolio_kind" :portfolio-client="selectedBoard.portfolio_client"
           :mode="selectedBoard.mode" :layout="selectedBoard.layout"
           :publication-enabled="selectedBoard.publication_enabled" :can-edit="canRenameSelectedBoard"
           :can-manage-members="canManageSelectedBoardMembers" :busy="boardSettingsBusy"
@@ -826,7 +821,7 @@ onBeforeUnmount(() => {
       </SelectionPanel>
 
       <template v-if="!selectedBoardId">
-        <SelectionPanel :visible="filtersExpanded" label="Asset filters" wide overlay raised :instant="filtersMorphing"
+        <SelectionPanel :visible="filtersExpanded" label="Asset filters" wide overlay raised
           @close="closeFilters" @after-leave="finishExpandedPanelClose">
           <AssetFilterControls v-model:status="status" v-model:project-ids="projectIds" v-model:tag-ids="tagIds"
             v-model:date-range="dateRange" v-model:date-from="customDateFrom" v-model:date-to="customDateTo"
@@ -834,10 +829,10 @@ onBeforeUnmount(() => {
             show-sort expanded :actions-visible="hasFilters">
             <template #actions><button class="clear-filters-button" type="button" @click="clearFilters">Clear
                 filters</button><button v-if="canShare" class="filter-create-board" type="button"
-                @click="boardCreator?.openCreateFromCurrentView()">Create board</button></template>
+                @click="openBoardCreator(true)">Create board</button></template>
             <div v-if="submitters.length" class="submitter-stack" role="group" aria-label="Filter by submitter"><button
                 v-for="submitter in visibleSubmitters" :key="submitter.id" class="submitter-avatar" type="button"
-                :aria-label="`Filter by ${submitterName(submitter)}`" :aria-pressed="uploadedBy === submitter.id"
+                :aria-label="`Filter by ${submitterName(submitter)}`" :aria-pressed="uploadedBys.includes(submitter.id)"
                 :title="submitterName(submitter)" @click="toggleSubmitter(submitter.id)"><img
                   v-if="submitter.avatar_url" :src="submitter.avatar_url" alt=""><span v-else aria-hidden="true">{{
                     submitterInitial(submitter)
@@ -851,36 +846,34 @@ onBeforeUnmount(() => {
           </button>
         </SelectionPanel>
         <SelectionPanel
-          :visible="compactFiltersVisible && !filtersExpanded && !viewExpanded && !videoExpanded && !boardSettingsExpanded"
-          label="Asset filters" :wide="searchExpanded || searchClosing" bare raised :instant="filtersMorphing">
+          :visible="compactFiltersVisible && !filtersExpanded && !viewExpanded && !videoExpanded && !boardSettingsExpanded && !boardCreatorExpanded"
+          label="Asset filters" :wide="searchExpanded" bare raised>
           <Transition name="compact-control">
-            <div v-if="!searchExpanded && !searchClosing" class="mobile-control-blur"
-              :class="{ 'is-morph-source': morphSource === 'filters' }"><button class="filter-panel-toggle"
+            <div v-if="!searchExpanded" class="mobile-control-blur"><button class="filter-panel-toggle"
                 :class="{ 'has-filter-count': activeFilterCount }" type="button" aria-label="Show filters"
                 aria-expanded="false" @click="openFilters"><span>Filters</span><span v-if="activeFilterCount"
                   class="filter-count">{{
                   activeFilterCount }}</span></button></div>
           </Transition>
           <Transition name="compact-control">
-            <div v-if="!searchExpanded && !searchClosing" class="mobile-control-blur"
-              :class="{ 'is-morph-source': morphSource === 'view' }"><button class="filter-panel-toggle" type="button"
+            <div v-if="!searchExpanded" class="mobile-control-blur"><button class="filter-panel-toggle" type="button"
                 aria-label="Change library view" :aria-expanded="viewExpanded" @click="openView">View</button></div>
           </Transition>
           <Transition name="compact-control">
-            <div v-if="hasFilters && !searchExpanded && !searchClosing" class="mobile-control-blur"><button
+            <div v-if="hasFilters && !searchExpanded" class="mobile-control-blur"><button
                 class="mobile-filter-search is-expanded filter-clear-compact" type="button" aria-label="Clear filters"
                 title="Clear filters" @click="clearFilters"><span class="search-control-icon search-control-icon--close"
                   aria-hidden="true">
                   <Xmark :size="20" :stroke-width="2" />
                 </span></button></div>
           </Transition>
-          <Transition name="filter-controls" @after-leave="finishSearchClose">
+          <Transition name="filter-controls">
             <form v-if="searchExpanded" class="mobile-search-form" role="search" @submit.prevent><label
                 class="search-field"><span class="sr-only">Search assets</span><input v-model="search" type="search"
                   name="filter-search" placeholder="Search" autofocus></label></form>
           </Transition>
           <div class="mobile-control-blur"><button class="mobile-filter-search"
-              :class="{ 'is-expanded': searchExpanded || searchClosing }" type="button"
+              :class="{ 'is-expanded': searchExpanded }" type="button"
               :aria-label="searchExpanded ? 'Hide search' : 'Search assets'" :aria-expanded="searchExpanded"
               @click="toggleSearch"><span class="search-control-icon search-control-icon--search" aria-hidden="true">
                 <Search :size="20" />
@@ -891,7 +884,7 @@ onBeforeUnmount(() => {
       </template>
       <template v-else>
         <SelectionPanel v-if="selectedDynamicBoard" :visible="filtersExpanded" label="Board asset filters" wide overlay
-          raised :instant="filtersMorphing" @close="closeFilters" @after-leave="finishExpandedPanelClose">
+          raised @close="closeFilters" @after-leave="finishExpandedPanelClose">
           <AssetFilterControls v-model:search="dynamicBoardFilters.search"
             v-model:project-ids="dynamicBoardFilters.projectIds" v-model:tag-ids="dynamicBoardFilters.tagIds"
             v-model:date-from="dynamicBoardFilters.dateFrom" v-model:date-to="dynamicBoardFilters.dateTo"
@@ -927,15 +920,13 @@ onBeforeUnmount(() => {
                 boardRenameFeedback.text }}</span></div>
             <div class="selected-board-actions">
               <button v-if="selectedDynamicBoard" class="button-secondary selected-board-action-button"
-                :class="{ 'is-morph-source': morphSource === 'filters', 'has-filter-count': dynamicBoardFilterCount }"
+                :class="{ 'has-filter-count': dynamicBoardFilterCount }"
                 type="button" aria-label="Show board filters" :aria-expanded="filtersExpanded"
                 @click="openFilters"><span>Filters</span><span v-if="dynamicBoardFilterCount" class="filter-count">{{
                   dynamicBoardFilterCount }}</span></button>
-              <button class="button-secondary selected-board-action-button"
-                :class="{ 'is-morph-source': morphSource === 'view' }" type="button" aria-label="Change library view"
+              <button class="button-secondary selected-board-action-button" type="button" aria-label="Change library view"
                 :aria-expanded="viewExpanded" @click="openView">View</button>
-              <button class="button-secondary selected-board-action-button"
-                :class="{ 'is-morph-source': morphSource === 'video' }" type="button"
+              <button class="button-secondary selected-board-action-button" type="button"
                 aria-label="Create a video from this board" :aria-expanded="videoExpanded"
                 @click="openVideo">Video</button>
               <button v-if="canArrangeSelectedBoard" class="button-secondary selected-board-action-button" type="button"
@@ -946,7 +937,7 @@ onBeforeUnmount(() => {
                 class="selected-board-action-button remove-selected-button" type="button" :disabled="arrangeRemoving"
                 @click="removeArrangeSelection">Remove {{ arrangeSelectedIds.length }}</button>
               <button class="button-secondary selected-board-action-button selected-board-settings-button"
-                :class="{ 'is-morph-source': morphSource === 'settings' }" type="button" aria-label="Board settings"
+                type="button" aria-label="Board settings"
                 title="Board settings" :aria-expanded="boardSettingsExpanded" @click="openBoardSettings">
                 <Gear2 :size="20" aria-hidden="true" />
               </button>
@@ -956,20 +947,36 @@ onBeforeUnmount(() => {
         <span v-if="selectedBoardId && selectedBoardStatus === 'pending' && displayedAssets.length" class="sr-only"
           role="status">Loading the rest of {{ selectedBoard?.title ?? 'this board' }}</span>
         <AssetMasonrySkeleton
-          v-if="selectedBoardId && selectedBoardStatus === 'pending' && displayedAssets.length === 0"
-          :label="`Loading ${selectedBoard?.title ?? 'board'}`" />
-        <div v-else-if="selectedBoardId && selectedBoardError && displayedAssets.length === 0" class="state error"
+          v-if="!leavingAssets && selectedBoardId && selectedBoardStatus === 'pending' && displayedAssets.length === 0"
+          :label="`Loading ${selectedBoard?.title ?? 'board'}`" :view-settings="libraryView" />
+        <div v-else-if="!leavingAssets && selectedBoardId && selectedBoardError && displayedAssets.length === 0" class="state error"
           role="alert"><strong>Unable to load this board.</strong><span>Try another board or return to all
             assets.</span>
         </div>
-        <AssetMasonrySkeleton v-else-if="!selectedBoardId && loadStatus === 'pending' && assets.length === 0" />
-        <div v-else-if="!selectedBoardId && error" class="state error" role="alert"><strong>Unable to load
+        <AssetMasonrySkeleton v-else-if="!leavingAssets && !selectedBoardId && loadStatus === 'pending' && assets.length === 0"
+          :view-settings="libraryView" />
+        <div v-else-if="!leavingAssets && !selectedBoardId && error" class="state error" role="alert"><strong>Unable to load
             assets.</strong><span>Check your connection and try again.</span><button type="button"
             @click="refresh()">Try
             again</button></div>
-        <div v-else-if="displayedAssets.length === 0" class="state"><strong>{{ selectedBoardId ? 'No matching assets on this board' : hasFilters ? 'No matching assets' : 'No assets yet' }}</strong><span>{{ selectedBoardId ? 'Try another board or change your search.' : hasFilters ? 'Change your search or clear the filters.' : 'Upload frames from the Figma plugin to build this library.' }}</span><button v-if="!selectedBoardId && hasFilters" type="button"
-            @click="clearFilters">Clear filters</button></div>
-        <AssetMasonry v-else :key="selectedBoardId || 'all'" :assets="displayedAssets" :hidden="cardsHidden"
+        <div v-else-if="masonryAssets.length === 0" class="state" :class="{ 'state-hidden': cardsHidden }">
+          <template v-if="selectedStaticBoard">
+            <strong>This board is empty</strong>
+            <span>Browse your library, open an asset, and add it to this board.</span>
+            <button type="button" @click="selectBoard('')">Browse assets</button>
+          </template>
+          <template v-else-if="selectedDynamicBoard">
+            <strong>No assets match this board’s filters</strong>
+            <span>Change the filters to include more approved assets.</span>
+            <button type="button" @click="openFilters">Change filters</button>
+          </template>
+          <template v-else>
+            <strong>{{ hasFilters ? 'No matching assets' : 'No assets yet' }}</strong>
+            <span>{{ hasFilters ? 'Change your search or clear the filters.' : 'Upload frames from the Figma plugin to build this library.' }}</span>
+            <button v-if="hasFilters" type="button" @click="clearFilters">Clear filters</button>
+          </template>
+        </div>
+        <AssetMasonry v-else :key="selectedBoardId || 'all'" :assets="masonryAssets" :hidden="cardsHidden"
           :play-videos="!videoExpanded"
           :stable-columns="false" :animate-changes="!cardsHidden" :can-approve="canApprove && !arrangeExpanded"
           :editable-titles="canRenameAssets && !arrangeExpanded" :view-settings="libraryView"
@@ -1137,37 +1144,51 @@ main {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: calc(var(--space)/3);
+  gap: var(--cluster-gap);
   padding: var(--space);
-  text-align: center
+  text-align: center;
+  opacity: 1;
+  transform: translateY(0);
+  transition-property: opacity, transform;
+  transition-duration: 180ms, 220ms;
+  transition-timing-function: ease-out, cubic-bezier(.2, 0, 0, 1)
+}
+
+.state.state-hidden {
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(16px)
 }
 
 .state strong {
-  font-size: 16px;
+  color: var(--color-fg);
+  font-size: var(--font-size-body);
   line-height: 1.15
 }
 
 .state span {
-  font-size: 14px;
+  color: var(--color-muted);
+  font-size: var(--font-size-body-compact);
   line-height: 1.25;
-  opacity: var(--muted)
 }
 
 .state button {
-  min-height: 36px;
-  margin-top: calc(var(--space)/3);
-  padding: 0 calc(var(--space)*.75);
-  font-size: 13px;
+  min-height: var(--control-height);
+  margin-top: var(--cluster-gap);
+  padding-inline: var(--button-padding-inline);
+  color: var(--color-bg);
+  background: var(--color-fg);
+  font-size: var(--font-size-control);
   line-height: 1
 }
 
 button {
-  min-height: 44px;
-  padding: 0 18px;
+  min-height: var(--control-height);
+  padding: 0 var(--button-padding-inline);
   border: 0;
   border-radius: 999px;
-  color: white;
-  background: black;
+  color: var(--color-bg);
+  background: var(--color-fg);
   font: inherit;
   cursor: pointer;
   transition-property: scale, opacity;
@@ -1256,6 +1277,7 @@ button {
 @media(prefers-reduced-motion:reduce) {
 
   .preview img,
+  .state,
   button {
     transition: none
   }
@@ -1365,7 +1387,7 @@ button {
 }
 
 .selected-board-heading {
-  margin: 0  calc(var(--space)*2) calc(var(--space)*2) 0
+  margin: 0 0 calc(var(--space) * 2)
 }
 
 .selected-board-title {
@@ -1714,30 +1736,27 @@ button {
 
 .mobile-search-form.filter-controls-enter-active,
 .mobile-search-form.filter-controls-leave-active {
-  overflow: hidden;
-  transition-property: width, clip-path;
-  transition-duration: 240ms;
+  transition-property: translate;
+  transition-duration: 180ms;
   transition-timing-function: cubic-bezier(.2, 0, 0, 1)
 }
 
 .mobile-search-form.filter-controls-enter-from,
 .mobile-search-form.filter-controls-leave-to {
-  width: 0;
-  clip-path: inset(0 100% 0 0 round 999px);
-  transform: none
+  translate: 4px 0
 }
 
-.mobile-search-form.filter-controls-leave-active label {
-  min-width: 18rem
+.mobile-search-form.filter-controls-leave-active {
+  position: absolute;
+  right: calc(var(--filter-control-height-mobile) + var(--filter-panel-control-gap));
+  transition-duration: 140ms
 }
 
 .compact-control-leave-active {
   position: absolute;
   right: calc(var(--filter-control-height-mobile) + var(--filter-panel-control-gap));
-  overflow: hidden;
-  transform-origin: right center;
-  transition-property: clip-path, transform;
-  transition-duration: 240ms;
+  transition-property: translate;
+  transition-duration: 140ms;
   transition-timing-function: cubic-bezier(.2, 0, 0, 1)
 }
 
@@ -1746,19 +1765,17 @@ button {
 }
 
 .compact-control-leave-to {
-  clip-path: inset(0 0 0 100% round var(--filter-pill-radius));
-  transform: translateX(4px) scaleX(.01)
+  translate: 4px 0
 }
 
 .compact-control-enter-active {
-  transition-property: clip-path, transform;
-  transition-duration: 240ms;
+  transition-property: translate;
+  transition-duration: 180ms;
   transition-timing-function: cubic-bezier(.2, 0, 0, 1)
 }
 
 .compact-control-enter-from {
-  clip-path: inset(0 100% 0 0 round var(--filter-pill-radius));
-  transform: translateX(4px) scaleX(.01)
+  translate: 4px 0
 }
 
 .preview {

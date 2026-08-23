@@ -14,42 +14,7 @@ interface Edition {
 }
 
 const { data, status, error, refresh } = await useFetch<{ data: { collections: Edition[] } }>('/api/shares')
-const editions = computed(() => data.value?.data.collections.filter(item => item.purpose === 'portfolio') ?? [])
-const cases = computed(() => data.value?.data.collections.filter(item => item.purpose === 'case') ?? [])
-const creatingCase = ref(false)
-const caseTitle = ref('')
-const caseBusy = ref(false)
-const caseError = ref('')
-const caseInput = ref<HTMLInputElement | null>(null)
-
-const showCaseForm = async () => {
-  creatingCase.value = true
-  caseError.value = ''
-  await nextTick()
-  caseInput.value?.focus()
-}
-
-const hideCaseForm = () => {
-  creatingCase.value = false
-  caseTitle.value = ''
-  caseError.value = ''
-}
-
-const createCase = async () => {
-  const title = caseTitle.value.trim()
-  if (!title) return
-  caseBusy.value = true; caseError.value = ''
-  try {
-    const response = await $fetch<{ data: { collection: { id: string } } }>('/api/shares', {
-      method: 'POST', body: {
-        title, purpose: 'case', mode: 'static', layout: 'column', filters: { search: '', projectId: null, tagId: null, uploadedBy: null, dateFrom: null, dateTo: null },
-        expiresAt: null, reviewMonth: null, submissionDeadline: null, portfolioKind: null, portfolioClient: null, introduction: null
-      }
-    })
-    await navigateTo(`/boards/${response.data.collection.id}`)
-  } catch { caseError.value = 'Unable to create this case. Try again.' }
-  finally { caseBusy.value = false }
-}
+const portfolios = computed(() => data.value?.data.collections.filter(item => item.purpose === 'portfolio') ?? [])
 
 onActivated(() => refresh())
 </script>
@@ -67,51 +32,28 @@ onActivated(() => refresh())
     <main>
       <section class="intro">
         <p>Portfolio</p>
-        <h1>One library.<br>Many editions.</h1>
+        <h1>Create and publish<br>your portfolio.</h1>
         <ShareCollection portfolio-only />
       </section>
-      <section class="case-library" aria-labelledby="case-library-title">
-        <div>
-          <p>Reusable cases</p>
-          <h2 id="case-library-title">Build once. Curate for each edition.</h2>
-        </div>
-        <div class="case-actions"><button v-if="!creatingCase" class="button-secondary" type="button"
-            @click="showCaseForm">Create case</button>
-          <form v-else @submit.prevent="createCase"><label><span>Case name</span><input ref="caseInput"
-                v-model="caseTitle" name="case-name" required maxlength="120" autocomplete="off"
-                placeholder="Brand identity"></label>
-            <div class="case-form-actions"><button type="submit" :disabled="caseBusy">{{ caseBusy ? 'Creating…' :
-                'Create case' }}</button><button class="button-plain" type="button"
-                @click="hideCaseForm">Cancel</button></div><small role="status" aria-live="polite">{{ caseError
-              }}</small>
-          </form>
-        </div>
-        <div v-if="cases.length" class="case-list">
-          <NuxtLink v-for="portfolioCase in cases" :key="portfolioCase.id" :to="`/boards/${portfolioCase.id}`"><span>{{
-              portfolioCase.title }}</span><small>{{ portfolioCase.itemCount }} works</small></NuxtLink>
-        </div>
-        <p v-else class="muted">Cases group ordered library assets into reusable project stories.</p>
-      </section>
-      <p v-if="status === 'pending'" class="state">Loading portfolio editions…</p>
-      <p v-else-if="error" class="state">Unable to load portfolio editions.</p>
-      <section v-else-if="editions.length" class="editions" aria-label="Portfolio editions">
-        <article v-for="edition in editions" :key="edition.id">
-          <NuxtLink class="cover" :to="`/boards/${edition.id}`">
-            <AssetMedia v-if="edition.previewAssets[0]" :src="edition.previewAssets[0].previewUrl" :mime-type="edition.previewAssets[0].mime_type" alt="" />
+      <p v-if="status === 'pending'" class="state">Loading portfolios…</p>
+      <p v-else-if="error" class="state">Unable to load portfolios.</p>
+      <section v-else-if="portfolios.length" class="editions" aria-label="Portfolios">
+        <article v-for="portfolio in portfolios" :key="portfolio.id">
+          <NuxtLink class="cover" :to="`/boards/${portfolio.id}`">
+            <AssetMedia v-if="portfolio.previewAssets[0]" :src="portfolio.previewAssets[0].previewUrl" :mime-type="portfolio.previewAssets[0].mime_type" alt="" />
             <span v-else>No work yet</span>
           </NuxtLink>
           <h2>
-            <NuxtLink :to="`/boards/${edition.id}`">{{ edition.title }}</NuxtLink>
+            <NuxtLink :to="`/boards/${portfolio.id}`">{{ portfolio.title }}</NuxtLink>
           </h2>
-          <p>{{ edition.portfolio_kind === 'client' ? (edition.portfolio_client || 'Client edition') : 'Main portfolio'
-            }} · {{ edition.publication_enabled ? 'published' : 'draft' }}</p>
-          <a v-if="edition.publication_enabled" :href="`/s/${edition.slug}`" target="_blank" rel="noopener">View
-            published edition</a>
+          <p>{{ portfolio.portfolio_kind === 'client' ? (portfolio.portfolio_client || 'Client version') : 'Main portfolio'
+            }} · {{ portfolio.publication_enabled ? 'published' : 'draft' }}</p>
+          <a v-if="portfolio.publication_enabled" :href="`/s/${portfolio.slug}`" target="_blank" rel="noopener">View published portfolio</a>
         </article>
       </section>
       <div v-else class="state">
-        <strong>No portfolio editions yet</strong>
-        <span>Make a main portfolio or a private client edition from your shared library.</span>
+        <strong>No portfolio yet</strong>
+        <span>Create one, add work, and publish when it is ready.</span>
       </div>
     </main>
   </div>

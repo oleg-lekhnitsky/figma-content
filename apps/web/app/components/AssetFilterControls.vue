@@ -1,7 +1,7 @@
 <script setup lang="ts">
 interface Option { id: string; name: string }
 
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   search?: string
   status?: string
   projectIds: string[]
@@ -13,11 +13,13 @@ withDefaults(defineProps<{
   projects: Option[]
   tags: Option[]
   showSearch?: boolean
+  showAssetFilters?: boolean
   showStatus?: boolean
   useDatePresets?: boolean
   showSort?: boolean
   expanded?: boolean
   heading?: string
+  description?: string
   actionsVisible?: boolean
 }>(), {
   search: '',
@@ -27,11 +29,13 @@ withDefaults(defineProps<{
   dateTo: '',
   sort: 'newest',
   showSearch: false,
+  showAssetFilters: true,
   showStatus: false,
   useDatePresets: false,
   showSort: false,
   expanded: false,
   heading: '',
+  description: '',
   actionsVisible: false
 })
 
@@ -44,7 +48,37 @@ const emit = defineEmits<{
   'update:dateFrom': [value: string]
   'update:dateTo': [value: string]
   'update:sort': [value: string]
+  submit: []
 }>()
+
+const sheetContent = ref<HTMLElement | null>(null)
+let revealTimer: ReturnType<typeof setTimeout> | undefined
+const keepFocusedFilterVisible = () => {
+  const content = sheetContent.value
+  const focused = document.activeElement
+  if (!content || !(focused instanceof HTMLElement) || !content.contains(focused)) return
+  const contentRect = content.getBoundingClientRect()
+  const focusedRect = focused.getBoundingClientRect()
+  const inset = 8
+  const delta = focusedRect.bottom > contentRect.bottom - inset
+    ? focusedRect.bottom - contentRect.bottom + inset
+    : focusedRect.top < contentRect.top + inset
+      ? focusedRect.top - contentRect.top - inset
+      : 0
+  if (!delta) return
+  content.scrollBy({
+    top: delta,
+    behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+  })
+}
+watch(() => props.actionsVisible, async (visible, wasVisible) => {
+  if (!visible || wasVisible) return
+  await nextTick()
+  requestAnimationFrame(keepFocusedFilterVisible)
+  clearTimeout(revealTimer)
+  revealTimer = setTimeout(keepFocusedFilterVisible, 280)
+})
+onBeforeUnmount(() => clearTimeout(revealTimer))
 
 const toggleOption = (values: string[], id: string) => values.includes(id) ? values.filter(value => value !== id) : [...values, id]
 const dateOptions = [
@@ -66,11 +100,13 @@ const sortOptions = [
 </script>
 
 <template>
-  <form class="asset-filter-controls asset-filter-controls--filters" :class="{ 'asset-filter-controls--expanded': expanded }" aria-label="Filter assets" @submit.prevent>
+  <form class="asset-filter-controls asset-filter-controls--filters" :class="{ 'asset-filter-controls--expanded': expanded }" aria-label="Filter assets" @submit.prevent="emit('submit')">
     <button v-if="expanded" class="filter-sheet-handle" type="button" aria-label="Close filters"><span aria-hidden="true" /></button>
-    <div class="filter-sheet-content">
+    <div ref="sheetContent" class="filter-sheet-content">
       <template v-if="expanded">
-      <h2 v-if="heading" class="filter-overlay-title">{{ heading }}</h2>
+      <div v-if="heading && description" class="board-settings-intro"><h2 class="filter-overlay-title">{{ heading }}</h2><p class="board-type-summary">{{ description }}</p></div>
+      <h2 v-else-if="heading" class="filter-overlay-title">{{ heading }}</h2>
+      <slot name="before" />
       <section v-if="showSearch" class="filter-option-group filter-search-group">
         <h3>Search</h3>
         <label class="filter-visible-search"><span class="sr-only">Search assets</span><input :value="search" type="search" placeholder="Type to search" @input="emit('update:search', ($event.target as HTMLInputElement).value)"></label>
@@ -79,15 +115,15 @@ const sortOptions = [
         <h3>Status</h3>
         <div class="filter-option-list filter-option-list--segmented"><button type="button" :aria-pressed="status === ''" @click="emit('update:status', '')">All</button><button type="button" :aria-pressed="status === 'approved'" @click="emit('update:status', 'approved')">Approved</button><button type="button" :aria-pressed="status === 'draft'" @click="emit('update:status', 'draft')">Draft</button></div>
       </section>
-      <section class="filter-option-group">
+      <section v-if="showAssetFilters" class="filter-option-group">
         <h3>Projects</h3>
         <div class="filter-option-list"><button type="button" :aria-pressed="projectIds.length === 0" @click="emit('update:projectIds', [])">All</button><button v-for="option in projects" :key="option.id" type="button" :aria-pressed="projectIds.includes(option.id)" @click="emit('update:projectIds', toggleOption(projectIds, option.id))">{{ option.name }}</button></div>
       </section>
-      <section class="filter-option-group">
+      <section v-if="showAssetFilters" class="filter-option-group">
         <h3>Tags</h3>
         <div class="filter-option-list"><button type="button" :aria-pressed="tagIds.length === 0" @click="emit('update:tagIds', [])">All</button><button v-for="option in tags" :key="option.id" type="button" :aria-pressed="tagIds.includes(option.id)" @click="emit('update:tagIds', toggleOption(tagIds, option.id))">{{ option.name }}</button></div>
       </section>
-      <section class="filter-option-group">
+      <section v-if="showAssetFilters" class="filter-option-group">
         <h3>Date</h3>
         <div v-if="useDatePresets" class="filter-option-list"><button v-for="option in dateOptions" :key="option.value" type="button" :aria-pressed="dateRange === option.value" @click="emit('update:dateRange', option.value)">{{ option.label }}</button></div>
         <div v-if="!useDatePresets || dateRange === 'custom'" class="filter-date-range"><label><span>From</span><input :value="dateFrom" type="date" :max="dateTo || undefined" @input="emit('update:dateFrom', ($event.target as HTMLInputElement).value)"></label><label><span>To</span><input :value="dateTo" type="date" :min="dateFrom || undefined" @input="emit('update:dateTo', ($event.target as HTMLInputElement).value)"></label></div>

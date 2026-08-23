@@ -590,7 +590,7 @@ watch(() => props.assetId, id => {
             aria-label="Close board picker" @click="boardPickerOpen = false">
             <X :size="20" aria-hidden="true" />
           </button>
-          <ShareCollection ref="boardCreator" hide-trigger @created="refreshBoards" />
+          <ShareCollection ref="boardCreator" hide-trigger @created="() => refreshBoards()" />
         </footer>
       </section>
     </dialog>

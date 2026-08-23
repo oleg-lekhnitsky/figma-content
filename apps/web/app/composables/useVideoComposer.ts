@@ -1211,7 +1211,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
   }
   const startPlayback=()=>{if(playing.value)return;const startTime=template.value.collection==='grid'&&settings.value.loop?gridPlaybackTime:progress.value;playbackStartedAt=performance.now()-startTime*1000;lastPreviewFrameAt=0;playing.value=true;videos.forEach(video=>void video.play().catch(()=>{}));animationFrame=requestAnimationFrame(tick)}
   const togglePlayback=()=>{if(playing.value){stop();void drawAt(progress.value);return}startPlayback()}
-  const seek=(value:number)=>{progress.value=value;if(template.value.collection==='grid')gridPlaybackTime=value;if(playing.value)playbackStartedAt=performance.now()-value*1000;void drawAt(value)}
+  const seek=(value:number)=>{progress.value=value;if(template.value.collection==='grid')gridPlaybackTime=value;if(playing.value)playbackStartedAt=performance.now()-value*1000;return drawAt(value)}
   const setCanvas=(value:HTMLCanvasElement)=>{canvas.value=value;void drawAt(progress.value)}
   const waitForReplacementCanvas=(previousCanvas:HTMLCanvasElement|undefined,changeRevision:number)=>new Promise<void>(resolve=>{
     let attempts=0

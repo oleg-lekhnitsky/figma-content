@@ -3,6 +3,7 @@ import type { RouteLocationRaw } from 'vue-router'
 import { Figma, Heart } from 'reicon-vue'
 import type { BoardViewSettings } from '@content-library/shared'
 import type { AssetMasonryItem } from '../types/asset-masonry'
+import { boardViewStyle } from '../utils/board-view-style'
 
 defineSlots<{
   details(props: { asset: T }): unknown
@@ -70,6 +71,7 @@ let resizeObserver: ResizeObserver | undefined
 let measureFrame = 0
 let revealFrame = 0
 let mediaRevealFrame = 0
+let layoutLocked = false
 const pendingLoadedImages = new Set<string>()
 let touchPointerId: number | undefined
 const quickActionsAssetId = ref<string | null>(null)
@@ -246,6 +248,7 @@ const handlePointerCaptureLost = (event: PointerEvent) => {
   commitReorder()
 }
 const measureCards = () => {
+  if (layoutLocked) return
   cancelAnimationFrame(measureFrame)
   cancelAnimationFrame(revealFrame)
   measureFrame = requestAnimationFrame(() => {
@@ -285,6 +288,63 @@ const observeCards = () => {
   syncLoadedImages()
   measureCards()
 }
+const freezeCardsForLeave = () => {
+  const root = masonry.value
+  if (!root) return
+  const rootRect = root.getBoundingClientRect()
+  const cards = [...root.querySelectorAll<HTMLElement>('.asset-card')]
+  const cardRects = cards.map(card => card.getBoundingClientRect())
+  root.style.position = 'relative'
+  root.style.height = `${rootRect.height}px`
+  cards.forEach((card, index) => {
+    const styles = getComputedStyle(card)
+    const rect = cardRects[index]
+    if (!rect) return
+    card.style.position = 'absolute'
+    card.style.left = `${rect.left - rootRect.left}px`
+    card.style.top = `${rect.top - rootRect.top}px`
+    card.style.width = `${rect.width}px`
+    card.style.height = `${rect.height}px`
+    card.style.boxSizing = 'border-box'
+    card.style.transform = 'none'
+    card.style.opacity = styles.opacity
+    card.style.transition = 'none'
+  })
+}
+const releaseFrozenCards = () => {
+  const root = masonry.value
+  if (!root) return
+  root.style.removeProperty('position')
+  root.style.removeProperty('height')
+  for (const card of root.querySelectorAll<HTMLElement>('.asset-card')) {
+    card.style.removeProperty('position')
+    card.style.removeProperty('left')
+    card.style.removeProperty('top')
+    card.style.removeProperty('width')
+    card.style.removeProperty('height')
+    card.style.removeProperty('box-sizing')
+    card.style.removeProperty('transform')
+    card.style.removeProperty('opacity')
+    card.style.removeProperty('transition')
+  }
+}
+watch(() => props.hidden, async hidden => {
+  if (hidden && layoutReady.value) {
+    layoutLocked = true
+    cancelAnimationFrame(measureFrame)
+    cancelAnimationFrame(revealFrame)
+    resizeObserver?.disconnect()
+    freezeCardsForLeave()
+    return
+  }
+  if (!hidden) {
+    releaseFrozenCards()
+    if (!draggedId.value) renderedAssets.value = [...props.assets]
+    layoutLocked = false
+    await nextTick()
+    observeCards()
+  }
+}, { flush: 'sync' })
 const markImageLoaded = (id: string) => {
   if (loadedImages.has(id) || pendingLoadedImages.has(id)) return
   pendingLoadedImages.add(id)
@@ -305,12 +365,10 @@ const projectAndTags = (asset: AssetMasonryItem) => {
 const viewStyle = computed(() => {
   const view = effectiveViewSettings.value
   if (!view) return undefined
-  const radius = { none:'0px', small:'calc(var(--radius)/2)', default:'var(--radius)', large:'var(--radius-mobile)' }[view.radius]
-  const gap = { none:'0px', tight:'calc(var(--space)/4)', default:'var(--board-default-gap,var(--space))', wide:'calc(var(--space)*2)' }[view.gap]
-  const density = view.columns === 'even-fewer' ? -3 : view.columns === 'fewer' ? -1 : view.columns === 'more' ? 1 : view.columns === 'even-more' ? 2 : typeof view.columns === 'number' ? Math.max(-3, Math.min(2, view.columns - 7)) : 0
-  return { '--board-column-offset': String(density), '--board-radius':radius, '--board-gap':gap }
+  return boardViewStyle(view)
 })
 watch(() => [props.assets.map(asset => asset.id).join(','), props.rowFlow], async () => {
+  if (props.hidden || layoutLocked) return
   if (!draggedId.value) renderedAssets.value = [...props.assets]
   await nextTick()
   observeCards()
@@ -330,8 +388,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section ref="masonry" class="asset-masonry" :class="{ 'cards-hidden': hidden || !layoutReady, 'column-layout': layout === 'column', 'stable-columns': stableColumns, 'custom-view': effectiveViewSettings, 'hide-text': effectiveViewSettings && !effectiveViewSettings.showText, 'is-arranging': reorderable }" :style="viewStyle" :aria-label="label">
-    <TransitionGroup name="card-list" :css="false">
+  <section ref="masonry" class="asset-masonry" :class="{ 'cards-hidden': !layoutReady, 'cards-leaving': hidden, 'column-layout': layout === 'column', 'stable-columns': stableColumns, 'custom-view': effectiveViewSettings, 'hide-text': effectiveViewSettings && !effectiveViewSettings.showText, 'is-arranging': reorderable }" :style="viewStyle" :aria-label="label">
     <article
       v-for="(asset, index) in renderedAssets" :key="asset.id" class="asset-card"
       :class="{ 'is-priority': index < 7, 'is-loaded': loadedImages.has(asset.id), 'is-selected': isSelected(asset.id), 'is-dragging': draggedId === asset.id, 'is-pointer-dragging': pointerDragging && draggedId === asset.id, 'is-drop-target': dropIndex === index && draggedId !== asset.id, 'has-quick-actions': quickActionsAssetId === asset.id }"
@@ -356,7 +413,7 @@ onBeforeUnmount(() => {
           v-if="reorderable" class="touch-reorder-handle" type="button" :aria-label="`Drag to reorder ${asset.title}`"
           @pointerdown.stop="startTouchDrag($event, index)" @pointermove.stop="movePointerDrag" @pointerup.stop="finishPointerDrag"
           @pointercancel.stop="cancelPointerDrag" @lostpointercapture="handlePointerCaptureLost" @click.prevent>
-          <span aria-hidden="true">⠿</span>
+          <span aria-hidden="true" />
         </button>
       </div>
       <div class="card-body">
@@ -370,12 +427,11 @@ onBeforeUnmount(() => {
         <slot name="actions" :asset="asset"><span v-if="interactive" class="card-meta card-status">{{ asset.status }}</span></slot>
       </div>
     </article>
-    </TransitionGroup>
   </section>
 </template>
 
 <style scoped>
-.asset-masonry{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));column-gap:var(--space);align-items:start}.asset-masonry.custom-view:not(.column-layout){grid-template-columns:repeat(min(var(--board-columns,7),7),minmax(0,1fr));column-gap:var(--board-gap,var(--space))}.asset-masonry.is-masonry{grid-auto-flow:dense;grid-auto-rows:1px;row-gap:0}
+.asset-masonry{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));column-gap:var(--space);align-items:start;opacity:1;transform:translateY(0);transition-property:opacity,transform;transition-duration:.18s,.22s;transition-timing-function:ease-out,cubic-bezier(.2,0,0,1)}.asset-masonry.custom-view:not(.column-layout){grid-template-columns:repeat(min(var(--board-columns,7),7),minmax(0,1fr));column-gap:var(--board-gap,var(--space))}.asset-masonry.is-masonry{grid-auto-flow:dense;grid-auto-rows:1px;row-gap:0}
 .asset-masonry.stable-columns .asset-card:nth-child(7n + 1){grid-column:1}.asset-masonry.stable-columns .asset-card:nth-child(7n + 2){grid-column:2}.asset-masonry.stable-columns .asset-card:nth-child(7n + 3){grid-column:3}.asset-masonry.stable-columns .asset-card:nth-child(7n + 4){grid-column:4}.asset-masonry.stable-columns .asset-card:nth-child(7n + 5){grid-column:5}.asset-masonry.stable-columns .asset-card:nth-child(7n + 6){grid-column:6}.asset-masonry.stable-columns .asset-card:nth-child(7n){grid-column:7}
 .asset-masonry.column-layout{--column-viewport-margin:clamp(24px,6vh,64px);width:min(760px,100%);margin-inline:auto;grid-template-columns:minmax(0,1fr);row-gap:0}.asset-masonry.column-layout .asset-card{padding-bottom:var(--section-gap)}.asset-masonry.column-layout .preview{height:auto;aspect-ratio:auto!important;overflow:visible;clip-path:none;background:transparent}.asset-masonry.column-layout .preview :is(img,video){width:auto;height:auto;max-width:100%;max-height:calc(100vh - var(--column-viewport-margin)*2);max-height:calc(100dvh - var(--column-viewport-margin)*2);margin-inline:auto;border-radius:var(--radius);object-fit:contain}.asset-masonry.column-layout .card-body{flex-direction:column;align-items:center;justify-content:center;text-align:center}
 .asset-masonry.column-layout .preview :deep(.asset-media-picture img){width:auto;height:auto;max-width:100%;max-height:calc(100vh - var(--column-viewport-margin)*2);max-height:calc(100dvh - var(--column-viewport-margin)*2);margin-inline:auto;border-radius:var(--radius);object-fit:contain}
@@ -395,15 +451,16 @@ onBeforeUnmount(() => {
 .figma-button,.card-approval-toggle{width:32px;min-width:32px;padding:0}
 .preview-actions{position:absolute;z-index:3;right:10px;bottom:10px;left:10px;display:flex;justify-content:center;opacity:0;transform:translateY(8px);pointer-events:none;transition:opacity 150ms,transform 150ms cubic-bezier(.2,0,0,1)}
 .selection-control.selection-control{position:absolute;z-index:3;top:10px;right:10px;width:24px;height:24px;min-height:24px;padding:0;border:1px solid rgb(0 0 0/.35);border-radius:50%;background:rgb(255 255 255/.9);box-shadow:0 1px 4px rgb(0 0 0/.12);opacity:0;transition:opacity 120ms,scale 150ms,background-color 150ms,border-color 150ms}.selection-control.active{border-color:var(--color-fg);background:var(--color-fg);opacity:1}.selection-control:hover{border-color:var(--color-fg)}.selection-control:active{scale:.9}
-.touch-reorder-handle{position:absolute;z-index:4;top:10px;left:10px;width:36px;height:36px;min-height:36px;display:none;place-items:center;padding:0;border-radius:50%;color:var(--material-tinted-fg);background:var(--material-tinted-bg);font-size:23px;line-height:1;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation))}.touch-reorder-handle span{translate:0 -1px;pointer-events:none}
+.touch-reorder-handle{position:absolute;z-index:4;top:10px;left:10px;width:36px;height:36px;min-height:36px;display:none;place-items:center;padding:0;border-radius:50%;color:var(--material-tinted-fg);background:var(--material-tinted-bg);font-size:23px;line-height:1;touch-action:none;-webkit-appearance:none;appearance:none;-webkit-user-select:none;user-select:none;-webkit-backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation))}.touch-reorder-handle span{display:block;width:12px;height:18px;background:radial-gradient(circle,currentColor 2px,transparent 2.5px) center/6px 6px;pointer-events:none}
 .figma-button:is(:hover,:focus-visible),.card-approval-toggle:is(:hover,:focus-visible){opacity:1;background:var(--material-tinted-hover-bg);-webkit-backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation))}.figma-button:active,.card-approval-toggle:active{scale:.96}.figma-button:focus-visible,.card-approval-toggle:focus-visible{outline:2px solid var(--color-accent);outline-offset:2px}
 @media(hover:hover) and (pointer:fine){.asset-card:hover .selection-control,.asset-card:focus-within .selection-control{opacity:1}.asset-card:hover .card-quick-actions,.asset-card:focus-within .card-quick-actions{visibility:visible;transform:translate(-50%,0) scale(1);pointer-events:auto}.asset-card:hover .preview-actions,.asset-card:focus-within .preview-actions{opacity:1;transform:translateY(0);pointer-events:auto}}
 .asset-masonry.cards-hidden .asset-card{visibility:hidden}
+.asset-masonry.cards-leaving:not(.cards-hidden){opacity:0;transform:translateY(16px);pointer-events:none}.asset-masonry.cards-leaving:not(.cards-hidden) .asset-card{transition-delay:0ms}
 @media(max-width:2200px){.asset-masonry,.asset-masonry.custom-view:not(.column-layout){grid-template-columns:repeat(min(var(--board-columns,6),6),minmax(0,1fr))}.asset-masonry.stable-columns .asset-card:nth-child(n){grid-column:auto}.asset-masonry.stable-columns .asset-card:nth-child(6n + 1){grid-column:1}.asset-masonry.stable-columns .asset-card:nth-child(6n + 2){grid-column:2}.asset-masonry.stable-columns .asset-card:nth-child(6n + 3){grid-column:3}.asset-masonry.stable-columns .asset-card:nth-child(6n + 4){grid-column:4}.asset-masonry.stable-columns .asset-card:nth-child(6n + 5){grid-column:5}.asset-masonry.stable-columns .asset-card:nth-child(6n){grid-column:6}}
 @media(max-width:1680px){.asset-masonry,.asset-masonry.custom-view:not(.column-layout){grid-template-columns:repeat(min(var(--board-columns,5),5),minmax(0,1fr))}.asset-masonry.stable-columns .asset-card:nth-child(n){grid-column:auto}.asset-masonry.stable-columns .asset-card:nth-child(5n + 1){grid-column:1}.asset-masonry.stable-columns .asset-card:nth-child(5n + 2){grid-column:2}.asset-masonry.stable-columns .asset-card:nth-child(5n + 3){grid-column:3}.asset-masonry.stable-columns .asset-card:nth-child(5n + 4){grid-column:4}.asset-masonry.stable-columns .asset-card:nth-child(5n){grid-column:5}}
 @media(max-width:1280px){.asset-masonry,.asset-masonry.custom-view:not(.column-layout){grid-template-columns:repeat(min(var(--board-columns,4),4),minmax(0,1fr))}.asset-masonry.stable-columns .asset-card:nth-child(n){grid-column:auto}.asset-masonry.stable-columns .asset-card:nth-child(4n + 1){grid-column:1}.asset-masonry.stable-columns .asset-card:nth-child(4n + 2){grid-column:2}.asset-masonry.stable-columns .asset-card:nth-child(4n + 3){grid-column:3}.asset-masonry.stable-columns .asset-card:nth-child(4n){grid-column:4}}
 @media(max-width:900px){.asset-masonry,.asset-masonry.custom-view:not(.column-layout){grid-template-columns:repeat(min(var(--board-columns,3),3),minmax(0,1fr))}.asset-masonry.stable-columns .asset-card:nth-child(n){grid-column:auto}.asset-masonry.stable-columns .asset-card:nth-child(3n + 1){grid-column:1}.asset-masonry.stable-columns .asset-card:nth-child(3n + 2){grid-column:2}.asset-masonry.stable-columns .asset-card:nth-child(3n){grid-column:3}}
-@media(max-width:520px){.asset-masonry{--board-default-gap:var(--masonry-mobile-column-gap);width:calc(100% + var(--masonry-mobile-inline-bleed)*2);margin-inline:calc(var(--masonry-mobile-inline-bleed)*-1);grid-template-columns:repeat(2,minmax(0,1fr));column-gap:var(--masonry-mobile-column-gap)}.asset-masonry,.asset-masonry.is-masonry{row-gap:var(--masonry-mobile-row-gap)}.asset-masonry.custom-view,.asset-masonry.custom-view.is-masonry{row-gap:0}.asset-card{padding-bottom:0}.preview{border-radius:var(--radius-mobile);clip-path:inset(0 round var(--radius-mobile))}.asset-masonry.stable-columns .asset-card:nth-child(n){grid-column:auto}.asset-masonry.stable-columns .asset-card:nth-child(odd){grid-column:1}.asset-masonry.stable-columns .asset-card:nth-child(even){grid-column:2}.card-body{padding-top:var(--masonry-mobile-row-gap);padding-left:calc(var(--space)/4);font-size:var(--font-size-body-compact)}}
+@media(max-width:520px){.asset-masonry{--board-default-gap:var(--masonry-mobile-column-gap);width:calc(100% + var(--masonry-mobile-inline-bleed)*2);margin-inline:calc(var(--masonry-mobile-inline-bleed)*-1);grid-template-columns:repeat(2,minmax(0,1fr));column-gap:var(--masonry-mobile-column-gap)}.asset-masonry,.asset-masonry.is-masonry{row-gap:var(--masonry-mobile-row-gap)}.asset-masonry.custom-view,.asset-masonry.custom-view.is-masonry{row-gap:0}.asset-card{padding-bottom:0}.preview{border-radius:var(--board-radius,var(--radius-mobile));clip-path:inset(0 round var(--board-radius,var(--radius-mobile)))}.asset-masonry.stable-columns .asset-card:nth-child(n){grid-column:auto}.asset-masonry.stable-columns .asset-card:nth-child(odd){grid-column:1}.asset-masonry.stable-columns .asset-card:nth-child(even){grid-column:2}.card-body{padding-top:var(--masonry-mobile-row-gap);padding-left:calc(var(--space)/4);font-size:var(--font-size-body-compact)}}
 .asset-masonry.custom-view .preview{border-radius:var(--board-radius,var(--radius));clip-path:inset(0 round var(--board-radius,var(--radius)))}
 .asset-masonry.custom-view.hide-text.is-masonry{overflow:hidden;border-radius:var(--board-radius,var(--radius));clip-path:inset(0 round var(--board-radius,var(--radius)))}
 @media(max-width:520px){.asset-masonry.custom-view:not(.column-layout){grid-template-columns:repeat(min(var(--board-columns,2),2),minmax(0,1fr));column-gap:var(--board-gap,var(--space))}}
@@ -414,5 +471,5 @@ onBeforeUnmount(() => {
 @media(max-width:900px){.asset-masonry.custom-view:not(.column-layout){grid-template-columns:repeat(clamp(1,calc(3 + var(--board-column-offset,0)),5),minmax(0,1fr))}}
 @media(max-width:520px){.asset-masonry.custom-view:not(.column-layout){grid-template-columns:repeat(clamp(1,calc(2 + var(--board-column-offset,0)),4),minmax(0,1fr))}}
 @media(hover:none),(pointer:coarse){.selection-control.selection-control{opacity:1}.preview.has-context-actions{-webkit-touch-callout:none}.asset-card.has-quick-actions .card-quick-actions,.asset-card:focus-within .card-quick-actions{visibility:visible;transform:translate(-50%,0) scale(1);pointer-events:auto}.figma-button,.card-approval-toggle{width:44px;min-width:44px;min-height:44px}.preview-actions{opacity:1;transform:none;pointer-events:auto}.touch-reorder-handle{display:grid}.preview-link,.preview-link:hover,.preview-link:active,.preview-link:focus{opacity:1}.preview :is(img,video){filter:none}}
-@media(prefers-reduced-motion:reduce){.asset-masonry.is-arranging .asset-card .preview{animation:none}.asset-card{opacity:1;transform:none;transition:none}.preview :is(img,video),.preview :deep(.asset-media-picture img){opacity:1;transform:none;transition:none}.figma-button{transition-duration:.01ms;transform:translate(-50%,0)}.preview-actions{transition:none}.figma-button:active{scale:1}}
+@media(prefers-reduced-motion:reduce){.asset-masonry{transition:none}.asset-masonry.is-arranging .asset-card .preview{animation:none}.asset-card{opacity:1;transform:none;transition:none}.asset-masonry:is(.cards-hidden,.cards-leaving) .asset-card{visibility:hidden}.preview :is(img,video),.preview :deep(.asset-media-picture img){opacity:1;transform:none;transition:none}.figma-button{transition-duration:.01ms;transform:translate(-50%,0)}.preview-actions{transition:none}.figma-button:active{scale:1}}
 </style>

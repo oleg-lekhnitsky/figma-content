@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import type { BoardLayout } from '@content-library/shared'
-import { ArrowUpRight, ChevronDown, Copy } from 'reicon-vue'
+import { ArrowUpRight, Copy } from 'reicon-vue'
 import { boardLayoutOptions } from '../utils/board-layouts'
 
 const props = defineProps<{
   title: string
   purpose: 'showcase' | 'review' | 'portfolio' | 'case'
+  portfolioKind?: 'main' | 'client' | null
+  portfolioClient?: string | null
   mode: 'dynamic' | 'static'
   layout: BoardLayout
   publicationEnabled: boolean
@@ -21,6 +23,9 @@ const props = defineProps<{
 
 const memberEmail = ref('')
 const memberRole = ref<'editor' | 'contributor' | 'viewer'>('contributor')
+const memberRoleOpen = ref(false)
+const memberRoles = ['editor', 'contributor', 'viewer'] as const
+const memberRoleLabel = computed(() => memberRole.value[0]!.toUpperCase() + memberRole.value.slice(1))
 const addingMember = ref(false)
 const emit = defineEmits<{
   setPublication: [enabled: boolean]
@@ -59,11 +64,13 @@ onBeforeUnmount(() => {
       <p class="board-type-summary"><strong>{{ mode === 'dynamic' ? 'Dynamic board.' : 'Static board.' }}</strong> {{ mode === 'dynamic' ? 'Matching assets update automatically from filters.' : 'Assets are selected and arranged manually.' }}</p>
     </div>
 
-    <fieldset class="filter-option-group">
-      <legend>Public access</legend>
-      <div class="filter-option-list">
-        <button type="button" :aria-pressed="!publicationEnabled" :disabled="!canEdit || busy" @click="$emit('setPublication', false)">Private</button>
-        <button type="button" :aria-pressed="publicationEnabled" :disabled="!canEdit || busy" @click="$emit('setPublication', true)">Published</button>
+    <section class="filter-option-group" role="group" aria-labelledby="board-public-access">
+      <h3 id="board-public-access">Public access</h3>
+      <div class="board-public-access-row">
+        <div class="filter-option-list filter-option-list--segmented">
+          <button type="button" :aria-pressed="!publicationEnabled" :disabled="!canEdit || busy" @click="$emit('setPublication', false)">Private</button>
+          <button type="button" :aria-pressed="publicationEnabled" :disabled="!canEdit || busy" @click="$emit('setPublication', true)">Published</button>
+        </div>
         <Transition name="public-access-actions">
           <span v-if="publicationEnabled && publicUrl" class="public-access-actions">
             <a class="button public-access-icon" :href="publicUrl" target="_blank" rel="noopener" aria-label="Open public page in a new tab" title="Open public page"><ArrowUpRight aria-hidden="true" /></a>
@@ -71,36 +78,46 @@ onBeforeUnmount(() => {
           </span>
         </Transition>
       </div>
-    </fieldset>
+    </section>
 
-    <div v-if="purpose === 'portfolio' || purpose === 'review'" class="board-settings-actions">
-      <NuxtLink v-if="purpose === 'portfolio' || purpose === 'review'" class="button" :to="fullSettingsUrl">{{ purpose === 'portfolio' ? 'Portfolio details and cases' : 'Open review workspace' }}</NuxtLink>
+    <section v-if="purpose === 'portfolio'" class="board-setting-group portfolio-summary">
+      <h3>Portfolio</h3>
+      <p>{{ portfolioKind === 'main' ? 'Main portfolio' : portfolioClient ? `Client portfolio · ${portfolioClient}` : 'Client portfolio' }}</p>
+      <NuxtLink class="panel-secondary-action" :to="fullSettingsUrl">Manage portfolio</NuxtLink>
+    </section>
+
+    <div v-else-if="purpose === 'review'" class="board-settings-actions">
+      <NuxtLink class="button" :to="fullSettingsUrl">Open review workspace</NuxtLink>
     </div>
 
-    <fieldset class="filter-option-group">
-      <legend>Public layout</legend>
-      <div class="filter-option-list">
+    <section class="filter-option-group" role="group" aria-labelledby="board-public-layout">
+      <h3 id="board-public-layout">Public layout</h3>
+      <div class="filter-option-list filter-option-list--segmented">
         <button v-for="option in boardLayoutOptions" :key="option.value" type="button" :aria-pressed="layout === option.value" :disabled="!canEdit || busy" @click="$emit('setLayout', option.value)">{{ option.label }}</button>
       </div>
-    </fieldset>
+    </section>
 
     <section class="board-setting-group board-members">
-      <div class="board-members-heading">
-        <h3>Board members</h3>
-        <button v-if="canManageMembers" type="button" :aria-expanded="addingMember" @click="addingMember = !addingMember">{{ addingMember ? 'Cancel' : 'Add member' }}</button>
-      </div>
+      <h3>Board members</h3>
       <ul v-if="members.length">
         <li v-for="member in members" :key="member.user_id"><span><strong>{{ member.allowed_users?.email ?? member.allowed_users?.figma_handle ?? 'Workspace member' }}</strong><small>{{ member.role }}</small></span><button v-if="canManageMembers && member.role !== 'owner'" type="button" :disabled="busy" @click="$emit('removeMember', member.user_id)">Remove</button></li>
       </ul>
       <p v-else>No board members yet.</p>
+      <button v-if="canManageMembers" class="panel-secondary-action" type="button" :aria-expanded="addingMember" @click="addingMember = !addingMember">{{ addingMember ? 'Cancel' : 'Add member' }}</button>
       <Transition name="member-form">
         <form v-if="canManageMembers && addingMember" class="member-form" @submit.prevent="submitMember">
-          <input v-model="memberEmail" required type="email" autocomplete="email" placeholder="Member email">
-          <label class="member-role-select">
-            <select v-model="memberRole" aria-label="Board role"><option value="editor">Editor</option><option value="contributor">Contributor</option><option value="viewer">Viewer</option></select>
-            <ChevronDown aria-hidden="true" />
-          </label>
-          <button type="submit" :disabled="busy">Add member</button>
+          <input v-model="memberEmail" class="panel-field" required type="email" autocomplete="email" placeholder="Member email">
+          <AppDropdownMenu v-model:open="memberRoleOpen" width="anchor" content-class="panel-dropdown-menu">
+            <template #trigger="{ triggerProps }">
+              <button v-bind="triggerProps" class="panel-field panel-dropdown-trigger" type="button" aria-label="Board role">
+                <span>{{ memberRoleLabel }}</span><span class="filter-dropdown-chevron" aria-hidden="true" />
+              </button>
+            </template>
+            <template #default>
+              <button v-for="role in memberRoles" :key="role" role="menuitemradio" :aria-checked="memberRole === role" tabindex="-1" type="button" @click="memberRole = role">{{ role[0]!.toUpperCase() + role.slice(1) }}</button>
+            </template>
+          </AppDropdownMenu>
+          <button class="panel-primary-action" type="submit" :disabled="busy">Add member</button>
         </form>
       </Transition>
     </section>
@@ -108,7 +125,7 @@ onBeforeUnmount(() => {
     <section v-if="canManageMembers" class="board-setting-group danger-zone">
       <h3>Delete board</h3>
       <p>This permanently removes the board, member access, and its public link.</p>
-      <button type="button" :disabled="busy" @click="$emit('deleteBoard')">Delete board</button>
+      <button class="panel-secondary-action" type="button" :disabled="busy" @click="$emit('deleteBoard')">Delete board</button>
     </section>
       <Transition name="board-settings-toast">
         <p v-if="feedback" class="board-settings-feedback" :class="{ error }" role="status" aria-live="polite">{{ feedback }}</p>
@@ -125,12 +142,13 @@ onBeforeUnmount(() => {
   border: 0;
 }
 
-.board-settings-controls legend,
 .board-setting-group h3 {
-  margin: 0 0 .625rem;
-  color: inherit;
-  font-size: var(--filter-option-font-size);
+  margin: 0;
+  color: var(--color-surface);
+  font-size: var(--filter-caption-size);
   font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1;
 }
 
 .board-settings-intro {
@@ -143,42 +161,21 @@ onBeforeUnmount(() => {
 .board-type-summary,
 .board-setting-group p {
   margin: 0;
-  color: rgb(255 255 255 / .58);
+  color: var(--filter-overlay-muted-color);
   font-size: var(--filter-option-font-size);
   line-height: 1.35;
 }
 
-.board-type-summary strong { color: #fff; }
-.board-setting-group { display: grid; gap: .375rem; }
+.board-type-summary strong { color: var(--filter-overlay-panel-color); }
+.board-setting-group { display: grid; gap: var(--space); }
 
-.board-members-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: .75rem;
-}
-
-.board-members-heading h3 { margin: 0; }
-
-.board-members-heading button {
-  padding: 0;
-  border: 0;
-  color: rgb(255 255 255 / .72);
-  background: transparent;
-  font: inherit;
-  font-size: var(--filter-option-font-size);
-  cursor: pointer;
-}
-
-.member-form :is(input, select, button),
 .board-settings-actions :is(a, button),
-.board-members li button,
-.danger-zone > button {
+.board-members li button {
   min-height: var(--filter-option-height);
   padding: 0 var(--filter-option-padding);
-  border: var(--filter-hairline) solid rgb(255 255 255 / .42);
+  border: var(--filter-hairline) solid var(--filter-overlay-border-color);
   border-radius: var(--filter-pill-radius);
-  color: #fff;
+  color: var(--filter-overlay-panel-color);
   background: transparent;
   font: inherit;
   font-size: var(--filter-option-font-size);
@@ -187,7 +184,6 @@ onBeforeUnmount(() => {
   opacity: 1;
 }
 
-.member-form button,
 .board-settings-actions :is(a, button) {
   border-color: var(--filter-overlay-primary-background);
   color: var(--filter-overlay-primary-color);
@@ -198,6 +194,24 @@ onBeforeUnmount(() => {
   display: flex;
   flex-wrap: wrap;
   gap: var(--filter-option-gap);
+}
+
+.board-public-access-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--filter-option-gap);
+}
+
+.board-public-access-row > .filter-option-list--segmented {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.board-settings-actions :is(a, button) {
+  width: 100%;
+  min-height: var(--filter-action-height);
+  font-size: var(--filter-action-font-size);
 }
 
 .public-access-actions {
@@ -255,86 +269,45 @@ onBeforeUnmount(() => {
 }
 
 .board-settings-actions :is(a, button),
-.member-form button,
-.board-members li button,
-.danger-zone > button { display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.board-members li button { display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
 
 .member-form {
   width: 100%;
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) max-content;
-  column-gap: var(--filter-option-gap);
-  row-gap: .75rem;
-  padding-top: .625rem;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space);
+  padding-top: 0;
   overflow: hidden;
 }
 
-.member-form :is(input, select) {
+.member-form input {
   min-width: 0;
   outline: none;
 }
 
 .member-form input {
-  grid-column: 1 / -1;
   width: 100%;
 }
 
-.member-role-select {
-  position: relative;
-  min-width: 0;
-  min-height: var(--filter-option-height);
-  display: flex;
-  align-items: center;
-  border: var(--filter-hairline) solid rgb(255 255 255 / .42);
-  border-radius: var(--filter-pill-radius);
-}
-
-.member-role-select:focus-within { border-color: #fff; }
-
-.member-form .member-role-select select {
-  width: 100%;
-  max-width: 100%;
-  min-height: 100%;
-  appearance: none;
-  border: 0;
-  border-radius: inherit;
-  padding-inline-start: var(--filter-option-padding);
-  padding-inline-end: calc(var(--filter-option-padding) * 2 + .875rem);
-  background: transparent;
-}
-
-.member-role-select svg {
-  position: absolute;
-  right: var(--filter-option-padding);
-  width: .875rem;
-  height: .875rem;
-  fill: none;
-  stroke: currentColor;
-  pointer-events: none;
-}
-
-.member-form button { white-space: nowrap; }
-.member-form input::placeholder { color: rgb(255 255 255 / .7); }
-.member-form :is(input, select):focus { border-color: #fff; }
+.member-form input::placeholder { color: var(--filter-overlay-muted-color); }
 
 .member-form-enter-active,
 .member-form-leave-active {
-  max-height: 8rem;
-  transition: max-height 260ms cubic-bezier(.2, .8, .2, 1), padding-top 260ms cubic-bezier(.2, .8, .2, 1), opacity 180ms ease, translate 260ms cubic-bezier(.2, .8, .2, 1);
+  max-height: 14rem;
+  transition: max-height 260ms cubic-bezier(.2, .8, .2, 1), opacity 180ms ease, translate 260ms cubic-bezier(.2, .8, .2, 1);
 }
 
 .member-form-enter-from,
 .member-form-leave-to {
   max-height: 0;
-  padding-top: 0;
   opacity: 0;
   translate: 0 -.375rem;
 }
 
 .board-members ul {
   display: grid;
-  margin: .25rem 0 0;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
@@ -349,21 +322,8 @@ onBeforeUnmount(() => {
 }
 
 .board-members li > span { min-width: 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: .25rem .5rem; }
-.board-members li strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.board-members li small { color: rgb(255 255 255 / .58); font-size: var(--filter-caption-size); text-transform: capitalize; }
-
-.danger-zone {
-  gap: .75rem;
-  padding-top: 0;
-}
-
-.danger-zone > button {
-  justify-self: start;
-  margin-top: .25rem;
-  border-color: rgb(255 255 255 / .72);
-  color: var(--filter-overlay-primary-color);
-  background: rgb(255 255 255 / .72);
-}
+.board-members li strong { overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.board-members li small { color: var(--filter-overlay-muted-color); font-size: var(--filter-caption-size); text-transform: capitalize; }
 
 .board-settings-feedback {
   position: fixed;
@@ -398,11 +358,6 @@ onBeforeUnmount(() => {
 .board-settings-toast-leave-to {
   opacity: 0;
   transform: translate(-50%, .5rem);
-}
-
-@media (max-width: 520px) {
-  .member-form { grid-template-columns: 1fr; }
-  .member-form :is(input, select, button) { width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -7,7 +7,6 @@ const props = withDefaults(defineProps<{
   bare?: boolean
   raised?: boolean
   overlay?: boolean
-  instant?: boolean
   closeLabel?: string
   closeDisabled?: boolean
 }>(), {
@@ -16,7 +15,6 @@ const props = withDefaults(defineProps<{
   bare: false,
   raised: false,
   overlay: false,
-  instant: false,
   closeLabel: '',
   closeDisabled: false
 })
@@ -25,13 +23,13 @@ const emit = defineEmits<{ close: []; afterLeave: [] }>()
 </script>
 
 <template>
-  <AppDrawer v-if="overlay" :open="visible" :label="label" :instant="instant" :dismissible="!closeDisabled" @close="emit('close')" @after-leave="emit('afterLeave')">
+  <AppDrawer v-if="overlay" :open="visible" :label="label" :dismissible="!closeDisabled" @close="emit('close')" @after-leave="emit('afterLeave')">
     <slot />
   </AppDrawer>
   <Teleport to="body">
-    <Transition name="selection-panel" :css="!instant" @after-leave="$emit('afterLeave')">
+    <Transition name="selection-panel" @after-leave="$emit('afterLeave')">
       <div
-        v-if="visible && !overlay" class="selection-panel" :class="{ 'selection-panel--wide': wide, 'selection-panel--bare': bare, 'selection-panel--raised': raised, 'selection-panel--instant': instant }" role="region"
+        v-if="visible && !overlay" class="selection-panel" :class="{ 'selection-panel--wide': wide, 'selection-panel--bare': bare, 'selection-panel--raised': raised }" role="region"
         :aria-label="label">
         <slot />
         <button
@@ -115,12 +113,15 @@ const emit = defineEmits<{ close: []; afterLeave: [] }>()
 
 .selection-panel-enter-active,
 .selection-panel-leave-active {
-  transition: opacity 150ms ease
+  transition-property: translate;
+  transition-timing-function: cubic-bezier(.2, 0, 0, 1)
 }
 
-.selection-panel-enter-from,
-.selection-panel-leave-to {
-  opacity: 0
+.selection-panel-enter-active { transition-duration: 100ms; }
+.selection-panel-leave-active { transition: none; }
+
+.selection-panel-enter-from {
+  translate: 0 4px
 }
 
 @media (max-width: 520px) {

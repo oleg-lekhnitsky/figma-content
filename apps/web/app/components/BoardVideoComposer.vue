@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { AssetMasonryItem } from '~/types/asset-masonry'
-import { ChevronLeft, Download3, Eye, EyeOff, Menu4 } from 'reicon-vue'
+import { ArrowDown, ArrowUp, ChevronLeft, Download3, Eye, EyeOff, Menu4 } from 'reicon-vue'
 import { videoTemplates } from '~/utils/video-templates'
 import VideoCanvasInspector from '~/components/video-composer/VideoCanvasInspector.vue'
 import VideoPreviewStage from '~/components/video-composer/VideoPreviewStage.vue'
@@ -243,10 +243,10 @@ const showAllAssets = () => {
               <span v-else>{{ asset.title.trim().charAt(0) || '·' }}</span>
             </span><span>{{ asset.title }}</span>
             <span class="video-asset-mobile-order">
-              <button type="button" :disabled="assetOrder[0] === asset.id" :aria-label="`Move ${asset.title} earlier`" @click="moveAssetBy(asset.id, -1)">↑</button>
-              <button type="button" :disabled="assetOrder[assetOrder.length - 1] === asset.id" :aria-label="`Move ${asset.title} later`" @click="moveAssetBy(asset.id, 1)">↓</button>
+              <button type="button" :disabled="assetOrder[0] === asset.id" :aria-label="`Move ${asset.title} earlier`" @click="moveAssetBy(asset.id, -1)"><ArrowUp :size="20" weight="Outline" :stroke-width="1.75" aria-hidden="true" /></button>
+              <button type="button" :disabled="assetOrder[assetOrder.length - 1] === asset.id" :aria-label="`Move ${asset.title} later`" @click="moveAssetBy(asset.id, 1)"><ArrowDown :size="20" weight="Outline" :stroke-width="1.75" aria-hidden="true" /></button>
             </span>
-            <button class="video-asset-visibility" type="button" :aria-label="hiddenAssetIds.has(asset.id) ? `Show ${asset.title}` : `Hide ${asset.title}`" :aria-pressed="!hiddenAssetIds.has(asset.id)" @click="toggleAsset(asset)"><EyeOff v-if="hiddenAssetIds.has(asset.id)" :size="16" aria-hidden="true" /><Eye v-else :size="16" aria-hidden="true" /></button>
+            <button class="video-asset-visibility" type="button" :aria-label="hiddenAssetIds.has(asset.id) ? `Show ${asset.title}` : `Hide ${asset.title}`" :aria-pressed="!hiddenAssetIds.has(asset.id)" @click="toggleAsset(asset)"><EyeOff v-if="hiddenAssetIds.has(asset.id)" :size="20" weight="Outline" :stroke-width="1.75" aria-hidden="true" /><Eye v-else :size="20" weight="Outline" :stroke-width="1.75" aria-hidden="true" /></button>
           </li>
         </ol>
         <button v-if="hiddenAssetIds.size" class="video-assets-show-all" type="button" @click="showAllAssets">Show all</button>
@@ -1049,7 +1049,7 @@ const showAllAssets = () => {
   display: flex;
   align-items: center;
   min-height: var(--video-control-height);
-  padding: 0 8px 0 10px;
+  padding: 0 var(--filter-option-padding);
   color: var(--video-range-label-color);
   font-size: var(--video-type-body);
   line-height: 1;
@@ -1141,34 +1141,6 @@ const showAllAssets = () => {
   border: 1px dashed rgb(255 255 255/.72);
   border-radius: calc(var(--radius)/3);
   pointer-events: none
-}
-
-:deep(.video-reset) {
-  width: 100%;
-  min-height: var(--filter-action-height);
-  padding: 0 var(--filter-action-padding);
-  border: 0;
-  border-radius: calc(var(--radius)*1.5);
-  background: color-mix(in srgb, var(--filter-overlay-panel-color) 7%, transparent);
-  color: inherit;
-  font-size: var(--filter-action-font-size);
-  font-weight: 600;
-  transition-property: background-color, transform;
-  transition-duration: 120ms;
-  transition-timing-function: ease-out
-}
-
-:deep(.video-reset:hover) {
-  background: color-mix(in srgb, var(--filter-overlay-panel-color) 11%, transparent)
-}
-
-:deep(.video-reset:active) {
-  transform: scale(.96)
-}
-
-:deep(.video-reset:focus-visible) {
-  outline: 2px solid currentColor;
-  outline-offset: 2px
 }
 
 :deep(.video-timeline) {
@@ -1404,7 +1376,7 @@ const showAllAssets = () => {
 
 }
 
-@media(max-width:640px) {
+@media(max-width:1180px) {
   :global(.selection-panel--filter-overlay:has(.board-video-composer)) {
     display: block;
     overflow-x: hidden !important;
@@ -1541,32 +1513,41 @@ const showAllAssets = () => {
     grid-column: 1;
     grid-row: 4;
     order: 3;
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 4px;
-    padding: 4px;
-    border-radius: var(--radius-mobile);
-    background: var(--filter-overlay-panel-background);
+    display: flex;
+    justify-content: space-between;
+    gap: 2px;
+    padding: 4px var(--filter-option-padding);
+    border-radius: calc(var(--radius)*1.5);
+    color: var(--filter-overlay-panel-color);
+    background: var(--filter-overlay-panel-background-mobile);
     backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation));
     -webkit-backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation))
   }
 
   .video-mobile-toolbar button {
+    flex: 0 0 auto;
     min-width: 0;
     min-height: 44px;
-    padding: 0 6px;
+    padding: 0 var(--filter-option-padding);
     border: 0;
-    border-radius: calc(var(--radius-mobile) - 4px);
+    border-radius: calc(var(--radius)*1.5 - 4px);
     color: inherit;
     background: transparent;
-    font-size: var(--video-type-body);
+    font-size: var(--font-size-label);
     font-weight: var(--video-weight-strong);
-    touch-action: manipulation
+    touch-action: manipulation;
+    transition-property: color, background-color, transform;
+    transition-duration: 120ms;
+    transition-timing-function: ease-out
   }
 
   .video-mobile-toolbar button[aria-expanded=true] {
     color: var(--filter-overlay-primary-color);
     background: var(--filter-overlay-primary-background)
+  }
+
+  .video-mobile-toolbar button:active {
+    transform: scale(.96)
   }
 
   .video-mobile-toolbar button:focus-visible,
@@ -1841,7 +1822,7 @@ const showAllAssets = () => {
 
   :deep(.video-reset) {
     min-height: var(--range-control-height-mobile);
-    font-size: var(--font-size-control);
+    font-size: var(--font-size-body);
   }
 
   :deep(.video-toggle) {
@@ -1897,8 +1878,12 @@ const showAllAssets = () => {
   .video-assets-panel li {
     grid-template-columns: 38px minmax(0, 1fr) 88px 44px;
     min-height: 52px;
-    padding: 4px 8px;
+    padding: var(--video-inspector-control-gap) var(--filter-option-padding);
     border-radius: calc(var(--radius)*1.5)
+  }
+
+  .video-asset-thumbnail {
+    border-radius: calc(var(--radius)/2)
   }
 
   .video-asset-handle {
@@ -1937,7 +1922,7 @@ const showAllAssets = () => {
   }
 }
 
-@media (max-width:640px) and (prefers-reduced-motion: reduce) {
+@media (max-width:1180px) and (prefers-reduced-motion: reduce) {
   .board-video-composer.is-stage-motion-ready :deep(.video-canvas-wrap) {
     transition: none
   }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { BoardLayout, BoardViewSettings } from '@content-library/shared'
-import { Xmark } from 'reicon-vue'
+import { ArrowDown, ArrowUp, Xmark } from 'reicon-vue'
 
 definePageMeta({ middleware: 'auth' })
 
@@ -21,6 +21,9 @@ const { data, error } = await useFetch<{data:{collection:Collection&{filters:Fil
 if (error.value) throw createError({ statusCode: error.value.statusCode ?? 404, statusMessage: 'Board unavailable' })
 
 const collection = reactive({ ...data.value!.data.collection })
+if (collection.purpose === 'showcase' || collection.purpose === 'case') {
+  await navigateTo({ path:'/library', query:{ board:collection.id, panel:'settings' } }, { replace:true })
+}
 const defaultViewSettings:BoardViewSettings={showText:true,radius:'default',gap:'default',columns:'auto'}
 const viewSettings=ref<BoardViewSettings>({ ...defaultViewSettings, ...(collection.view_settings ?? {}) })
 provide('boardViewSettings', viewSettings)
@@ -45,6 +48,8 @@ const reviewFilter = ref<'all'|'ready'|'reviewed'>('all')
 const groupBy = ref<'contributor'|'project'>('contributor')
 const selectedAssetIds = reactive(new Set<string>())
 const feedback = reactive({ text:'', error:false })
+const portfolioTitleDraft = ref(collection.title)
+const portfolioTitleInput = ref<HTMLTextAreaElement | null>(null)
 const members = ref<Member[]>([])
 const memberEmail = ref('')
 const memberRole = ref<'editor'|'contributor'|'viewer'>('contributor')
@@ -55,12 +60,14 @@ const deleteTrigger = ref<HTMLButtonElement | null>(null)
 const deleteError = ref('')
 const filtersExpanded = ref(false)
 const compactFiltersVisible = ref(true)
-const filtersMorphing = ref(false)
 const boardAssets = ref<Asset[]>([])
 const projects = ref<Option[]>([])
 const tags = ref<Option[]>([])
 const portfolioCases = ref<PortfolioCase[]>([])
 const selectedCaseIds = ref<string[]>([])
+const creatingPortfolioProject = ref(false)
+const portfolioProjectTitle = ref('')
+const portfolioProjectInput = ref<HTMLInputElement | null>(null)
 const initialProjectIds = Array.isArray(collection.filters.projectIds) ? collection.filters.projectIds : []
 const initialTagIds = Array.isArray(collection.filters.tagIds) ? collection.filters.tagIds : []
 const filters = reactive({
@@ -90,22 +97,36 @@ const loadOptions = async () => {
   projects.value=projectResponse.data.projects
   tags.value=tagResponse.data.tags
 }
-await Promise.all([loadMembers(),loadContent(),loadOptions()])
-if (collection.purpose === 'portfolio') {
+const loadPortfolioProjects = async () => {
   const response=await apiFetch<{data:{cases:PortfolioCase[];selectedIds:string[]}}>(`/api/shares/${id}/cases`)
   portfolioCases.value=Array.isArray(response.data?.cases) ? response.data.cases : []
   selectedCaseIds.value=Array.isArray(response.data?.selectedIds) ? response.data.selectedIds : []
 }
+await Promise.all([loadMembers(),loadContent(),loadOptions()])
+if (collection.purpose === 'portfolio') await loadPortfolioProjects()
 
+const resizePortfolioTitle = async () => {
+  await nextTick()
+  const input=portfolioTitleInput.value
+  if(!input)return
+  input.style.height='auto'
+  input.style.height=`${input.scrollHeight}px`
+}
+const handlePortfolioTitleKeydown = (event:KeyboardEvent) => {
+  const input=event.currentTarget as HTMLTextAreaElement
+  if(event.key==='Enter'){event.preventDefault();input.blur()}
+  if(event.key==='Escape'){event.preventDefault();portfolioTitleDraft.value=collection.title;input.blur()}
+}
 const rename = async (event:Event) => {
   feedback.text=''; feedback.error=false
-  const input=event.target as HTMLInputElement
+  const input=event.target as HTMLInputElement | HTMLTextAreaElement
   const nextTitle=input.value.trim()
-  if(!nextTitle || nextTitle===collection.title)return
+  if(!nextTitle){portfolioTitleDraft.value=collection.title;void resizePortfolioTitle();return}
+  if(nextTitle===collection.title)return
   const previous=collection.title
   collection.title=nextTitle
   try { await apiFetch(`/api/shares/${id}`,{method:'PATCH',body:{action:'rename',title:nextTitle}}); feedback.text='Saved' }
-  catch { collection.title=previous; input.value=previous; feedback.text='Unable to rename. Try a different name.'; feedback.error=true }
+  catch { collection.title=previous; portfolioTitleDraft.value=previous; input.value=previous; void resizePortfolioTitle(); feedback.text='Unable to rename. Try a different name.'; feedback.error=true }
 }
 const copyLink = async () => {
   await navigator.clipboard.writeText(`${window.location.origin}${publicUrl.value}`)
@@ -141,8 +162,8 @@ const moveContactLink = (index:number,direction:-1|1) => {
 }
 const saveCaseOrder = async (caseIds:string[]) => {
   contentBusy.value=true; feedback.text=''; feedback.error=false
-  try { await apiFetch(`/api/shares/${id}/cases`,{method:'PUT',body:{caseIds}}); selectedCaseIds.value=caseIds; feedback.text='Portfolio cases saved.' }
-  catch { feedback.text='Unable to save portfolio cases.'; feedback.error=true }
+  try { await apiFetch(`/api/shares/${id}/cases`,{method:'PUT',body:{caseIds}}); selectedCaseIds.value=caseIds; feedback.text='Portfolio work saved.' }
+  catch { feedback.text='Unable to save portfolio work.'; feedback.error=true }
   finally { contentBusy.value=false }
 }
 const addPortfolioCase = (caseId:string) => saveCaseOrder([...selectedCaseIds.value,caseId])
@@ -156,6 +177,33 @@ const movePortfolioCase = (index:number,direction:-1|1) => {
 }
 const selectedPortfolioCases = computed(() => selectedCaseIds.value.map(caseId => portfolioCases.value.find(item => item.id === caseId)).filter((item):item is PortfolioCase => Boolean(item)))
 const availablePortfolioCases = computed(() => portfolioCases.value.filter(item => !selectedCaseIds.value.includes(item.id)))
+const showPortfolioProjectForm = async () => {
+  creatingPortfolioProject.value=true
+  portfolioProjectTitle.value=''
+  await nextTick()
+  portfolioProjectInput.value?.focus()
+}
+const hidePortfolioProjectForm = () => {
+  creatingPortfolioProject.value=false
+  portfolioProjectTitle.value=''
+}
+const createPortfolioProject = async () => {
+  const title=portfolioProjectTitle.value.trim()
+  if(!title)return
+  contentBusy.value=true;feedback.text='';feedback.error=false
+  try {
+    const response=await apiFetch<{data:{collection:{id:string}}}>('/api/shares',{method:'POST',body:{
+      title,purpose:'case',mode:'static',layout:'column',
+      filters:{search:'',projectId:null,tagId:null,projectIds:[],tagIds:[],uploadedBy:null,dateFrom:null,dateTo:null},
+      expiresAt:null,reviewMonth:null,submissionDeadline:null,portfolioKind:null,portfolioClient:null,introduction:null
+    }})
+    await loadPortfolioProjects()
+    await saveCaseOrder([...selectedCaseIds.value,response.data.collection.id])
+    hidePortfolioProjectForm()
+    feedback.text='Project created and added. Select its name to add work.'
+  } catch { feedback.text='Unable to create this project.';feedback.error=true }
+  finally { contentBusy.value=false }
+}
 const isoDate = (value:string,end=false) => value ? new Date(`${value}T${end?'23:59:59.999':'00:00:00.000'}`).toISOString() : null
 const saveFilters = async () => {
   contentBusy.value=true; feedback.text=''; feedback.error=false
@@ -176,22 +224,12 @@ const clearFilters = () => {
   filters.dateFrom=''
   filters.dateTo=''
 }
-const supportsFilterMorph = () => import.meta.client && 'startViewTransition' in document && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
-const morphFilters = async (update: () => void,direction:'opening'|'closing',keepMorphMode=false) => {
-  const viewTransitionDocument=document as Document & {startViewTransition:(callback:()=>Promise<void>)=>{finished:Promise<void>}}
-  filtersMorphing.value=true
-  document.documentElement.dataset.filterTransition=direction
-  const transition=viewTransitionDocument.startViewTransition(async()=>{update();await nextTick()})
-  try{await transition.finished}finally{delete document.documentElement.dataset.filterTransition;if(!keepMorphMode)filtersMorphing.value=false}
-}
 const openFilters = () => {
-  const update=()=>{compactFiltersVisible.value=false;filtersExpanded.value=true}
-  if(supportsFilterMorph())void morphFilters(update,'opening',true)
-  else update()
+  compactFiltersVisible.value=false
+  filtersExpanded.value=true
 }
 const closeFilters = () => {
-  if(supportsFilterMorph())void morphFilters(()=>{filtersExpanded.value=false;compactFiltersVisible.value=true},'closing')
-  else filtersExpanded.value=false
+  filtersExpanded.value=false
 }
 const finishFiltersClose = () => {
   if(!filtersExpanded.value) compactFiltersVisible.value=true
@@ -326,12 +364,12 @@ const deleteBoard = async () => {
 </script>
 
 <template>
-  <div class="admin-shell board-shell">
+  <div class="admin-shell board-shell" :class="{ 'portfolio-settings-page selection-panel--filter-overlay': collection.purpose === 'portfolio' }">
     <header class="toolbar">
       <WorkspaceSwitcher class="identity" />
-      <span>{{ collection.purpose === 'review' ? activeView === 'review' ? 'Board review' : activeView === 'members' ? 'Board members' : 'Board settings' : 'Board settings' }}</span>
+      <span>{{ collection.purpose === 'portfolio' ? 'Portfolio settings' : collection.purpose === 'review' ? activeView === 'review' ? 'Board review' : activeView === 'members' ? 'Board members' : 'Board settings' : 'Board settings' }}</span>
       <span class="muted">{{ workspaceAdmin ? 'workspace admin' : role }}</span>
-      <NuxtLink class="close" to="/library" aria-label="Close board settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19" /></svg></NuxtLink>
+      <NuxtLink class="close" :to="{ path: '/library', query: { board: collection.id } }" aria-label="Close board settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19" /></svg></NuxtLink>
     </header>
     <main>
       <section class="intro"><p>{{ collection.purpose === 'review' ? 'Monthly review' : 'Board' }}</p><h1>{{ collection.title }}</h1><div v-if="collection.purpose === 'review'" class="review-summary"><span>{{ collection.review_month ? new Date(`${collection.review_month}T12:00:00`).toLocaleDateString(undefined,{month:'long',year:'numeric'}) : 'Monthly review' }}</span><span>{{ collection.submission_deadline ? `Due ${new Date(collection.submission_deadline).toLocaleDateString()}` : 'No deadline' }}</span><div class="member-avatars" aria-label="Board members"><span v-for="member in members.slice(0,5)" :key="member.user_id" :title="member.allowed_users?.figma_handle || member.allowed_users?.email || member.role"><img v-if="member.allowed_users?.avatar_url" :src="member.allowed_users.avatar_url" alt=""><span v-else aria-hidden="true">{{ (member.allowed_users?.figma_handle || member.allowed_users?.email || '?').charAt(0).toUpperCase() }}</span></span><span v-if="members.length>5" class="avatar-more">+{{ members.length-5 }}</span></div></div></section>
@@ -348,41 +386,53 @@ const deleteBoard = async () => {
         <SelectionPanel :visible="Boolean(selectedAssets.length)" label="Selected submission actions" close-label="Clear selection" :close-disabled="contentBusy" @close="selectedAssetIds.clear()"><strong>{{ selectedAssets.length }} selected</strong><button v-if="canApprove&&selectedHasDraft" type="button" :disabled="contentBusy" @click="applyDecision(selectedAssets,'approve')">Approve</button><button v-if="selectedHasReady" type="button" :disabled="contentBusy" @click="applyDecision(selectedAssets,'pass')">Pass</button><button v-if="selectedHasReviewed" type="button" :disabled="contentBusy" @click="applyDecision(selectedAssets,'reopen')">Reopen</button></SelectionPanel>
       </section>
       <section v-if="collection.purpose !== 'review' || activeView === 'settings'" class="settings" aria-labelledby="settings-title">
-        <div><p class="section-label">Settings</p><h2 id="settings-title">{{ collection.purpose === 'portfolio' ? 'Build edition' : collection.purpose === 'case' ? 'Build case' : 'Manage board' }}</h2></div>
-        <div class="settings-content">
-          <label class="title-field"><span>Board name</span><input :value="collection.title" :readonly="!canEdit" maxlength="120" :aria-describedby="'board-title-feedback'" @change="rename"><small id="board-title-feedback" :class="{error:feedback.error}" role="status" aria-live="polite">{{ feedback.text }}</small></label>
+        <div><p v-if="collection.purpose !== 'portfolio'" class="section-label">Settings</p><h2 id="settings-title" :class="{ 'filter-overlay-title': collection.purpose === 'portfolio' }">{{ collection.purpose === 'portfolio' ? 'Portfolio details' : collection.purpose === 'case' ? 'Build case' : 'Manage board' }}</h2></div>
+        <div class="settings-content" :class="{ 'asset-filter-controls asset-filter-controls--expanded': collection.purpose === 'portfolio' }">
+          <div :class="{ 'filter-sheet-content': collection.purpose === 'portfolio' }">
+          <div v-if="collection.purpose === 'portfolio'" class="board-settings-intro portfolio-title-intro">
+            <h2 class="shared-editable-title"><textarea v-if="canEdit" ref="portfolioTitleInput" v-model="portfolioTitleDraft" class="shared-editable-title-input" rows="1" maxlength="120" aria-label="Portfolio name" :aria-invalid="feedback.error || undefined" aria-describedby="board-title-feedback" @input="resizePortfolioTitle" @change="rename" @keydown="handlePortfolioTitleKeydown" /><span class="shared-editable-title-display" :aria-hidden="canEdit || undefined">{{ collection.title }}</span></h2>
+            <p class="board-type-summary">{{ portfolioKind === 'main' ? 'Main portfolio.' : 'Client version.' }}<template v-if="portfolioKind === 'client' && portfolioClient.trim()"> {{ portfolioClient.trim() }}</template></p>
+            <small id="board-title-feedback" class="shared-editable-title-feedback" :class="{error:feedback.error}" role="status" aria-live="polite">{{ feedback.text }}</small>
+          </div>
+          <label v-else class="title-field"><span>Board name</span><input :value="collection.title" :readonly="!canEdit" maxlength="120" aria-describedby="board-title-feedback" @change="rename"><small id="board-title-feedback" :class="{error:feedback.error}" role="status" aria-live="polite">{{ feedback.text }}</small></label>
           <form v-if="collection.purpose === 'portfolio' && canEdit" class="portfolio-settings" @submit.prevent="savePortfolioSettings">
-            <fieldset><legend>Edition</legend><label><input v-model="portfolioKind" type="radio" value="main"> Main portfolio</label><label><input v-model="portfolioKind" type="radio" value="client"> Client edition</label></fieldset>
-            <label v-if="portfolioKind === 'client'"><span>Client or recipient</span><input v-model="portfolioClient" required maxlength="120" autocomplete="off"></label>
-            <label><span>Introduction</span><textarea v-model="introduction" rows="4" maxlength="2000" placeholder="A short note about this selection"></textarea></label>
-            <fieldset class="contact-fields"><legend>Contact footer</legend><label class="contact-heading"><span>Closing message</span><input v-model="contactHeading" maxlength="160" placeholder="Let’s work together"></label><div v-for="(link,index) in contactLinks" :key="index" class="contact-link-row"><label><span>Link label</span><input v-model="link.label" required maxlength="80" placeholder="Email"></label><label><span>URL</span><input v-model="link.url" required inputmode="url" placeholder="mailto:you@example.com"></label><div class="contact-link-actions"><button class="button-secondary" type="button" :disabled="index===0" :aria-label="`Move ${link.label || `link ${index+1}`} earlier`" @click="moveContactLink(index,-1)">↑</button><button class="button-secondary" type="button" :disabled="index===contactLinks.length-1" :aria-label="`Move ${link.label || `link ${index+1}`} later`" @click="moveContactLink(index,1)">↓</button><button class="button-plain" type="button" @click="removeContactLink(index)">Remove</button></div></div><button class="button-secondary add-contact-link" type="button" @click="addContactLink">Add link</button></fieldset>
-            <button class="button-secondary" type="submit" :disabled="busy">Save portfolio details</button>
+            <section class="filter-option-group" role="group" aria-labelledby="portfolio-type-title"><h3 id="portfolio-type-title">Portfolio type</h3><div class="filter-option-list filter-option-list--segmented"><button type="button" :aria-pressed="portfolioKind === 'main'" @click="portfolioKind = 'main'">Main portfolio</button><button type="button" :aria-pressed="portfolioKind === 'client'" @click="portfolioKind = 'client'">Client version</button></div></section>
+            <section v-if="portfolioKind === 'client'" class="filter-option-group"><h3>Client or recipient</h3><input v-model="portfolioClient" class="panel-field" required maxlength="120" autocomplete="off"></section>
+            <section class="filter-option-group"><h3>Introduction</h3><textarea v-model="introduction" class="panel-field portfolio-introduction" rows="4" maxlength="2000" placeholder="A short note about this selection"></textarea></section>
+            <section class="filter-option-group contact-fields" aria-labelledby="portfolio-contact-title"><h3 id="portfolio-contact-title">Contact</h3><label class="contact-heading"><span class="filter-option-label">Closing message</span><input v-model="contactHeading" class="panel-field" maxlength="160" placeholder="Let’s work together"></label><div v-for="(link,index) in contactLinks" :key="index" class="contact-link-row"><label><span class="filter-option-label">Link label</span><input v-model="link.label" class="panel-field" required maxlength="80" placeholder="Email"></label><label><span class="filter-option-label">URL</span><input v-model="link.url" class="panel-field" required inputmode="url" placeholder="mailto:you@example.com"></label><div class="contact-link-actions filter-option-list"><button type="button" :disabled="index===0" :aria-label="`Move ${link.label || `link ${index+1}`} earlier`" @click="moveContactLink(index,-1)">↑</button><button type="button" :disabled="index===contactLinks.length-1" :aria-label="`Move ${link.label || `link ${index+1}`} later`" @click="moveContactLink(index,1)">↓</button><button type="button" @click="removeContactLink(index)">Remove</button></div></div><button class="panel-secondary-action add-contact-link" type="button" @click="addContactLink">Add link</button></section>
+            <div class="board-settings-actions"><button class="panel-secondary-action" type="submit" :disabled="busy">Save portfolio details</button></div>
           </form>
-          <section v-if="collection.purpose === 'portfolio'" class="case-picker" aria-labelledby="portfolio-cases-title">
-            <div><h3 id="portfolio-cases-title">Cases</h3><p class="muted">Choose reusable cases and arrange them for this edition.</p></div>
+          <section v-if="collection.purpose === 'portfolio'" class="case-picker filter-option-group" aria-labelledby="portfolio-cases-title">
+            <div class="portfolio-section-heading"><h3 id="portfolio-cases-title">Work</h3><p class="muted">Add projects and arrange the order they appear in your portfolio. Select a project name to edit its work.</p></div>
             <ol v-if="selectedPortfolioCases.length" class="selected-cases">
-              <li v-for="(portfolioCase,index) in selectedPortfolioCases" :key="portfolioCase.id"><NuxtLink :to="`/boards/${portfolioCase.id}`">{{ portfolioCase.title }}</NuxtLink><span>{{ portfolioCase.itemCount }} works</span><div><button class="button-secondary" type="button" :disabled="contentBusy||index===0" :aria-label="`Move ${portfolioCase.title} earlier`" @click="movePortfolioCase(index,-1)">↑</button><button class="button-secondary" type="button" :disabled="contentBusy||index===selectedPortfolioCases.length-1" :aria-label="`Move ${portfolioCase.title} later`" @click="movePortfolioCase(index,1)">↓</button><button class="button-secondary" type="button" :disabled="contentBusy" @click="removePortfolioCase(portfolioCase.id)">Remove</button></div></li>
+              <li v-for="(portfolioCase,index) in selectedPortfolioCases" :key="portfolioCase.id" class="portfolio-case-row"><NuxtLink :to="{path:'/library',query:{board:portfolioCase.id}}">{{ portfolioCase.title }}</NuxtLink><span>{{ portfolioCase.itemCount }} {{ portfolioCase.itemCount===1?'item':'items' }}</span><div class="portfolio-case-actions"><button class="panel-secondary-action portfolio-icon-action" type="button" :disabled="contentBusy||index===0" :aria-label="`Move ${portfolioCase.title} earlier`" @click="movePortfolioCase(index,-1)"><ArrowUp :size="20" weight="Outline" :stroke-width="1.75" aria-hidden="true" /></button><button class="panel-secondary-action portfolio-icon-action" type="button" :disabled="contentBusy||index===selectedPortfolioCases.length-1" :aria-label="`Move ${portfolioCase.title} later`" @click="movePortfolioCase(index,1)"><ArrowDown :size="20" weight="Outline" :stroke-width="1.75" aria-hidden="true" /></button><button class="panel-secondary-action" type="button" :disabled="contentBusy" @click="removePortfolioCase(portfolioCase.id)">Remove</button></div></li>
             </ol>
-            <p v-else class="muted">No cases in this edition yet.</p>
-            <div v-if="availablePortfolioCases.length" class="available-cases"><strong>Add a case</strong><button v-for="portfolioCase in availablePortfolioCases" :key="portfolioCase.id" class="button-secondary" type="button" :disabled="contentBusy" @click="addPortfolioCase(portfolioCase.id)">Add {{ portfolioCase.title }}</button></div>
-            <NuxtLink v-else-if="!portfolioCases.length" class="button-secondary" to="/portfolio">Create a case</NuxtLink>
+            <p v-else class="muted">No work in this portfolio yet.</p>
+            <div v-if="availablePortfolioCases.length" class="available-cases"><strong>Add existing project</strong><button v-for="portfolioCase in availablePortfolioCases" :key="portfolioCase.id" class="panel-secondary-action" type="button" :disabled="contentBusy" @click="addPortfolioCase(portfolioCase.id)">Add {{ portfolioCase.title }}</button></div>
+            <button v-if="!creatingPortfolioProject" class="panel-secondary-action" type="button" :disabled="contentBusy" @click="showPortfolioProjectForm">Create project</button>
+            <form v-else class="portfolio-project-form" @submit.prevent="createPortfolioProject"><label><span class="filter-option-label">Project name</span><input ref="portfolioProjectInput" v-model="portfolioProjectTitle" class="panel-field" required maxlength="120" autocomplete="off" placeholder="Brand identity"></label><div class="board-settings-actions"><button class="panel-secondary-action" type="submit" :disabled="contentBusy">{{ contentBusy?'Creating…':'Create project' }}</button><button class="panel-secondary-action" type="button" :disabled="contentBusy" @click="hidePortfolioProjectForm">Cancel</button></div></form>
           </section>
-          <dl><div><dt>{{ collection.purpose === 'review' ? 'Review month' : 'Updates' }}</dt><dd>{{ collection.purpose === 'review' && collection.review_month ? new Date(`${collection.review_month}T12:00:00`).toLocaleDateString(undefined,{month:'long',year:'numeric'}) : collection.mode === 'dynamic' ? 'Dynamic' : collection.content_strategy==='manual'?'Manual selection':'Filter snapshot' }}</dd></div><div v-if="collection.purpose === 'review'"><dt>Deadline</dt><dd>{{ collection.submission_deadline ? new Date(collection.submission_deadline).toLocaleDateString() : 'No deadline' }}</dd></div><div><dt>Public access</dt><dd>{{ collection.purpose === 'case' ? 'Published through portfolio editions' : collection.publication_enabled?'Anyone with the link can view':'Disabled' }}</dd></div></dl>
-          <div class="layout-setting"><span>Public layout</span><LayoutControl :model-value="collection.layout" :disabled="!canEdit" label="Public board layout" @update:model-value="setLayout" /></div>
-          <div v-if="collection.purpose !== 'case'" class="actions"><NuxtLink v-if="collection.publication_enabled" class="button-secondary" :to="publicUrl" target="_blank">View public page</NuxtLink><button v-if="collection.publication_enabled" class="button-secondary" type="button" @click="copyLink">Copy public link</button><button v-if="canEdit" class="button-secondary" type="button" :disabled="busy" @click="setPublication(!collection.publication_enabled)">{{ collection.purpose === 'portfolio' ? (collection.publication_enabled ? 'Unpublish edition' : 'Publish edition') : (collection.publication_enabled?'Disable public link':'Enable public link') }}</button></div>
+          <section v-if="collection.purpose === 'portfolio'" class="portfolio-publishing filter-option-group" aria-labelledby="portfolio-publishing-title">
+            <div class="portfolio-section-heading"><h3 id="portfolio-publishing-title">Publishing</h3><p class="muted">{{ collection.publication_enabled ? 'Your portfolio is available through its public link.' : 'Publish when the portfolio is ready to share.' }}</p></div>
+            <div class="portfolio-publishing-actions"><NuxtLink v-if="collection.publication_enabled" class="panel-secondary-action" :to="publicUrl" target="_blank">View portfolio</NuxtLink><button v-if="collection.publication_enabled" class="panel-secondary-action" type="button" @click="copyLink">Copy public link</button><button v-if="canEdit" class="panel-secondary-action" type="button" :disabled="busy" @click="setPublication(!collection.publication_enabled)">{{ collection.publication_enabled ? 'Unpublish portfolio' : 'Publish portfolio' }}</button></div>
+          </section>
+          <dl v-if="collection.purpose !== 'portfolio'"><div><dt>{{ collection.purpose === 'review' ? 'Review month' : 'Updates' }}</dt><dd>{{ collection.purpose === 'review' && collection.review_month ? new Date(`${collection.review_month}T12:00:00`).toLocaleDateString(undefined,{month:'long',year:'numeric'}) : collection.mode === 'dynamic' ? 'Dynamic' : collection.content_strategy==='manual'?'Manual selection':'Filter snapshot' }}</dd></div><div v-if="collection.purpose === 'review'"><dt>Deadline</dt><dd>{{ collection.submission_deadline ? new Date(collection.submission_deadline).toLocaleDateString() : 'No deadline' }}</dd></div><div><dt>Public access</dt><dd>{{ collection.purpose === 'case' ? 'Included in portfolios' : collection.publication_enabled?'Anyone with the link can view':'Disabled' }}</dd></div></dl>
+          <div v-if="collection.purpose !== 'portfolio'" class="layout-setting"><span>Public layout</span><LayoutControl :model-value="collection.layout" :disabled="!canEdit" label="Public board layout" @update:model-value="setLayout" /></div>
+          <div v-if="collection.purpose !== 'case' && collection.purpose !== 'portfolio'" class="actions"><NuxtLink v-if="collection.publication_enabled" class="button-secondary" :to="publicUrl" target="_blank">View public page</NuxtLink><button v-if="collection.publication_enabled" class="button-secondary" type="button" @click="copyLink">Copy public link</button><button v-if="canEdit" class="button-secondary" type="button" :disabled="busy" @click="setPublication(!collection.publication_enabled)">{{ collection.publication_enabled?'Disable public link':'Enable public link' }}</button></div>
+          </div>
         </div>
       </section>
-      <section v-if="collection.purpose !== 'review' && collection.mode === 'dynamic'" class="content" aria-labelledby="content-title">
+      <section v-if="collection.purpose !== 'review' && collection.purpose !== 'portfolio' && collection.mode === 'dynamic'" class="content" aria-labelledby="content-title">
         <div><p class="section-label">Content</p><h2 id="content-title">Choose what appears</h2></div>
         <div class="content-settings">
           <p class="muted content-explanation">Approved items matching these filters appear automatically. Drag to arrange them; newly matching items appear first.</p>
-          <template v-if="canEdit"><SelectionPanel :visible="filtersExpanded" label="Board asset filters" wide overlay :instant="filtersMorphing" @close="closeFilters" @after-leave="finishFiltersClose"><AssetFilterControls v-model:search="filters.search" v-model:project-ids="filters.projectIds" v-model:tag-ids="filters.tagIds" v-model:date-from="filters.dateFrom" v-model:date-to="filters.dateTo" :projects="projects" :tags="tags" :heading="collection.title" show-search expanded :actions-visible="Boolean(activeFilterCount)"><template #actions><button class="clear-filters-button" type="button" @click="clearFilters">Clear filters</button></template></AssetFilterControls><button class="filter-panel-toggle is-expanded" type="button" aria-label="Hide filters" aria-expanded="true" @click="closeFilters"><Xmark :size="20" :stroke-width="2" aria-hidden="true" /></button></SelectionPanel><SelectionPanel :visible="compactFiltersVisible && !filtersExpanded" label="Board controls" bare :instant="filtersMorphing"><button class="filter-panel-toggle" type="button" aria-label="Show filters" aria-expanded="false" @click="openFilters"><span>Filters</span><span v-if="activeFilterCount" class="filter-count">{{ activeFilterCount }}</span></button><button v-if="activeFilterCount" class="filter-clear-compact" type="button" aria-label="Clear filters" title="Clear filters" @click="clearFilters"><Xmark :size="20" :stroke-width="2" aria-hidden="true" /></button></SelectionPanel></template>
+          <template v-if="canEdit"><SelectionPanel :visible="filtersExpanded" label="Board asset filters" wide overlay @close="closeFilters" @after-leave="finishFiltersClose"><AssetFilterControls v-model:search="filters.search" v-model:project-ids="filters.projectIds" v-model:tag-ids="filters.tagIds" v-model:date-from="filters.dateFrom" v-model:date-to="filters.dateTo" :projects="projects" :tags="tags" :heading="collection.title" show-search expanded :actions-visible="Boolean(activeFilterCount)"><template #actions><button class="clear-filters-button" type="button" @click="clearFilters">Clear filters</button></template></AssetFilterControls><button class="filter-panel-toggle is-expanded" type="button" aria-label="Hide filters" aria-expanded="true" @click="closeFilters"><Xmark :size="20" :stroke-width="2" aria-hidden="true" /></button></SelectionPanel><SelectionPanel :visible="compactFiltersVisible && !filtersExpanded" label="Board controls" bare><button class="filter-panel-toggle" type="button" aria-label="Show filters" aria-expanded="false" @click="openFilters"><span>Filters</span><span v-if="activeFilterCount" class="filter-count">{{ activeFilterCount }}</span></button><button v-if="activeFilterCount" class="filter-clear-compact" type="button" aria-label="Clear filters" title="Clear filters" @click="clearFilters"><Xmark :size="20" :stroke-width="2" aria-hidden="true" /></button></SelectionPanel></template>
           <div class="content-heading"><strong>{{ boardAssets.length }} {{ boardAssets.length===1 ? 'item' : 'items' }} on this board</strong></div>
           <AssetMasonry v-if="boardAssets.length" :assets="boardAssets" label="Board content" heading-tag="h3" :reorderable="canEdit&&!contentBusy" @reorder="reorderBoardAssets"><template #details="{asset}"><p>{{ asset.projects?.name ?? 'No project' }}</p></template><template #previewActions="{asset}"><div v-if="canEdit" class="asset-order-actions" role="group" :aria-label="`Reorder ${asset.title}`"><button class="button-secondary order-button" type="button" :disabled="contentBusy||boardAssetIndex(asset.id)===0" :aria-label="`Move ${asset.title} up`" title="Move up" @click="moveBoardAsset(asset.id,-1)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 14 6-6 6 6" /></svg></button><button class="button-secondary order-button" type="button" :disabled="contentBusy||boardAssetIndex(asset.id)===boardAssets.length-1" :aria-label="`Move ${asset.title} down`" title="Move down" @click="moveBoardAsset(asset.id,1)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 10 6 6 6-6" /></svg></button></div></template></AssetMasonry>
           <p v-else class="muted">No content matches this board yet.</p>
         </div>
       </section>
-      <section v-if="collection.purpose !== 'review' || activeView === 'members'" class="members" aria-labelledby="members-title">
+      <section v-if="collection.purpose !== 'portfolio' && (collection.purpose !== 'review' || activeView === 'members')" class="members" aria-labelledby="members-title">
         <div><p class="section-label">Private access</p><h2 id="members-title">Board members</h2></div>
         <div>
           <p class="muted member-explanation">Members manage this board after signing in. They do not control who can view its public link. Workspace admins can manage every board without being added here.</p>
@@ -390,7 +440,7 @@ const deleteBoard = async () => {
           <ul><li v-for="member in members" :key="member.user_id"><div><strong>{{ member.allowed_users?.email ?? member.allowed_users?.figma_handle ?? 'Workspace member' }}</strong><span class="muted">{{ member.role }}</span></div><button v-if="canManageMembers && member.role!=='owner'" class="button-secondary" type="button" :disabled="busy" @click="removeMember(member)">Remove</button></li></ul>
         </div>
       </section>
-      <section v-if="canManageMembers && (collection.purpose !== 'review' || activeView === 'settings')" class="danger" aria-labelledby="danger-title">
+      <section v-if="collection.purpose !== 'portfolio' && canManageMembers && (collection.purpose !== 'review' || activeView === 'settings')" class="danger" aria-labelledby="danger-title">
         <div><p class="section-label">Danger zone</p><h2 id="danger-title">Delete board</h2></div>
         <div class="danger-content"><p>Delete this board, its member access, and its public link.</p><button ref="deleteTrigger" class="button-secondary destructive-button" type="button" :disabled="busy" @click="openDeleteDialog">Delete board</button></div>
       </section>
@@ -933,15 +983,72 @@ const deleteBoard = async () => {
 .contact-link-actions .button-secondary { min-width: var(--control-height); padding-inline: calc(var(--space) / 2); }
 .contact-link-actions .button-plain { min-height: 36px; }
 .add-contact-link { margin-top: calc(var(--space) / 2); }
-.portfolio-settings input:not([type="radio"]), .portfolio-settings textarea { width: 100%; color: var(--color-fg); }
 .portfolio-settings button { justify-self: start; }
 .case-picker { display: grid; gap: var(--space); }
 .case-picker h3, .case-picker p { margin: 0; }
+.portfolio-section-heading { display: grid; gap: calc(var(--space) / 2); }
 .selected-cases { display: grid; gap: calc(var(--space) / 2); margin: 0; padding: 0; list-style: none; }
-.selected-cases li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: var(--space); padding: calc(var(--space) / 2); border-radius: var(--radius); background: var(--color-surface); }
-.selected-cases li > div, .available-cases { display: flex; flex-wrap: wrap; align-items: center; gap: calc(var(--space) / 2); }
-.selected-cases li > span { color: var(--color-muted); }
-.selected-cases button[aria-label] { min-width: var(--control-height); padding-inline: calc(var(--space) / 2); }
-.available-cases strong { flex-basis: 100%; }
-@media (max-width: 560px) { .contact-link-row { grid-template-columns: 1fr; } .contact-link-actions { grid-column: 1; } .selected-cases li { grid-template-columns: 1fr auto; } .selected-cases li > div { grid-column: 1 / 3; } }
+.selected-cases li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: var(--space); padding: var(--filter-option-padding); border-radius: calc(var(--radius) * 1.5); background: var(--filter-overlay-nested-background); }
+.selected-cases li > a { color: inherit; }
+.portfolio-case-actions { width: 100%; display: grid; grid-template-columns: repeat(2, var(--filter-action-height)) minmax(0, 1fr); align-items: center; gap: var(--filter-action-gap); }
+.portfolio-case-actions .portfolio-icon-action { width: var(--filter-action-height); padding: 0; }
+.available-cases { display: grid; gap: var(--filter-action-gap); }
+.portfolio-project-form { display: grid; gap: var(--space); }
+.portfolio-project-form label { display: grid; gap: calc(var(--space) / 2); }
+.selected-cases li > span { color: var(--filter-overlay-muted-color); }
+.available-cases strong { margin-bottom: calc(var(--space) / 2); }
+.portfolio-publishing { display: grid; gap: var(--space); }
+.portfolio-publishing h3, .portfolio-publishing p { margin: 0; }
+.portfolio-publishing-actions { display: grid; gap: var(--filter-action-gap); }
+
+.portfolio-settings-page > main {
+  min-height: 0;
+  padding: var(--filter-overlay-margin) 0;
+  overflow: hidden;
+}
+
+.portfolio-settings-page > main > .intro {
+  display: none;
+}
+
+.portfolio-settings-page .settings {
+  width: min(100%, var(--filter-overlay-width));
+  height: 100%;
+  min-height: 0;
+  max-width: none;
+  display: block;
+  margin-inline: auto;
+  padding: 0;
+}
+
+.portfolio-settings-page {
+  height: 100dvh;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.portfolio-settings-page .settings > div:first-child { display: none; }
+.portfolio-settings-page .settings-content.asset-filter-controls {
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+}
+.portfolio-settings-page .portfolio-settings { display: contents; }
+.portfolio-settings-page .portfolio-introduction { min-height: calc(var(--filter-action-height) * 2.5); padding-block: var(--filter-option-padding); }
+.portfolio-settings-page .contact-fields { display: grid; }
+.portfolio-settings-page .contact-link-row { grid-template-columns: minmax(0, 1fr); }
+.portfolio-settings-page .contact-link-actions { grid-column: 1; }
+.portfolio-settings-page .selected-cases li { grid-template-columns: minmax(0, 1fr) auto; }
+.portfolio-settings-page .portfolio-case-actions { grid-column: 1 / 3; }
+.portfolio-settings-page .portfolio-settings label > span,
+.portfolio-settings-page .case-picker .muted,
+.portfolio-settings-page .portfolio-publishing .muted { color: var(--filter-overlay-muted-color); }
+.portfolio-settings-page .selected-cases li {
+  border-radius: calc(var(--radius) * 1.5);
+  color: var(--filter-overlay-panel-color);
+}
+
+@media (max-width: 560px) { .contact-link-row { grid-template-columns: 1fr; } .contact-link-actions { grid-column: 1; } .selected-cases li { grid-template-columns: 1fr auto; } .portfolio-case-actions { grid-column: 1 / 3; } }
 </style>
