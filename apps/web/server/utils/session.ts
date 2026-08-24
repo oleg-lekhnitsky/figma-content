@@ -2,8 +2,9 @@ import type { H3Event } from 'h3'
 import { deleteCookie, getCookie, getHeader, setCookie } from 'h3'
 import type { Role } from '@content-library/shared'
 import type { AccountRow, AllowedUserRow } from './database.types'
-import { appError, databaseError } from './app-error'
+import { appError } from './app-error'
 import { hashToken, randomToken } from './crypto'
+import { runSupabaseQuery, useSupabaseAdmin } from './supabase'
 
 const sessionCookieName = () => process.env.NODE_ENV === 'production'
   ? '__Host-content_library_session'
@@ -46,10 +47,9 @@ export const getAppSession = async (event: H3Event): Promise<AppSession | null> 
   const token = sessionToken(event)
   if (!token) return null
   const now = new Date().toISOString()
-  const { data, error } = await useSupabaseAdmin().from('sessions')
+  const { data } = await runSupabaseQuery('read session', async () => await useSupabaseAdmin().from('sessions')
     .select('id, expires_at, allowed_users(*,accounts(*))')
-    .eq('token_hash', hashToken(token)).is('revoked_at', null).gt('expires_at', now).maybeSingle()
-  if (error) throw databaseError('read session', error)
+    .eq('token_hash', hashToken(token)).is('revoked_at', null).gt('expires_at', now).maybeSingle())
   if (!data) return null
   const member = data.allowed_users as unknown as SessionMember
   if (!member?.is_active || !member.accounts) return null

@@ -5,6 +5,7 @@ import type { BoardLayout, BoardViewSettings } from '@content-library/shared'
 definePageMeta({ middleware: 'auth' })
 const route = useRoute()
 const router = useRouter()
+const selectedBoardId = computed(() => typeof route.query.board === 'string' ? route.query.board : '')
 
 interface AssetCard {
   id: string; title: string; description?: string | null; previewUrl: string; preview2xUrl?: string | null; originalUrl?: string | null; mime_type?: string | null; width: number; height: number; status?: string; figma_url?: string
@@ -111,7 +112,11 @@ const dateFrom = computed(() => {
 })
 const dateTo = computed(() => dateRange.value === 'custom' && customDateTo.value ? new Date(`${customDateTo.value}T23:59:59.999`).toISOString() : '')
 const query = computed(() => ({ search: search.value, ...(status.value ? { status: status.value } : {}), ...(projectIds.value.length ? { projectIds: projectIds.value.join(',') } : {}), ...(tagIds.value.length ? { tagIds: tagIds.value.join(',') } : {}), ...(uploadedBys.value.length ? { uploadedBys: uploadedBys.value.join(',') } : {}), ...(dateFrom.value ? { dateFrom: dateFrom.value } : {}), ...(dateTo.value ? { dateTo: dateTo.value } : {}), sort: sort.value, page: page.value }))
-const { data, status: loadStatus, error, refresh } = await useLazyFetch<AssetList>('/api/assets', { query, watch: [query] })
+const { data, status: loadStatus, error, refresh } = await useLazyFetch<AssetList>('/api/assets', {
+  query,
+  watch: [query],
+  immediate: !selectedBoardId.value
+})
 const { data: projectData } = await useLazyFetch<{ data: { projects: Project[] } }>('/api/projects')
 const { data: tagData } = await useLazyFetch<{ data: { tags: Tag[] } }>('/api/tags')
 const { data: boardData, refresh: refreshBoards } = await useLazyFetch<BoardList>('/api/shares')
@@ -123,9 +128,9 @@ const handleBoardCreated = async (boardId: string) => {
 const projects = computed(() => projectData.value?.data.projects ?? [])
 const tags = computed(() => tagData.value?.data.tags ?? [])
 const collections = computed(() => boardData.value?.data.collections ?? [])
-const boards = computed(() => collections.value)
-const selectedBoardId = computed(() => typeof route.query.board === 'string' ? route.query.board : '')
-const selectedBoard = computed(() => collections.value.find(board => board.id === selectedBoardId.value))
+const boards = computed(() => collections.value.filter(board => board.purpose !== 'portfolio'))
+const selectedCollection = computed(() => collections.value.find(board => board.id === selectedBoardId.value))
+const selectedBoard = computed(() => boards.value.find(board => board.id === selectedBoardId.value))
 const selectedDynamicBoard = computed(() => selectedBoard.value?.mode === 'dynamic' ? selectedBoard.value : null)
 const selectedStaticBoard = computed(() => selectedBoard.value?.mode === 'static' ? selectedBoard.value : null)
 const canArrangeSelectedBoard = computed(() => Boolean(selectedStaticBoard.value && ['owner', 'editor', 'admin'].includes(selectedStaticBoard.value.role)))
@@ -300,13 +305,20 @@ const { data: selectedBoardData, status: selectedBoardStatus, error: selectedBoa
   const boardId = selectedBoardId.value
   if (!boardId) return { boardId: '', assets: [] as AssetCard[] }
   const board = boardData.value?.data.collections.find(collection => collection.id === boardId)
+  if (board?.purpose === 'portfolio') return { boardId, assets: [] as AssetCard[] }
   const availableAssets = data.value?.data.assets ?? []
   const availableById = new Map(availableAssets.map(asset => [asset.id, asset]))
   const localAssets = (board?.assetIds ?? []).map(id => availableById.get(id)).filter((asset): asset is AssetCard => Boolean(asset))
-  if (board?.purpose !== 'portfolio' && board?.mode !== 'dynamic' && localAssets.length === board?.assetIds.length) return { boardId, assets: localAssets }
+  if (board?.mode !== 'dynamic' && localAssets.length === board?.assetIds.length) return { boardId, assets: localAssets }
   const response = await $fetch<BoardContent>(`/api/shares/${boardId}/content`)
   return { boardId, assets: response.data.assets }
 }, { watch: [selectedBoardId] })
+watch(selectedCollection, collection => {
+  if (collection?.purpose === 'portfolio') void navigateTo('/portfolio', { replace: true })
+}, { immediate: true })
+watch(selectedBoardId, boardId => {
+  if (!boardId && !data.value && loadStatus.value !== 'pending') void refresh()
+})
 let hydratingDynamicBoard = false
 watch(selectedBoard, async board => {
   hydratingDynamicBoard = true
@@ -573,7 +585,6 @@ const assets = ref<AssetCard[]>([])
 const loadMoreSentinel = ref<HTMLElement | null>(null)
 let loadMoreObserver: IntersectionObserver | undefined
 let liveRefreshTimer: ReturnType<typeof setTimeout> | undefined
-let assetPollTimer: ReturnType<typeof setInterval> | undefined
 let assetEvents: EventSource | undefined
 const mediaResourceKey = (value: string | null | undefined) => {
   if (!value) return ''
@@ -592,8 +603,10 @@ const reconcileAssetMedia = (incoming: AssetCard, previous?: AssetCard): AssetCa
   previewUrl: preserveMountedPreview(previous.previewUrl, incoming.previewUrl) ?? incoming.previewUrl,
   preview2xUrl: preserveMountedPreview(previous.preview2xUrl, incoming.preview2xUrl)
 } : incoming
+const submitters = ref<Submitter[]>([])
 watch(() => data.value?.data, (next) => {
   if (!next) return
+  if (next.page <= 1) submitters.value = next.submitters ?? []
   const incoming = next.assets ?? []
   if (next.page <= 1) {
     if (incoming.map(asset => `${asset.id}:${asset.updated_at}`).join('|') === assets.value.map(asset => `${asset.id}:${asset.updated_at}`).join('|')) return
@@ -605,7 +618,6 @@ watch(() => data.value?.data, (next) => {
   for (const asset of incoming) merged.set(asset.id, reconcileAssetMedia(asset, merged.get(asset.id)))
   assets.value = [...merged.values()]
 }, { immediate: true })
-const submitters = computed(() => data.value?.data.submitters ?? [])
 const visibleSubmitters = computed(() => submitters.value.slice(0, 5))
 const submitterName = (submitter: Submitter) => submitter.figma_handle || 'Unknown submitter'
 const submitterInitial = (submitter: Submitter) => submitterName(submitter).trim().charAt(0).toUpperCase() || '?'
@@ -701,7 +713,9 @@ const updateToolbar = () => {
   })
 }
 const refreshWhenVisible = () => {
-  if (document.visibilityState === 'visible') void refresh()
+  if (document.visibilityState !== 'visible') return
+  if (selectedBoardId.value) void refreshSelectedBoard()
+  else void refresh()
 }
 watch([search, status, projectIds, tagIds, uploadedBys, dateRange, customDateFrom, customDateTo, sort], () => {
   page.value = 1
@@ -748,10 +762,11 @@ onMounted(() => {
   assetEvents = new EventSource('/api/live/assets')
   assetEvents.addEventListener('assets-changed', () => {
     clearTimeout(liveRefreshTimer)
-    liveRefreshTimer = setTimeout(() => { void refresh() }, 400)
+    liveRefreshTimer = setTimeout(() => {
+      if (selectedBoardId.value) void refreshSelectedBoard()
+      else void refresh()
+    }, 400)
   })
-  assetEvents.addEventListener('ready', () => { void refresh() })
-  assetPollTimer = setInterval(refreshWhenVisible, 15_000)
   window.addEventListener('focus', refreshWhenVisible)
   document.addEventListener('visibilitychange', refreshWhenVisible)
 })
@@ -759,7 +774,6 @@ onBeforeUnmount(() => {
   clearTimeout(liveRefreshTimer)
   clearTimeout(dynamicBoardSaveTimer)
   flushArrangeSave()
-  clearInterval(assetPollTimer)
   assetEvents?.close()
   loadMoreObserver?.disconnect()
   cancelAnimationFrame(scrollFrame)
@@ -780,6 +794,7 @@ onBeforeUnmount(() => {
               alt=""><span v-else aria-hidden="true">{{ accountInitial }}</span></NuxtLink>
           <WorkspaceSwitcher class="brand" />
         </div>
+        <img class="library-wordmark" src="/ddw-wordmark.svg" alt="designdep.work">
         <p class="count sr-only" role="status" aria-live="polite">{{ resultMessage }}</p>
         <nav aria-label="Library controls">
           <NuxtLink class="button-secondary" to="/portfolio">Portfolio</NuxtLink><button v-if="canShare"
@@ -800,8 +815,8 @@ onBeforeUnmount(() => {
           <button v-for="board in boards" :key="board.id" type="button"
             :title="`${board.title} · ${board.publication_enabled ? 'Published' : 'Private'}`"
             :aria-label="`Show ${board.title}, ${board.publication_enabled ? 'published' : 'private'}`"
-            :aria-pressed="selectedBoardId === board.id" @click="selectBoard(board.id)"><span class="board-tab-status"
-              :class="{ 'is-published': board.publication_enabled }" aria-hidden="true" /><span
+            :aria-pressed="selectedBoardId === board.id" @click="selectBoard(board.id)"><span
+              v-if="board.publication_enabled" class="board-tab-status" aria-hidden="true" /><span
               class="board-tab-title">{{ board.title }}</span></button>
         </nav>
       </div>
@@ -1054,6 +1069,15 @@ main {
   background: var(--color-bg)
 }
 
+.library-wordmark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: clamp(7rem, 8vw, 9rem);
+  height: auto;
+  transform: translate(-50%, -50%)
+}
+
 .brand {
   text-decoration: none
 }
@@ -1258,6 +1282,10 @@ button {
 }
 
 @media(max-width:900px) {
+  .library-wordmark {
+    display: none
+  }
+
   .index-toolbar {
     grid-template-columns: 1fr 2fr auto
   }
@@ -1361,14 +1389,8 @@ button {
   width: 7px;
   height: 7px;
   flex: 0 0 auto;
-  border: 1px solid currentColor;
-  border-radius: 50%;
-  opacity: .45
-}
-
-.board-tab-status.is-published {
-  border-color: #06f90e;
   background: #06f90e;
+  border-radius: 50%;
   opacity: 1
 }
 

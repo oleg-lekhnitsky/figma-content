@@ -48,6 +48,7 @@
   --control-padding-inline: var(--button-padding-inline);
   --supporting-text-inset: calc(var(--control-padding-inline) / 2);
   --select-chevron-size: .75rem;
+  --select-chevron-inset: var(--supporting-text-inset);
   --filter-option-height: 2.125rem;
   --filter-option-padding: .75rem;
   --font-size-h3: 1.25rem;
@@ -281,10 +282,10 @@ textarea {
 
 select {
   appearance: none;
-  padding-inline-end: calc(var(--control-padding-inline) * 2 + var(--select-chevron-size));
+  padding-inline-end: calc(var(--select-chevron-inset) * 2 + var(--select-chevron-size));
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='m1 1 5 5 5-5' stroke='%23fff' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right var(--control-padding-inline) center;
+  background-position: right var(--select-chevron-inset) center;
   background-size: var(--select-chevron-size) auto;
 }
 
@@ -365,6 +366,10 @@ form > .frames-section {
   border-radius: var(--radius-mobile);
   color: var(--material-tinted-fg);
   background: var(--material-tinted-fallback-bg);
+}
+
+.frames li.has-layout-toggle {
+  align-items: start;
 }
 
 @supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
@@ -504,12 +509,13 @@ form > .frames-section {
 .account-copy strong {
   color: var(--material-tinted-fg);
   font-size: var(--font-size-body-compact);
+  font-weight: 400;
 }
 
 .account-copy span {
   color: var(--panel-muted);
   font-size: var(--font-size-label);
-  font-weight: 600;
+  font-weight: 400;
 }
 
 main.is-compact {
@@ -579,7 +585,7 @@ main.is-widget {
 }
 
 .is-widget .frame-layout-toggle {
-  align-self: center;
+  align-self: start;
   color: var(--material-tinted-fg);
   background: rgb(255 255 255 / 14%);
 }
