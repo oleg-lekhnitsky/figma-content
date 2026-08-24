@@ -19,9 +19,10 @@ export default defineNuxtConfig({
       ],
       link: [
         { rel: 'manifest', href: '/manifest.webmanifest' },
+        { rel: 'apple-touch-icon', sizes: '180x180', href: '/apple-touch-icon.png?v=3' },
         { rel: 'preload', href: '/fonts/ABCDiatypeCyrillicTrial-Medium.otf', as: 'font', type: 'font/otf', crossorigin: 'anonymous' },
         { rel: 'preload', href: '/fonts/ABCDiatypeCyrillicTrial-Bold.otf', as: 'font', type: 'font/otf', crossorigin: 'anonymous' },
-        { rel: 'apple-touch-startup-image', href: '/pwa-launch.png' }
+        { rel: 'apple-touch-startup-image', href: '/pwa-launch.png?v=3' }
       ]
     }
   },

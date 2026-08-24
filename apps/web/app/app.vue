@@ -1,7 +1,6 @@
 <script setup lang="ts">
 const splashVisible = ref(true)
 const splashLeaving = ref(false)
-const splashLetters = [...'Specials']
 let splashTimer: ReturnType<typeof setTimeout> | undefined
 let splashRemoveTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -22,8 +21,8 @@ onBeforeUnmount(() => {
 <template>
   <NuxtRouteAnnouncer />
   <PullToRefresh />
-  <div v-if="splashVisible" class="app-splash" :class="{ 'app-splash--leaving': splashLeaving }" role="status" aria-label="Specials">
-    <span class="app-splash-word" aria-hidden="true"><span v-for="(letter, index) in splashLetters" :key="index" class="app-splash-letter" :style="{ '--letter-stagger': `${120 + index * 35}ms` }">{{ letter }}</span></span>
+  <div v-if="splashVisible" class="app-splash" :class="{ 'app-splash--leaving': splashLeaving }" role="status" aria-label="designdep.work">
+    <img class="app-splash-art" src="/pwa-launch%203.svg" alt="" aria-hidden="true">
   </div>
   <NuxtPage />
 </template>
@@ -41,22 +40,11 @@ onBeforeUnmount(() => {
   transition: opacity 220ms ease-out
 }
 
-.app-splash-word {
-  display: flex;
-  transform: translateY(-2dvh);
-  font-family: var(--font-family-ui);
-  font-size: clamp(4rem, 22vw, 8rem);
-  font-weight: 500;
-  letter-spacing: -.055em;
-  line-height: 1;
-  white-space: nowrap
-}
-
-.app-splash-letter {
-  display: inline-block;
-  opacity: 0;
-  transform: translateY(16px);
-  animation: splash-letter-in 220ms cubic-bezier(.2, 0, 0, 1) var(--letter-stagger) forwards
+.app-splash-art {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover
 }
 
 .app-splash--leaving {
@@ -69,22 +57,9 @@ onBeforeUnmount(() => {
   }
 }
 
-@keyframes splash-letter-in {
-  to {
-    opacity: 1;
-    transform: translateY(0)
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .app-splash {
     transition: none
-  }
-
-  .app-splash-letter {
-    opacity: 1;
-    transform: none;
-    animation: none
   }
 }
 </style>
