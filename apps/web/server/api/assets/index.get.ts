@@ -44,7 +44,19 @@ export default defineEventHandler(async (event) => {
       ? query.order(standardSort[0], { ascending: standardSort[1] })
       : query.order('allowed_users(figma_handle)', { ascending: true, nullsFirst: false })
   }
-  const { data, count } = await runSupabaseQuery('list assets', async () => await buildAssetQuery().range(from, from + q.pageSize - 1))
+  const isRangePastEnd = (error: unknown) => (
+    typeof error === 'object' && error !== null && 'code' in error && error.code === 'PGRST103'
+  )
+  const pageResult = await runSupabaseQuery(
+    'list assets',
+    async () => await buildAssetQuery().range(from, from + q.pageSize - 1),
+    2,
+    isRangePastEnd,
+  )
+  const rangeError = isRangePastEnd(pageResult.error) ? pageResult.error as { details?: string } : null
+  const rangeTotal = Number(rangeError?.details?.match(/only (\d+) rows?/)?.[1] ?? 0)
+  const data = pageResult.data ?? []
+  const count = pageResult.count ?? rangeTotal
   let submitters: Array<{ id: string, figma_handle: string | null, avatar_url: string | null }> = []
   if (q.page === 1) {
     const buildSubmitterAssetsQuery = () => {

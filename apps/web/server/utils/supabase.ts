@@ -22,13 +22,14 @@ export const runSupabaseQuery = async <T>(
   operation: string,
   query: () => PromiseLike<T>,
   attempts = 2,
+  acceptError?: (error: unknown) => boolean,
 ) => {
   let cause: unknown
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
       const result = await query()
       const error = (result as { error?: unknown }).error
-      if (!error) return result
+      if (!error || acceptError?.(error)) return result
       cause = error
     } catch (error) {
       cause = error

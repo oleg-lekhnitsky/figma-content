@@ -583,6 +583,7 @@ const clearDynamicBoardFilters = () => {
 }
 const assets = ref<AssetCard[]>([])
 const loadMoreSentinel = ref<HTMLElement | null>(null)
+const loadingNextPage = ref(false)
 let loadMoreObserver: IntersectionObserver | undefined
 let liveRefreshTimer: ReturnType<typeof setTimeout> | undefined
 let assetEvents: EventSource | undefined
@@ -606,6 +607,7 @@ const reconcileAssetMedia = (incoming: AssetCard, previous?: AssetCard): AssetCa
 const submitters = ref<Submitter[]>([])
 watch(() => data.value?.data, (next) => {
   if (!next) return
+  loadingNextPage.value = false
   if (next.page <= 1) submitters.value = next.submitters ?? []
   const incoming = next.assets ?? []
   if (next.page <= 1) {
@@ -629,8 +631,11 @@ const toggleSubmitter = (submitterId: string) => {
 const total = computed(() => data.value?.data.total ?? 0)
 const canLoadMore = computed(() => !selectedBoardId.value && loadStatus.value !== 'pending' && assets.value.length < total.value)
 const loadNextPage = () => {
-  if (canLoadMore.value) page.value += 1
+  if (!canLoadMore.value || loadingNextPage.value) return
+  loadingNextPage.value = true
+  page.value += 1
 }
+watch(error, () => { loadingNextPage.value = false })
 watch(loadMoreSentinel, (sentinel, previous) => {
   if (previous) loadMoreObserver?.unobserve(previous)
   if (sentinel) loadMoreObserver?.observe(sentinel)
@@ -718,6 +723,7 @@ const refreshWhenVisible = () => {
   else void refresh()
 }
 watch([search, status, projectIds, tagIds, uploadedBys, dateRange, customDateFrom, customDateTo, sort], () => {
+  loadingNextPage.value = false
   page.value = 1
   void replaceLibraryQuery(persistedFilterQuery.value)
 }, { deep: true })
