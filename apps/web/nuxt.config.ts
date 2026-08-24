@@ -22,7 +22,21 @@ export default defineNuxtConfig({
         { rel: 'apple-touch-icon', sizes: '180x180', href: '/apple-touch-icon.png?v=3' },
         { rel: 'preload', href: '/fonts/ABCDiatypeCyrillicTrial-Medium.otf', as: 'font', type: 'font/otf', crossorigin: 'anonymous' },
         { rel: 'preload', href: '/fonts/ABCDiatypeCyrillicTrial-Bold.otf', as: 'font', type: 'font/otf', crossorigin: 'anonymous' },
-        { rel: 'apple-touch-startup-image', href: '/pwa-launch.png?v=3' }
+        { rel: 'apple-touch-startup-image', href: '/apple-splash-1290x2796.png?v=5', media: '(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)' },
+        { rel: 'apple-touch-startup-image', href: '/apple-splash-1179x2556.png?v=5', media: '(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)' },
+        { rel: 'apple-touch-startup-image', href: '/apple-splash-1284x2778.png?v=5', media: '(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3)' },
+        { rel: 'apple-touch-startup-image', href: '/apple-splash-1170x2532.png?v=5', media: '(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)' },
+        { rel: 'apple-touch-startup-image', href: '/apple-splash-1242x2688.png?v=5', media: '(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3)' },
+        { rel: 'apple-touch-startup-image', href: '/apple-splash-828x1792.png?v=5', media: '(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2)' },
+        { rel: 'apple-touch-startup-image', href: '/apple-splash-1125x2436.png?v=5', media: '(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)' },
+        { rel: 'apple-touch-startup-image', href: '/apple-splash-1242x2208.png?v=5', media: '(device-width: 414px) and (device-height: 736px) and (-webkit-device-pixel-ratio: 3)' },
+        { rel: 'apple-touch-startup-image', href: '/apple-splash-750x1334.png?v=5', media: '(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2)' },
+        { rel: 'apple-touch-startup-image', href: '/apple-splash-2048x2732.png?v=5', media: '(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2)' },
+        { rel: 'apple-touch-startup-image', href: '/apple-splash-1668x2388.png?v=5', media: '(device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2)' },
+        { rel: 'apple-touch-startup-image', href: '/apple-splash-1640x2360.png?v=5', media: '(device-width: 820px) and (device-height: 1180px) and (-webkit-device-pixel-ratio: 2)' },
+        { rel: 'apple-touch-startup-image', href: '/apple-splash-1620x2160.png?v=5', media: '(device-width: 810px) and (device-height: 1080px) and (-webkit-device-pixel-ratio: 2)' },
+        { rel: 'apple-touch-startup-image', href: '/apple-splash-1536x2048.png?v=5', media: '(device-width: 768px) and (device-height: 1024px) and (-webkit-device-pixel-ratio: 2)' },
+        { rel: 'apple-touch-startup-image', href: '/pwa-launch.png?v=5' }
       ]
     }
   },

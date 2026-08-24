@@ -8,8 +8,8 @@ onMounted(() => {
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
   splashTimer = setTimeout(() => {
     splashLeaving.value = true
-    splashRemoveTimer = setTimeout(() => { splashVisible.value = false }, reducedMotion ? 0 : 220)
-  }, reducedMotion ? 350 : 1100)
+    splashRemoveTimer = setTimeout(() => { splashVisible.value = false }, reducedMotion ? 0 : 140)
+  }, reducedMotion ? 0 : 80)
 })
 
 onBeforeUnmount(() => {
@@ -22,7 +22,7 @@ onBeforeUnmount(() => {
   <NuxtRouteAnnouncer />
   <PullToRefresh />
   <div v-if="splashVisible" class="app-splash" :class="{ 'app-splash--leaving': splashLeaving }" role="status" aria-label="designdep.work">
-    <img class="app-splash-art" src="/pwa-launch%203.svg" alt="" aria-hidden="true">
+    <img class="app-splash-art" src="/pwa-mark.svg?v=5" alt="" aria-hidden="true" decoding="sync" fetchpriority="high">
   </div>
   <NuxtPage />
 </template>
@@ -37,14 +37,14 @@ onBeforeUnmount(() => {
   color: var(--color-fg);
   background: var(--color-bg);
   opacity: 1;
-  transition: opacity 220ms ease-out
+  transition: opacity 140ms ease-out
 }
 
 .app-splash-art {
-  width: 100%;
-  height: 100%;
+  width: min(87vw, 70rem);
+  height: auto;
   display: block;
-  object-fit: cover
+  transform: translateY(-4dvh)
 }
 
 .app-splash--leaving {

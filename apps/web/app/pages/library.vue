@@ -817,7 +817,7 @@ onBeforeUnmount(() => {
 
       <SelectionPanel :visible="Boolean(selectedBoard && videoExpanded)" label="Create video" wide overlay raised
         @close="closeVideo" @after-leave="finishExpandedPanelClose">
-        <BoardVideoComposer v-if="selectedBoard" :assets="videoAssets" :board-title="selectedBoard.title" @close="closeVideo" />
+        <LazyBoardVideoComposer v-if="selectedBoard && videoExpanded" :assets="videoAssets" :board-title="selectedBoard.title" @close="closeVideo" />
         <button class="filter-panel-toggle is-expanded" type="button" aria-label="Close video creator"
           aria-expanded="true" @click="closeVideo">
           <Xmark :size="20" :stroke-width="2" aria-hidden="true" />
