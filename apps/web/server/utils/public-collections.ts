@@ -122,7 +122,8 @@ export const publicAssetsForCollection = async (
   const signedAssets = await Promise.all(data.map(async (asset: { thumbnail_path: string | null; thumbnail_2x_path: string | null; image_path: string; [key: string]: unknown }) => ({
     ...asset,
     previewUrl: await signedAssetUrl(asset.thumbnail_path ?? asset.image_path, 3600),
-    preview2xUrl: asset.thumbnail_2x_path ? await signedAssetUrl(asset.thumbnail_2x_path, 3600) : null
+    preview2xUrl: asset.thumbnail_2x_path ? await signedAssetUrl(asset.thumbnail_2x_path, 3600) : null,
+    originalUrl: await signedAssetUrl(asset.image_path, 3600)
   })))
   const position = new Map(ids.map((id, index) => [id, index]))
   signedAssets.sort((a, b) => (position.get(String(a.id)) ?? Number.MAX_SAFE_INTEGER) - (position.get(String(b.id)) ?? Number.MAX_SAFE_INTEGER))

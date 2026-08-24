@@ -43,7 +43,10 @@ const resetScroll = async () => {
     drawerRoot.value.querySelectorAll<HTMLElement>('.filter-sheet-content, .video-panel-scroll').forEach(element => { element.scrollTop = 0 })
   }
   reset()
-  requestAnimationFrame(reset)
+  requestAnimationFrame(() => {
+    reset()
+    requestAnimationFrame(reset)
+  })
   drawerRoot.value?.focus({ preventScroll: true })
 }
 

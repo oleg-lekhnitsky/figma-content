@@ -53,7 +53,16 @@ const emit = defineEmits<{
 const inheritedViewSettings = inject<Ref<BoardViewSettings> | undefined>('boardViewSettings', undefined)
 const effectiveViewSettings = computed(() => props.viewSettings ?? inheritedViewSettings?.value)
 const previewSizes = computed(() => props.layout === 'column' ? 'min(760px, 100vw)' : '(max-width: 900px) 33vw, 320px')
-const preview1xMedia = computed(() => props.layout === 'column' ? '(max-width: 520px)' : '(max-width: 520px), (min-width: 901px)')
+const mediaSource = (asset: T) => props.layout === 'column'
+  ? asset.preview2xUrl ?? asset.originalUrl ?? asset.previewUrl
+  : asset.previewUrl
+const mediaFallbacks = (asset: T) => {
+  const source = mediaSource(asset)
+  const fallbacks = props.layout === 'column'
+    ? [asset.originalUrl, asset.previewUrl]
+    : [asset.originalUrl]
+  return [...new Set(fallbacks.filter((fallback): fallback is string => Boolean(fallback) && fallback !== source))]
+}
 
 const route = useRoute()
 const router = useRouter()
@@ -411,9 +420,9 @@ onBeforeUnmount(() => {
         @pointerup="finishQuickActionsHold" @pointercancel="cancelQuickActionsHold"
         @contextmenu="openQuickActionsContextMenu($event, asset)">
         <NuxtLink v-if="interactive" class="preview-link" :to="assetLink(asset.id)" :aria-label="`View ${asset.title}`" @click="openAsset($event, asset.id)">
-          <AssetMedia :class="{ 'is-loaded': loadedImages.has(asset.id) }" :data-asset-id="asset.id" :src="asset.previewUrl" :srcset="asset.preview2xUrl ? `${asset.previewUrl} 640w, ${asset.preview2xUrl} 1280w` : undefined" :sizes="previewSizes" :single-resolution-media="preview1xMedia" :mime-type="asset.mime_type" :width="asset.width" :height="asset.height" :alt="`Preview of ${asset.title}`" :loading="index < 7 ? 'eager' : 'lazy'" :fetchpriority="index < 7 ? 'high' : 'auto'" :autoplay="playVideos" @load="markImageLoaded(asset.id)" />
+          <AssetMedia :class="{ 'is-loaded': loadedImages.has(asset.id) }" :data-asset-id="asset.id" :src="mediaSource(asset)" :fallback-srcs="mediaFallbacks(asset)" :sizes="previewSizes" :mime-type="asset.mime_type" :width="asset.width" :height="asset.height" :alt="`Preview of ${asset.title}`" :loading="index < 7 ? 'eager' : 'lazy'" :fetchpriority="index < 7 ? 'high' : 'auto'" :autoplay="playVideos" @load="markImageLoaded(asset.id)" />
         </NuxtLink>
-        <AssetMedia v-else :class="{ 'is-loaded': loadedImages.has(asset.id) }" :data-asset-id="asset.id" :src="asset.previewUrl" :srcset="asset.preview2xUrl ? `${asset.previewUrl} 640w, ${asset.preview2xUrl} 1280w` :undefined" :sizes="previewSizes" :single-resolution-media="preview1xMedia" :mime-type="asset.mime_type" :width="asset.width" :height="asset.height" :alt="asset.title" :loading="index < 7 ? 'eager' : 'lazy'" :fetchpriority="index < 7 ? 'high' : 'auto'" :autoplay="playVideos" @load="markImageLoaded(asset.id)" />
+        <AssetMedia v-else :class="{ 'is-loaded': loadedImages.has(asset.id) }" :data-asset-id="asset.id" :src="mediaSource(asset)" :fallback-srcs="mediaFallbacks(asset)" :sizes="previewSizes" :mime-type="asset.mime_type" :width="asset.width" :height="asset.height" :alt="asset.title" :loading="index < 7 ? 'eager' : 'lazy'" :fetchpriority="index < 7 ? 'high' : 'auto'" :autoplay="playVideos" @load="markImageLoaded(asset.id)" />
         <div v-if="interactive && (asset.figma_url || canApprove)" class="card-quick-actions" role="menu" :aria-label="`Actions for ${asset.title}`"><a v-if="asset.figma_url" class="figma-button" role="menuitem" :href="asset.figma_url" target="_blank" rel="noopener noreferrer" aria-label="Open in Figma" title="Open in Figma" @pointerdown.stop><Figma :size="16" aria-hidden="true" /></a><button v-if="canApprove" class="card-approval-toggle" type="button" role="menuitemcheckbox" :aria-checked="asset.status === 'approved'" :aria-label="asset.status === 'approved' ? `Remove approval from ${asset.title}` : `Approve ${asset.title}`" :title="asset.status === 'approved' ? 'Remove approval' : 'Approve'" @pointerdown.stop @click.stop="emit('toggleApproval', asset)"><Heart :size="16" :weight="asset.status === 'approved' ? 'Filled' : 'Outline'" aria-hidden="true" /></button></div>
         <div class="preview-actions"><slot name="previewActions" :asset="asset" /></div>
         <button v-if="selectable" class="selection-control" type="button" :class="{ active: isSelected(asset.id) }" :aria-label="`${isSelected(asset.id) ? 'Deselect' : 'Select'} ${asset.title}`" :aria-pressed="isSelected(asset.id)" @click="emit('toggleSelection', asset)" />

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Xmark } from 'reicon-vue'
-const props = withDefaults(defineProps<{
+const _props = withDefaults(defineProps<{
   visible?: boolean
   label: string
   wide?: boolean
@@ -87,7 +87,7 @@ const emit = defineEmits<{ close: []; afterLeave: [] }>()
   white-space: nowrap
 }
 
-.selection-panel :slotted(button),
+.selection-panel:not(.selection-panel--filter-overlay) :slotted(button),
 .selection-panel-close {
   min-height: 36px;
   padding: 0 14px;

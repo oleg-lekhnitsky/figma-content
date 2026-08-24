@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { BoardLayout, BoardViewSettings } from '@content-library/shared'
-import { ArrowDown, ArrowUp, Xmark } from 'reicon-vue'
+import { Xmark } from 'reicon-vue'
 
 definePageMeta({ middleware: 'auth' })
 
@@ -12,7 +12,6 @@ interface Member { user_id:string; role:BoardRole; allowed_users:{email:string|n
 interface Filters { search:string; projectId:string|null; tagId:string|null; projectIds:string[]; tagIds:string[]; uploadedBy:string|null; dateFrom:string|null; dateTo:string|null }
 interface Asset { id:string; title:string; description:string|null; previewUrl:string; preview2xUrl?:string|null; mime_type?:string|null; width:number; height:number; status:'draft'|'approved'; uploaded_by:string; projects?:{name:string}|null; allowed_users?:{email:string|null;figma_handle:string|null;avatar_url:string|null}|null; submission?:{review_status:'ready'|'reviewed';created_at:string;reviewed_at:string|null}|null }
 interface Option { id:string; name:string }
-interface PortfolioCase { id:string; title:string; itemCount:number; previewAssets:Array<{id:string;previewUrl:string;mime_type?:string|null}> }
 
 const route = useRoute()
 const id = String(route.params.id)
@@ -63,11 +62,6 @@ const compactFiltersVisible = ref(true)
 const boardAssets = ref<Asset[]>([])
 const projects = ref<Option[]>([])
 const tags = ref<Option[]>([])
-const portfolioCases = ref<PortfolioCase[]>([])
-const selectedCaseIds = ref<string[]>([])
-const creatingPortfolioProject = ref(false)
-const portfolioProjectTitle = ref('')
-const portfolioProjectInput = ref<HTMLInputElement | null>(null)
 const initialProjectIds = Array.isArray(collection.filters.projectIds) ? collection.filters.projectIds : []
 const initialTagIds = Array.isArray(collection.filters.tagIds) ? collection.filters.tagIds : []
 const filters = reactive({
@@ -97,13 +91,7 @@ const loadOptions = async () => {
   projects.value=projectResponse.data.projects
   tags.value=tagResponse.data.tags
 }
-const loadPortfolioProjects = async () => {
-  const response=await apiFetch<{data:{cases:PortfolioCase[];selectedIds:string[]}}>(`/api/shares/${id}/cases`)
-  portfolioCases.value=Array.isArray(response.data?.cases) ? response.data.cases : []
-  selectedCaseIds.value=Array.isArray(response.data?.selectedIds) ? response.data.selectedIds : []
-}
 await Promise.all([loadMembers(),loadContent(),loadOptions()])
-if (collection.purpose === 'portfolio') await loadPortfolioProjects()
 
 const resizePortfolioTitle = async () => {
   await nextTick()
@@ -159,50 +147,6 @@ const moveContactLink = (index:number,direction:-1|1) => {
   const target=index+direction
   if(target<0||target>=contactLinks.value.length)return
   ;[contactLinks.value[index],contactLinks.value[target]]=[contactLinks.value[target]!,contactLinks.value[index]!]
-}
-const saveCaseOrder = async (caseIds:string[]) => {
-  contentBusy.value=true; feedback.text=''; feedback.error=false
-  try { await apiFetch(`/api/shares/${id}/cases`,{method:'PUT',body:{caseIds}}); selectedCaseIds.value=caseIds; feedback.text='Portfolio work saved.' }
-  catch { feedback.text='Unable to save portfolio work.'; feedback.error=true }
-  finally { contentBusy.value=false }
-}
-const addPortfolioCase = (caseId:string) => saveCaseOrder([...selectedCaseIds.value,caseId])
-const removePortfolioCase = (caseId:string) => saveCaseOrder(selectedCaseIds.value.filter(id => id !== caseId))
-const movePortfolioCase = (index:number,direction:-1|1) => {
-  const next=[...selectedCaseIds.value]
-  const target=index+direction
-  if(target<0||target>=next.length)return
-  ;[next[index],next[target]]=[next[target]!,next[index]!]
-  void saveCaseOrder(next)
-}
-const selectedPortfolioCases = computed(() => selectedCaseIds.value.map(caseId => portfolioCases.value.find(item => item.id === caseId)).filter((item):item is PortfolioCase => Boolean(item)))
-const availablePortfolioCases = computed(() => portfolioCases.value.filter(item => !selectedCaseIds.value.includes(item.id)))
-const showPortfolioProjectForm = async () => {
-  creatingPortfolioProject.value=true
-  portfolioProjectTitle.value=''
-  await nextTick()
-  portfolioProjectInput.value?.focus()
-}
-const hidePortfolioProjectForm = () => {
-  creatingPortfolioProject.value=false
-  portfolioProjectTitle.value=''
-}
-const createPortfolioProject = async () => {
-  const title=portfolioProjectTitle.value.trim()
-  if(!title)return
-  contentBusy.value=true;feedback.text='';feedback.error=false
-  try {
-    const response=await apiFetch<{data:{collection:{id:string}}}>('/api/shares',{method:'POST',body:{
-      title,purpose:'showcase',mode:'static',contentStrategy:'manual',layout:'column',
-      filters:{search:'',projectId:null,tagId:null,projectIds:[],tagIds:[],uploadedBy:null,dateFrom:null,dateTo:null},
-      expiresAt:null,reviewMonth:null,submissionDeadline:null,portfolioKind:null,portfolioClient:null,introduction:null
-    }})
-    await loadPortfolioProjects()
-    await saveCaseOrder([...selectedCaseIds.value,response.data.collection.id])
-    hidePortfolioProjectForm()
-    feedback.text='Board created and added. Select its name to add work.'
-  } catch { feedback.text='Unable to create this board.';feedback.error=true }
-  finally { contentBusy.value=false }
 }
 const isoDate = (value:string,end=false) => value ? new Date(`${value}T${end?'23:59:59.999':'00:00:00.000'}`).toISOString() : null
 const saveFilters = async () => {
@@ -369,7 +313,7 @@ const deleteBoard = async () => {
       <WorkspaceSwitcher class="identity" />
       <span>{{ collection.purpose === 'portfolio' ? 'Portfolio settings' : collection.purpose === 'review' ? activeView === 'review' ? 'Board review' : activeView === 'members' ? 'Board members' : 'Board settings' : 'Board settings' }}</span>
       <span class="muted">{{ workspaceAdmin ? 'workspace admin' : role }}</span>
-      <NuxtLink class="close" :to="{ path: '/library', query: { board: collection.id } }" aria-label="Close board settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19" /></svg></NuxtLink>
+      <NuxtLink class="close" :to="collection.purpose === 'portfolio' ? '/portfolio' : { path: '/library', query: { board: collection.id } }" aria-label="Close board settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19" /></svg></NuxtLink>
     </header>
     <main>
       <section class="intro"><p>{{ collection.purpose === 'review' ? 'Monthly review' : 'Board' }}</p><h1>{{ collection.title }}</h1><div v-if="collection.purpose === 'review'" class="review-summary"><span>{{ collection.review_month ? new Date(`${collection.review_month}T12:00:00`).toLocaleDateString(undefined,{month:'long',year:'numeric'}) : 'Monthly review' }}</span><span>{{ collection.submission_deadline ? `Due ${new Date(collection.submission_deadline).toLocaleDateString()}` : 'No deadline' }}</span><div class="member-avatars" aria-label="Board members"><span v-for="member in members.slice(0,5)" :key="member.user_id" :title="member.allowed_users?.figma_handle || member.allowed_users?.email || member.role"><img v-if="member.allowed_users?.avatar_url" :src="member.allowed_users.avatar_url" alt=""><span v-else aria-hidden="true">{{ (member.allowed_users?.figma_handle || member.allowed_users?.email || '?').charAt(0).toUpperCase() }}</span></span><span v-if="members.length>5" class="avatar-more">+{{ members.length-5 }}</span></div></div></section>
@@ -402,16 +346,6 @@ const deleteBoard = async () => {
             <section class="filter-option-group contact-fields" aria-labelledby="portfolio-contact-title"><h3 id="portfolio-contact-title">Contact</h3><label class="contact-heading"><span class="filter-option-label">Closing message</span><input v-model="contactHeading" class="panel-field" maxlength="160" placeholder="Let’s work together"></label><div v-for="(link,index) in contactLinks" :key="index" class="contact-link-row"><label><span class="filter-option-label">Link label</span><input v-model="link.label" class="panel-field" required maxlength="80" placeholder="Email"></label><label><span class="filter-option-label">URL</span><input v-model="link.url" class="panel-field" required inputmode="url" placeholder="mailto:you@example.com"></label><div class="contact-link-actions filter-option-list"><button type="button" :disabled="index===0" :aria-label="`Move ${link.label || `link ${index+1}`} earlier`" @click="moveContactLink(index,-1)">↑</button><button type="button" :disabled="index===contactLinks.length-1" :aria-label="`Move ${link.label || `link ${index+1}`} later`" @click="moveContactLink(index,1)">↓</button><button type="button" @click="removeContactLink(index)">Remove</button></div></div><button class="panel-secondary-action add-contact-link" type="button" @click="addContactLink">Add link</button></section>
             <div class="board-settings-actions"><button class="panel-secondary-action" type="submit" :disabled="busy">Save portfolio details</button></div>
           </form>
-          <section v-if="collection.purpose === 'portfolio'" class="case-picker filter-option-group" aria-labelledby="portfolio-cases-title">
-            <div class="portfolio-section-heading"><h3 id="portfolio-cases-title">Boards</h3><p class="muted">Add boards and arrange the order they appear in your portfolio. A board stays available everywhere else.</p></div>
-            <ol v-if="selectedPortfolioCases.length" class="selected-cases">
-              <li v-for="(portfolioCase,index) in selectedPortfolioCases" :key="portfolioCase.id" class="portfolio-case-row"><NuxtLink :to="{path:'/library',query:{board:portfolioCase.id}}">{{ portfolioCase.title }}</NuxtLink><span>{{ portfolioCase.itemCount }} {{ portfolioCase.itemCount===1?'item':'items' }}</span><div class="portfolio-case-actions"><button class="panel-secondary-action portfolio-icon-action" type="button" :disabled="contentBusy||index===0" :aria-label="`Move ${portfolioCase.title} earlier`" @click="movePortfolioCase(index,-1)"><ArrowUp :size="20" weight="Outline" :stroke-width="1.75" aria-hidden="true" /></button><button class="panel-secondary-action portfolio-icon-action" type="button" :disabled="contentBusy||index===selectedPortfolioCases.length-1" :aria-label="`Move ${portfolioCase.title} later`" @click="movePortfolioCase(index,1)"><ArrowDown :size="20" weight="Outline" :stroke-width="1.75" aria-hidden="true" /></button><button class="panel-secondary-action" type="button" :disabled="contentBusy" @click="removePortfolioCase(portfolioCase.id)">Remove</button></div></li>
-            </ol>
-            <p v-else class="muted">No boards in this portfolio yet.</p>
-            <div v-if="availablePortfolioCases.length" class="available-cases"><strong>Add existing board</strong><button v-for="portfolioCase in availablePortfolioCases" :key="portfolioCase.id" class="panel-secondary-action" type="button" :disabled="contentBusy" @click="addPortfolioCase(portfolioCase.id)">Add {{ portfolioCase.title }}</button></div>
-            <button v-if="!creatingPortfolioProject" class="panel-secondary-action" type="button" :disabled="contentBusy" @click="showPortfolioProjectForm">Create board</button>
-            <form v-else class="portfolio-project-form" @submit.prevent="createPortfolioProject"><label><span class="filter-option-label">Board name</span><input ref="portfolioProjectInput" v-model="portfolioProjectTitle" class="panel-field" required maxlength="120" autocomplete="off" placeholder="Brand identity"></label><div class="board-settings-actions"><button class="panel-secondary-action" type="submit" :disabled="contentBusy">{{ contentBusy?'Creating…':'Create board' }}</button><button class="panel-secondary-action" type="button" :disabled="contentBusy" @click="hidePortfolioProjectForm">Cancel</button></div></form>
-          </section>
           <section v-if="collection.purpose === 'portfolio'" class="portfolio-publishing filter-option-group" aria-labelledby="portfolio-publishing-title">
             <div class="portfolio-section-heading"><h3 id="portfolio-publishing-title">Publishing</h3><p class="muted">{{ collection.publication_enabled ? 'Your portfolio is available through its public link.' : 'Publish when the portfolio is ready to share.' }}</p></div>
             <div class="portfolio-publishing-actions"><NuxtLink v-if="collection.publication_enabled" class="panel-secondary-action" :to="publicUrl" target="_blank">View portfolio</NuxtLink><button v-if="collection.publication_enabled" class="panel-secondary-action" type="button" @click="copyLink">Copy public link</button><button v-if="canEdit" class="panel-secondary-action" type="button" :disabled="busy" @click="setPublication(!collection.publication_enabled)">{{ collection.publication_enabled ? 'Unpublish portfolio' : 'Publish portfolio' }}</button></div>
@@ -984,19 +918,7 @@ const deleteBoard = async () => {
 .contact-link-actions .button-plain { min-height: 36px; }
 .add-contact-link { margin-top: calc(var(--space) / 2); }
 .portfolio-settings button { justify-self: start; }
-.case-picker { display: grid; gap: var(--space); }
-.case-picker h3, .case-picker p { margin: 0; }
 .portfolio-section-heading { display: grid; gap: calc(var(--space) / 2); }
-.selected-cases { display: grid; gap: calc(var(--space) / 2); margin: 0; padding: 0; list-style: none; }
-.selected-cases li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: var(--space); padding: var(--filter-option-padding); border-radius: calc(var(--radius) * 1.5); background: var(--filter-overlay-nested-background); }
-.selected-cases li > a { color: inherit; }
-.portfolio-case-actions { width: 100%; display: grid; grid-template-columns: repeat(2, var(--filter-action-height)) minmax(0, 1fr); align-items: center; gap: var(--filter-action-gap); }
-.portfolio-case-actions .portfolio-icon-action { width: var(--filter-action-height); padding: 0; }
-.available-cases { display: grid; gap: var(--filter-action-gap); }
-.portfolio-project-form { display: grid; gap: var(--space); }
-.portfolio-project-form label { display: grid; gap: calc(var(--space) / 2); }
-.selected-cases li > span { color: var(--filter-overlay-muted-color); }
-.available-cases strong { margin-bottom: calc(var(--space) / 2); }
 .portfolio-publishing { display: grid; gap: var(--space); }
 .portfolio-publishing h3, .portfolio-publishing p { margin: 0; }
 .portfolio-publishing-actions { display: grid; gap: var(--filter-action-gap); }
@@ -1040,15 +962,8 @@ const deleteBoard = async () => {
 .portfolio-settings-page .contact-fields { display: grid; }
 .portfolio-settings-page .contact-link-row { grid-template-columns: minmax(0, 1fr); }
 .portfolio-settings-page .contact-link-actions { grid-column: 1; }
-.portfolio-settings-page .selected-cases li { grid-template-columns: minmax(0, 1fr) auto; }
-.portfolio-settings-page .portfolio-case-actions { grid-column: 1 / 3; }
 .portfolio-settings-page .portfolio-settings label > span,
-.portfolio-settings-page .case-picker .muted,
 .portfolio-settings-page .portfolio-publishing .muted { color: var(--filter-overlay-muted-color); }
-.portfolio-settings-page .selected-cases li {
-  border-radius: calc(var(--radius) * 1.5);
-  color: var(--filter-overlay-panel-color);
-}
 
-@media (max-width: 560px) { .contact-link-row { grid-template-columns: 1fr; } .contact-link-actions { grid-column: 1; } .selected-cases li { grid-template-columns: 1fr auto; } .portfolio-case-actions { grid-column: 1 / 3; } }
+@media (max-width: 560px) { .contact-link-row { grid-template-columns: 1fr; } .contact-link-actions { grid-column: 1; } }
 </style>

@@ -682,6 +682,14 @@ body:has(.selection-panel.selection-panel--filter-overlay) { overflow: hidden; }
   transition-timing-function: ease-out;
 }
 
+.panel-secondary-action.panel-icon-action {
+  width: var(--filter-action-height);
+  min-width: var(--filter-action-height);
+  flex: 0 0 var(--filter-action-height);
+  padding: 0;
+  line-height: 0;
+}
+
 :is(.panel-secondary-action, .video-reset):hover {
   background: color-mix(in srgb, var(--filter-overlay-panel-color) 11%, transparent);
 }
