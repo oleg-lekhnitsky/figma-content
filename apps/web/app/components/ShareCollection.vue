@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { BoardLayout } from '@content-library/shared'
+import { Xmark } from 'reicon-vue'
 
 interface CurrentFilters { search?: string; projectIds?: string[]; projectNames?: string[]; tagIds?: string[]; tagNames?: string[]; uploadedBy?: string|null; dateFrom?: string; dateTo?: string; dateLabel?: string; status?: string }
 const props = withDefaults(defineProps<{ currentFilters?: CurrentFilters; portfolioOnly?: boolean; hideTrigger?: boolean }>(), { portfolioOnly: false, hideTrigger: false })
@@ -201,16 +202,6 @@ const openCreateFromCurrentView = async () => {
   void hydrateCreateOptions()
 }
 defineExpose({ openCreate, openCreateFromCurrentView })
-const showList = async () => {
-  errorMessage.value = ''
-  createPanelOpen.value = false
-  view.value = 'list'
-  await nextTick()
-  lockPageScroll()
-  if (!dialog.value?.open) dialog.value?.showModal()
-  await nextTick()
-  createButton.value?.focus()
-}
 const focusCurrentView = () => {
   if (view.value === 'create') titleInput.value?.focus()
   else createButton.value?.focus()
@@ -307,10 +298,9 @@ ref="dialog" class="share-dialog" aria-labelledby="share-title" @click.self="clo
       <header v-if="view === 'list'">
         <div class="dialog-heading"><h2 id="share-title" class="display-title">{{ props.portfolioOnly ? 'Create portfolio' : 'My boards and shared with me' }}</h2></div><button
 type="button"
-          class="button-secondary button-icon close-button" aria-label="Close board settings" @click="close"><svg
-            aria-hidden="true" viewBox="0 0 24 24">
-            <path d="m5 5 14 14M19 5 5 19" />
-          </svg></button>
+          class="button-secondary button-icon close-button" aria-label="Close board settings" @click="close">
+          <Xmark :size="20" :stroke-width="2" aria-hidden="true" />
+        </button>
       </header>
       <Transition name="panel-view" @after-enter="focusCurrentView">
         <section v-if="view === 'list'" key="list" class="boards-view">
@@ -367,9 +357,11 @@ type="button"
       <section v-if="purpose === 'review'" class="filter-option-group"><AppDatePicker v-model="submissionDeadline" label="Submission deadline (optional)" surface="field" /></section>
       <section class="board-setting-group"><p class="board-type-summary">{{ purpose === 'review' ? 'This board starts private. Add contributors after creating it.' : purpose === 'portfolio' ? 'Your portfolio starts private. Add work and publish when it is ready.' : 'This board starts private. Publish it when it is ready.' }}</p></section>
       <section v-if="errorMessage" class="board-setting-group"><p class="board-type-summary error" role="alert">{{ errorMessage }}</p></section>
-      <template #actions><button class="filter-create-board" type="submit" :disabled="busy">{{ busy ? 'Creating…' : purpose === 'portfolio' ? 'Create portfolio' : 'Create board' }}</button><button type="button" class="clear-filters-button" @click="props.portfolioOnly ? close() : showList()">Cancel</button></template>
+      <template #actions><button class="filter-create-board" type="submit" :disabled="busy">{{ busy ? 'Creating…' : purpose === 'portfolio' ? 'Create portfolio' : 'Create board' }}</button><button type="button" class="clear-filters-button" @click="close">Cancel</button></template>
     </AssetFilterControls>
-    <button class="filter-panel-toggle is-expanded" type="button" :aria-label="props.portfolioOnly ? 'Close create portfolio' : 'Close create board'" aria-expanded="true" @click="close"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m5 5 14 14M19 5 5 19" /></svg></button>
+    <button class="filter-panel-toggle is-expanded" type="button" :aria-label="props.portfolioOnly ? 'Close create portfolio' : 'Close create board'" aria-expanded="true" @click="close">
+      <Xmark :size="20" :stroke-width="2" aria-hidden="true" />
+    </button>
   </SelectionPanel>
 </template>
 

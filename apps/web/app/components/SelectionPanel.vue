@@ -95,6 +95,10 @@ const emit = defineEmits<{ close: []; afterLeave: [] }>()
   background: var(--color-fg)
 }
 
+.selection-panel:not(.selection-panel--filter-overlay) :slotted(.mobile-filter-search) {
+  padding-inline: 0
+}
+
 .selection-panel-close {
   width: 36px;
   padding: 0;

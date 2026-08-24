@@ -5,6 +5,7 @@ import { requireAuth } from '../../utils/session'
 
 export default defineEventHandler(async (event) => {
   const session = await requireAuth(event)
+  const includePreviews = getQuery(event).previews !== 'false'
   const { data: memberships, error: membershipError } = await useSupabaseAdmin().from('public_collection_members')
     .select('collection_id,role').eq('organization_id', session.user.organization_id).eq('user_id', session.user.id)
   if (membershipError) throw databaseError('list board memberships', membershipError)
@@ -25,7 +26,7 @@ export default defineEventHandler(async (event) => {
       purpose: collection.purpose,
       mode: collection.mode,
       filters: publicCollectionFiltersSchema.parse(collection.filters)
-    })
+    }, { includePreviews })
   })))
   return { data: { collections } }
 })

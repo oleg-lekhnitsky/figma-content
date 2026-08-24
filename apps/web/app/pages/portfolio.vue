@@ -25,9 +25,7 @@ interface Board {
 
 interface PortfolioBoardsResponse {
   data: {
-    cases: Board[]
     selectedIds: string[]
-    selectedCases: Board[]
   }
 }
 
@@ -36,14 +34,21 @@ interface CreatePortfolioResponse {
 }
 
 const apiFetch = useRequestFetch()
-const { data, status, error, refresh } = await useFetch<{ data: { collections: Board[] } }>('/api/shares')
+const { data, error, refresh } = await useFetch<{ data: { collections: Board[] } }>('/api/shares', {
+  query: { previews: 'false' }
+})
 const mainPortfolio = computed(() => data.value?.data.collections.find(board => board.purpose === 'portfolio' && board.portfolio_kind === 'main') ?? null)
 const regularBoards = computed(() => data.value?.data.collections.filter(board => board.purpose !== 'portfolio') ?? [])
-const selectedBoards = ref<Board[]>([])
+const selectedBoardIds = ref<string[]>([])
+const boardsError = ref(false)
 const busy = ref(false)
 const feedback = ref('')
 const feedbackError = ref(false)
 
+const selectedBoards = computed(() => {
+  const boards = new Map(regularBoards.value.map(board => [board.id, board]))
+  return selectedBoardIds.value.flatMap(id => boards.get(id) ?? [])
+})
 const selectedIds = computed(() => selectedBoards.value.map(board => board.id))
 const availableBoards = computed(() => {
   const selected = new Set(selectedIds.value)
@@ -52,15 +57,25 @@ const availableBoards = computed(() => {
 const canEdit = computed(() => !mainPortfolio.value || ['owner', 'editor', 'admin'].includes(mainPortfolio.value.role))
 
 const loadPortfolioBoards = async () => {
-  if (!mainPortfolio.value) {
-    selectedBoards.value = []
+  boardsError.value = false
+  const portfolio = mainPortfolio.value
+  if (!portfolio) {
+    selectedBoardIds.value = []
     return
   }
-  const response = await apiFetch<PortfolioBoardsResponse>(`/api/shares/${mainPortfolio.value.id}/cases`)
-  selectedBoards.value = response.data.selectedCases
+  try {
+    const response = await apiFetch<PortfolioBoardsResponse>(`/api/shares/${portfolio.id}/cases`, {
+      query: { linksOnly: 'true' }
+    })
+    if (mainPortfolio.value?.id !== portfolio.id) return
+    selectedBoardIds.value = response.data.selectedIds
+  } catch {
+    selectedBoardIds.value = []
+    boardsError.value = true
+  }
 }
 
-if (mainPortfolio.value) await loadPortfolioBoards()
+await loadPortfolioBoards()
 
 const ensureMainPortfolio = async () => {
   if (mainPortfolio.value) return mainPortfolio.value.id
@@ -116,16 +131,12 @@ const moveBoard = (index: number, direction: -1 | 1) => {
 
 const close = () => navigateTo('/library')
 
-onActivated(async () => {
-  await refresh()
-  await loadPortfolioBoards()
-})
 </script>
 
 <template>
   <div class="portfolio-page">
     <SelectionPanel visible label="Portfolio" wide overlay @close="close">
-      <div class="asset-filter-controls asset-filter-controls--expanded portfolio-controls">
+      <div class="asset-filter-controls asset-filter-controls--filters asset-filter-controls--expanded portfolio-controls">
         <div class="filter-sheet-content">
           <div class="board-settings-intro">
             <h1 class="filter-overlay-title">Portfolio</h1>
@@ -137,8 +148,7 @@ onActivated(async () => {
             <h2 id="portfolio-selected-title" class="filter-option-label">Included boards</h2>
             <p class="board-type-summary">Boards remain available in the library when they are added here.</p>
           </div>
-          <p v-if="status === 'pending'" class="board-type-summary" role="status">Loading boards…</p>
-          <p v-else-if="error" class="board-type-summary error" role="alert">Unable to load boards.</p>
+          <p v-if="error || boardsError" class="board-type-summary error" role="alert">Unable to load boards.</p>
           <ol v-else-if="selectedBoards.length" class="portfolio-board-list">
             <li v-for="(board, index) in selectedBoards" :key="board.id" class="portfolio-board-row">
               <NuxtLink class="portfolio-board-summary" :to="{ path: '/library', query: { board: board.id } }">
@@ -168,7 +178,7 @@ onActivated(async () => {
           </div>
         </section>
 
-        <section v-else-if="!regularBoards.length && status !== 'pending'" class="filter-option-group" aria-labelledby="portfolio-no-boards-title">
+        <section v-else-if="!regularBoards.length" class="filter-option-group" aria-labelledby="portfolio-no-boards-title">
           <h2 id="portfolio-no-boards-title" class="filter-option-label">No boards available</h2>
           <p class="board-type-summary">Create and arrange a board in the library, then add it here.</p>
           <NuxtLink class="panel-secondary-action" to="/library">Go to library</NuxtLink>

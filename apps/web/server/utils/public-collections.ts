@@ -64,7 +64,7 @@ export const boardPreviewForCollection = async (collection: {
   purpose: 'showcase' | 'review' | 'portfolio' | 'case'
   mode: 'dynamic' | 'static'
   filters: PublicCollectionFilters
-}) => {
+}, options: { includePreviews?: boolean } = {}) => {
   let ids: string[]
   if (collection.mode === 'dynamic') {
     ids = await applyDynamicBoardOrder(collection.id, await matchingApprovedAssetIds(collection.organization_id, collection.filters))
@@ -75,6 +75,7 @@ export const boardPreviewForCollection = async (collection: {
     ids = data.map((item: { asset_id: string }) => item.asset_id)
   }
   if (!ids.length) return { itemCount: 0, assetIds: [], previewAssets: [] }
+  if (options.includePreviews === false) return { itemCount: ids.length, assetIds: ids, previewAssets: [] }
 
   const previewIds = ids.slice(0, 4)
   let query = useSupabaseAdmin().from('assets')

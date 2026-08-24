@@ -853,15 +853,18 @@ onBeforeUnmount(() => {
             <template #actions><button class="clear-filters-button" type="button" @click="clearFilters">Clear
                 filters</button><button v-if="canShare" class="filter-create-board" type="button"
                 @click="openBoardCreator(true)">Create board</button></template>
-            <div v-if="submitters.length" class="submitter-stack" role="group" aria-label="Filter by submitter"><button
-                v-for="submitter in visibleSubmitters" :key="submitter.id" class="submitter-avatar" type="button"
-                :aria-label="`Filter by ${submitterName(submitter)}`" :aria-pressed="uploadedBys.includes(submitter.id)"
-                :title="submitterName(submitter)" @click="toggleSubmitter(submitter.id)"><img
-                  v-if="submitter.avatar_url" :src="submitter.avatar_url" alt=""><span v-else aria-hidden="true">{{
-                    submitterInitial(submitter)
-                  }}</span></button><span v-if="submitters.length > visibleSubmitters.length" class="submitter-more"
-                :title="`${submitters.length - visibleSubmitters.length} more submitters`">+{{
-                  submitters.length -visibleSubmitters.length }}</span></div>
+            <section v-if="submitters.length" class="filter-option-group submitter-filter-group">
+              <h3 id="asset-filter-submitters">Submitters</h3>
+              <div class="submitter-stack" role="group" aria-labelledby="asset-filter-submitters"><button
+                  v-for="submitter in visibleSubmitters" :key="submitter.id" class="submitter-avatar" type="button"
+                  :aria-label="`Filter by ${submitterName(submitter)}`" :aria-pressed="uploadedBys.includes(submitter.id)"
+                  :title="submitterName(submitter)" @click="toggleSubmitter(submitter.id)"><img
+                    v-if="submitter.avatar_url" :src="submitter.avatar_url" alt=""><span v-else aria-hidden="true">{{
+                      submitterInitial(submitter)
+                    }}</span></button><span v-if="submitters.length > visibleSubmitters.length" class="submitter-more"
+                  :title="`${submitters.length - visibleSubmitters.length} more submitters`">+{{
+                    submitters.length -visibleSubmitters.length }}</span></div>
+            </section>
           </AssetFilterControls>
           <button class="filter-panel-toggle is-expanded" type="button" aria-label="Hide filters" aria-expanded="true"
             @click="closeFilters">
@@ -870,26 +873,26 @@ onBeforeUnmount(() => {
         </SelectionPanel>
         <SelectionPanel
           :visible="compactFiltersVisible && !filtersExpanded && !viewExpanded && !videoExpanded && !boardSettingsExpanded && !boardCreatorExpanded"
-          label="Asset filters" :wide="searchExpanded" bare raised>
-          <Transition name="compact-control">
-            <div v-if="!searchExpanded" class="mobile-control-blur"><button class="filter-panel-toggle"
+          label="Asset filters" bare raised>
+          <div class="mobile-control-blur compact-search-placeholder"
+            :class="{ 'is-search-hidden': searchExpanded }" :aria-hidden="searchExpanded || undefined"
+            :inert="searchExpanded || undefined"><button class="filter-panel-toggle"
                 :class="{ 'has-filter-count': activeFilterCount }" type="button" aria-label="Show filters"
                 aria-expanded="false" @click="openFilters"><span>Filters</span><span v-if="activeFilterCount"
                   class="filter-count">{{
                   activeFilterCount }}</span></button></div>
-          </Transition>
-          <Transition name="compact-control">
-            <div v-if="!searchExpanded" class="mobile-control-blur"><button class="filter-panel-toggle" type="button"
-                aria-label="Change library view" :aria-expanded="viewExpanded" @click="openView">View</button></div>
-          </Transition>
-          <Transition name="compact-control">
-            <div v-if="hasFilters && !searchExpanded" class="mobile-control-blur"><button
+          <div class="mobile-control-blur compact-search-placeholder"
+            :class="{ 'is-search-hidden': searchExpanded }" :aria-hidden="searchExpanded || undefined"
+            :inert="searchExpanded || undefined"><button class="filter-panel-toggle" type="button"
+              aria-label="Change library view" :aria-expanded="viewExpanded" @click="openView">View</button></div>
+          <div v-if="hasFilters || searchExpanded" class="mobile-control-blur compact-search-placeholder"
+            :class="{ 'is-search-hidden': searchExpanded }" :aria-hidden="searchExpanded || undefined"
+            :inert="searchExpanded || undefined"><button
                 class="mobile-filter-search is-expanded filter-clear-compact" type="button" aria-label="Clear filters"
                 title="Clear filters" @click="clearFilters"><span class="search-control-icon search-control-icon--close"
                   aria-hidden="true">
                   <Xmark :size="20" :stroke-width="2" />
                 </span></button></div>
-          </Transition>
           <Transition name="filter-controls">
             <form v-if="searchExpanded" class="mobile-search-form" role="search" @submit.prevent><label
                 class="search-field"><span class="sr-only">Search assets</span><input v-model="search" type="search"
@@ -1716,10 +1719,19 @@ button {
 }
 
 .mobile-search-form {
-  width: 18rem;
+  position: absolute;
+  z-index: 1;
+  right: calc(var(--filter-control-height-mobile) + var(--filter-panel-control-gap));
+  left: 0;
+  width: auto;
   min-height: 44px;
   display: flex;
   align-items: center
+}
+
+.compact-search-placeholder.is-search-hidden {
+  visibility: hidden;
+  pointer-events: none
 }
 
 .mobile-search-form label {
@@ -1770,35 +1782,7 @@ button {
 }
 
 .mobile-search-form.filter-controls-leave-active {
-  position: absolute;
-  right: calc(var(--filter-control-height-mobile) + var(--filter-panel-control-gap));
   transition-duration: 140ms
-}
-
-.compact-control-leave-active {
-  position: absolute;
-  right: calc(var(--filter-control-height-mobile) + var(--filter-panel-control-gap));
-  transition-property: translate;
-  transition-duration: 140ms;
-  transition-timing-function: cubic-bezier(.2, 0, 0, 1)
-}
-
-.compact-control-leave-active:has(.filter-clear-compact) {
-  right: calc(var(--filter-control-height-mobile)*2 + var(--filter-panel-control-gap)*2)
-}
-
-.compact-control-leave-to {
-  translate: 4px 0
-}
-
-.compact-control-enter-active {
-  transition-property: translate;
-  transition-duration: 180ms;
-  transition-timing-function: cubic-bezier(.2, 0, 0, 1)
-}
-
-.compact-control-enter-from {
-  translate: 4px 0
 }
 
 .preview {
@@ -2099,7 +2083,11 @@ button {
     min-height: 44px
   }
 
-  .mobile-search-form,
+  .mobile-search-form {
+    width: auto;
+    height: 44px
+  }
+
   .mobile-search-form label {
     width: 100%;
     height: 44px
