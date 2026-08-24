@@ -11,4 +11,4 @@ export type UiMessage =
   | { type: 'save-state'; value: unknown }
   | { type: 'save-session'; token: string | null }
   | { type: 'open-external'; url: string }
-  | { type: 'resize'; height: number }
+  | { type: 'resize'; width: number; height: number }

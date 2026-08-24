@@ -1,6 +1,6 @@
 import type { ControllerMessage, ExportSettings as PluginExportSettings, SelectedFrame, UiMessage } from './messages'
 
-figma.showUI(__html__, { width: 420, height: 680, themeColors: true })
+const run = async () => {
 
 type ExportableNode = FrameNode | ComponentNode | InstanceNode
 
@@ -68,13 +68,29 @@ const postSelection = async () => {
   figma.ui.postMessage(message)
 }
 
+const preferences = await figma.clientStorage.getAsync('contentLibraryPreferences') as { layout?: unknown } | null
+const sessionToken = await figma.clientStorage.getAsync('contentLibrarySession')
+const startsAsWidget = preferences?.layout === 'widget' && Boolean(sessionToken)
+const selectionCount = selectedNodes().length
+const widgetHeight = selectionCount > 0 ? 110 + (selectionCount - 1) * 57 : 231
+const compactHeight = !sessionToken ? 281 : selectionCount === 0 ? 300 : 460
+figma.showUI(__html__, {
+  width: startsAsWidget ? 260 : 320,
+  height: startsAsWidget ? widgetHeight : compactHeight,
+  themeColors: true
+})
+
 figma.on('selectionchange', () => { void postSelection() })
 void postSelection()
 
 figma.ui.onmessage = async (message: UiMessage) => {
   if (message.type === 'refresh-selection') return postSelection()
   if (message.type === 'open-external') return figma.openExternal(message.url)
-  if (message.type === 'resize') return figma.ui.resize(420, Math.max(520, Math.min(800, message.height)))
+  if (message.type === 'resize') {
+    const width = Math.max(260, Math.min(320, message.width))
+    const minHeight = width <= 260 ? 120 : 240
+    return figma.ui.resize(width, Math.max(minHeight, Math.min(800, message.height)))
+  }
   if (message.type === 'load-state') return figma.ui.postMessage({
     type: 'stored-state',
     value: await figma.clientStorage.getAsync('contentLibraryPreferences'),
@@ -97,3 +113,7 @@ figma.ui.onmessage = async (message: UiMessage) => {
     }
   }
 }
+
+}
+
+void run()

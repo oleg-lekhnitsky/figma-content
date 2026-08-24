@@ -21,6 +21,7 @@ onBeforeUnmount(() => {
 
 <template>
   <NuxtRouteAnnouncer />
+  <PullToRefresh />
   <div v-if="splashVisible" class="app-splash" :class="{ 'app-splash--leaving': splashLeaving }" role="status" aria-label="Specials">
     <span class="app-splash-word" aria-hidden="true"><span v-for="(letter, index) in splashLetters" :key="index" class="app-splash-letter" :style="{ '--letter-stagger': `${120 + index * 35}ms` }">{{ letter }}</span></span>
   </div>
