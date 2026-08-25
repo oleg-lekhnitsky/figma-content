@@ -383,7 +383,7 @@ const viewStyle = computed(() => {
   if (!view) return undefined
   return boardViewStyle(view)
 })
-watch(() => [props.assets.map(asset => asset.id).join(','), props.rowFlow], async () => {
+watch([() => props.assets, () => props.rowFlow], async () => {
   if (props.hidden || layoutLocked) return
   if (!draggedId.value) renderedAssets.value = [...props.assets]
   await nextTick()

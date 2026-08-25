@@ -116,11 +116,12 @@ const query = computed(() => ({ search: search.value, ...(status.value ? { statu
 const { data, status: loadStatus, error, refresh } = await useLazyFetch<AssetList>('/api/assets', {
   query,
   watch: [query],
+  cache: false,
   immediate: !selectedBoardId.value
 })
-const { data: projectData, refresh: refreshProjects } = await useLazyFetch<{ data: { projects: Project[] } }>('/api/projects')
-const { data: tagData, refresh: refreshTags } = await useLazyFetch<{ data: { tags: Tag[] } }>('/api/tags')
-const { data: boardData, refresh: refreshBoards } = await useLazyFetch<BoardList>('/api/shares')
+const { data: projectData, refresh: refreshProjects } = await useLazyFetch<{ data: { projects: Project[] } }>('/api/projects', { cache: false })
+const { data: tagData, refresh: refreshTags } = await useLazyFetch<{ data: { tags: Tag[] } }>('/api/tags', { cache: false })
+const { data: boardData, refresh: refreshBoards } = await useLazyFetch<BoardList>('/api/shares', { cache: false })
 const boardCreator = ref<{ openCreate: () => Promise<void>; openCreateFromCurrentView: () => Promise<void> }>()
 const handleBoardCreated = async (boardId: string) => {
   await refreshBoards()
@@ -316,9 +317,11 @@ const { data: selectedBoardData, status: selectedBoardStatus, error: selectedBoa
   return { boardId, assets: response.data.assets }
 }, { watch: [selectedBoardId] })
 let forceAssetMediaReload = false
+let assetMediaRefreshKey = ''
 const refreshLibraryData = async () => {
   page.value = 1
   forceAssetMediaReload = true
+  assetMediaRefreshKey = Date.now().toString(36)
   try {
     await nextTick()
     await Promise.all([refresh(), refreshProjects(), refreshTags(), refreshBoards()])
@@ -613,7 +616,24 @@ const mediaResourceKey = (value: string | null | undefined) => {
 const preserveMountedPreview = (previous: string | null | undefined, incoming: string | null | undefined) => (
   previous && incoming && mediaResourceKey(previous) === mediaResourceKey(incoming) ? previous : incoming
 )
-const reconcileAssetMedia = (incoming: AssetCard, previous?: AssetCard): AssetCard => previous && !forceAssetMediaReload ? {
+const refreshedMediaUrl = (value: string | null | undefined) => {
+  if (!value || !assetMediaRefreshKey) return value
+  try {
+    const url = new URL(value, 'http://local')
+    if (url.origin !== 'http://local' || !url.pathname.startsWith('/api/assets/')) return value
+    url.searchParams.set('_refresh', assetMediaRefreshKey)
+    return `${url.pathname}${url.search}${url.hash}`
+  } catch {
+    return value
+  }
+}
+const forceReloadAssetMedia = (asset: AssetCard): AssetCard => ({
+  ...asset,
+  previewUrl: refreshedMediaUrl(asset.previewUrl) ?? asset.previewUrl,
+  preview2xUrl: refreshedMediaUrl(asset.preview2xUrl),
+  originalUrl: refreshedMediaUrl(asset.originalUrl)
+})
+const reconcileAssetMedia = (incoming: AssetCard, previous?: AssetCard): AssetCard => forceAssetMediaReload ? forceReloadAssetMedia(incoming) : previous ? {
   ...incoming,
   previewUrl: preserveMountedPreview(previous.previewUrl, incoming.previewUrl) ?? incoming.previewUrl,
   preview2xUrl: preserveMountedPreview(previous.preview2xUrl, incoming.preview2xUrl)
