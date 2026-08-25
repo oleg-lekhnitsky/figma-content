@@ -13,6 +13,8 @@ const overlayContent = ref<HTMLElement>()
 const assetVisual = ref<HTMLElement>()
 const assetTitleInput = ref<HTMLTextAreaElement>()
 const moreOpen = ref(false)
+const deleteDialogOpen = ref(false)
+const deleting = ref(false)
 const { data, error, refresh } = await useLazyFetch<{ data: { asset: AssetDetail } }>(() => `/api/assets/${props.assetId}`)
 const { data: previewData, execute: loadFullPreview } = await useLazyFetch<{ data: { id: string; url: string } }>(() => `/api/assets/${props.assetId}/preview`, { immediate: false })
 const { data: session } = await useLazyFetch<SessionResponse>('/api/auth/session')
@@ -246,7 +248,19 @@ const saveDetails = async () => {
   } finally { saving.value = false }
 }
 const download = async () => { if (!asset.value) return; downloading.value = true; try { const response = await $fetch<{ data: { url: string } }>(`/api/assets/${props.assetId}/download-url`, { method: 'POST' }); window.location.assign(response.data.url) } catch { actionError.value = 'Unable to prepare the download.' } finally { downloading.value = false } }
-const remove = async () => { if (!confirm('Permanently delete this asset and every version?')) return; try { await $fetch(`/api/assets/${props.assetId}`, { method: 'DELETE' }); emit('deleted', props.assetId); close() } catch { actionError.value = 'Unable to delete this asset.' } }
+const requestRemove = () => { moreOpen.value = false; actionError.value = ''; deleteDialogOpen.value = true }
+const remove = async () => {
+  if (deleting.value) return
+  deleting.value = true
+  actionError.value = ''
+  try {
+    await $fetch(`/api/assets/${props.assetId}`, { method: 'DELETE' })
+    deleteDialogOpen.value = false
+    emit('deleted', props.assetId)
+    close()
+  } catch { actionError.value = 'Unable to delete this asset.' }
+  finally { deleting.value = false }
+}
 const addToBoard = async (targetBoardId = boardId.value) => {
   if (!targetBoardId || addingBoardId.value) return
   actionError.value = ''
@@ -496,7 +510,7 @@ watch(() => props.assetId, id => {
                 <button role="menuitem" type="button" :disabled="downloading" :aria-disabled="downloading" @click="download()">{{ downloading ? 'Preparing…' : 'Download' }}</button>
                 <button v-if="canEdit" role="menuitem" type="button" @click="startEditing()">Edit details</button>
                 <button v-if="canEdit && asset.status !== 'archived'" role="menuitem" type="button" @click="patchAsset({ status: 'archived' })">Archive</button>
-                <button v-if="role === 'admin'" role="menuitem" type="button" @click="remove()">Delete</button>
+                <button v-if="role === 'admin'" role="menuitem" type="button" @click="requestRemove">Delete</button>
               </template>
             </AppDropdownMenu>
           </div>
@@ -579,6 +593,11 @@ watch(() => props.assetId, id => {
         </footer>
       </section>
     </dialog>
+    <AppDialog
+      v-model:open="deleteDialogOpen" :title="`Delete “${asset?.title ?? 'asset'}”?`"
+      description="This permanently deletes the asset and every saved version. This action cannot be undone."
+      :confirm-label="deleting ? 'Deleting asset…' : 'Delete asset'" :busy="deleting" :error="actionError"
+      @confirm="remove" />
   </Teleport>
 </template>
 

@@ -41,7 +41,7 @@ const setArchived = async (project:Project) => {
   <div class="admin-shell projects-shell">
     <header class="toolbar">
       <WorkspaceSwitcher class="identity" />
-      <nav aria-label="Administration"><NuxtLink v-if="role==='admin'" to="/admin/users">Users</NuxtLink><NuxtLink to="/admin/projects" aria-current="page">Projects</NuxtLink><NuxtLink v-if="role==='admin'" to="/admin/audit-log">Audit log</NuxtLink></nav>
+      <nav aria-label="Administration"><NuxtLink v-if="role==='admin'" to="/library?workspaceSettings=1">Workspace</NuxtLink><NuxtLink to="/admin/projects" aria-current="page">Projects</NuxtLink><NuxtLink v-if="role==='admin'" to="/admin/audit-log">Audit log</NuxtLink></nav>
       <span class="count">{{ projects.filter(project=>!project.archived_at).length }} active</span>
       <NuxtLink class="close" to="/library" aria-label="Close administration"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19" /></svg></NuxtLink>
     </header>

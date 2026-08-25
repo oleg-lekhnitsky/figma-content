@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Gear2, Plus, Search, Xmark } from 'reicon-vue'
 import type { BoardLayout, BoardViewSettings } from '@content-library/shared'
+import BrandWordmark from '~/components/BrandWordmark.vue'
 
 definePageMeta({ middleware: 'auth' })
 const route = useRoute()
@@ -17,7 +18,7 @@ interface Submitter { id: string; figma_handle: string | null; avatar_url: strin
 interface Project { id: string; name: string; slug: string }
 interface Tag { id: string; name: string; slug: string }
 interface AssetList { data: { assets: AssetCard[]; submitters: Submitter[]; total: number; page: number; pageSize: number } }
-interface SessionResponse { data: { authenticated: boolean; user?: { role: string; email?: string; figmaHandle?: string | null; avatarUrl?: string | null; workspace?: { name: string } | null } } }
+interface SessionResponse { data: { authenticated: boolean; user?: { role: string; email?: string; figmaHandle?: string | null; avatarUrl?: string | null; hasPassword?: boolean; workspace?: { name: string } | null } } }
 interface BoardSummary {
   id: string
   slug: string
@@ -141,6 +142,8 @@ const boardRenameBusy = ref(false)
 const boardRenameFeedback = reactive({ text: '', error: false })
 const boardSettingsBusy = ref(false)
 const boardSettingsFeedback = reactive({ text: '', error: false })
+const deleteBoardDialogOpen = ref(false)
+const removeArrangeDialogOpen = ref(false)
 const dismissBoardSettingsFeedback = () => {
   boardSettingsFeedback.text = ''
   boardSettingsFeedback.error = false
@@ -273,10 +276,10 @@ const removeSelectedBoardMember = async (userId: string) => {
 const deleteSelectedBoard = async () => {
   const board = selectedBoard.value
   if (!board || !canManageSelectedBoardMembers.value || boardSettingsBusy.value) return
-  if (!window.confirm(`Delete “${board.title}”? This permanently removes its access and public link.`)) return
   boardSettingsBusy.value = true
   try {
     await $fetch(`/api/shares/${board.id}`, { method: 'DELETE' })
+    deleteBoardDialogOpen.value = false
     boardSettingsExpanded.value = false
     await replaceLibraryQuery({ board: undefined, asset: undefined })
     await refreshBoards()
@@ -430,8 +433,6 @@ const removeArrangeSelection = async () => {
   const board = selectedStaticBoard.value
   const selectedIds = arrangeSelectedIds.value.filter(id => board?.assetIds.includes(id))
   if (!board || !selectedIds.length || arrangeRemoving.value) return
-  const subject = `${selectedIds.length} selected ${selectedIds.length === 1 ? 'item' : 'items'}`
-  if (!window.confirm(`Remove ${subject} from ${board.title}?`)) return
   arrangeRemoving.value = true
   clearTimeout(arrangeSaveTimer)
   arrangeSaveTimer = undefined
@@ -443,6 +444,7 @@ const removeArrangeSelection = async () => {
     const nextAssets = boardAssets.value.filter(asset => !selectedSet.has(asset.id))
     board.assetIds = board.assetIds.filter(id => !selectedSet.has(id))
     if (selectedBoardData.value?.boardId === board.id) selectedBoardData.value.assets = nextAssets
+    removeArrangeDialogOpen.value = false
     arrangeSelectedIds.value = []
     if (nextAssets.length) await $fetch(`/api/shares/${board.id}/order`, { method: 'PATCH', body: { assetIds: nextAssets.map(asset => asset.id) } })
     await refreshBoards()
@@ -645,8 +647,6 @@ const resultMessage = computed(() => {
   return loadStatus.value === 'success' ? `${total.value} ${total.value === 1 ? 'asset' : 'assets'}` : ''
 })
 const { data: session } = await useFetch<SessionResponse>('/api/auth/session')
-const accountName = computed(() => session.value?.data.user?.figmaHandle || session.value?.data.user?.email || 'Account')
-const accountInitial = computed(() => accountName.value.trim().charAt(0).toUpperCase() || '?')
 const isAdmin = computed(() => session.value?.data?.user?.role === 'admin')
 const canManageProjects = computed(() => ['editor', 'admin'].includes(session.value?.data?.user?.role ?? ''))
 const canApprove = computed(() => ['editor', 'admin'].includes(session.value?.data?.user?.role ?? ''))
@@ -795,12 +795,11 @@ onBeforeUnmount(() => {
     <main id="main-content">
       <header class="index-toolbar">
         <div class="header-identity">
-          <NuxtLink class="account-link" to="/account" :aria-label="`Open account for ${accountName}`"
-            :title="accountName"><img v-if="session?.data.user?.avatarUrl" :src="session.data.user.avatarUrl"
-              alt=""><span v-else aria-hidden="true">{{ accountInitial }}</span></NuxtLink>
           <WorkspaceSwitcher class="brand" />
         </div>
-        <img class="library-wordmark" src="/ddw-wordmark.svg" alt="designdep.work">
+        <div class="library-wordmark" aria-hidden="true">
+          <BrandWordmark />
+        </div>
         <p class="count sr-only" role="status" aria-live="polite">{{ resultMessage }}</p>
         <nav aria-label="Library controls">
           <NuxtLink class="button-secondary" to="/portfolio">Portfolio</NuxtLink><button v-if="canShare"
@@ -810,8 +809,10 @@ onBeforeUnmount(() => {
           </button>
           <ShareCollection ref="boardCreator" hide-trigger :current-filters="currentBoardFilters"
             @created="handleBoardCreated" @open-change="boardCreatorExpanded = $event" />
-          <NuxtLink v-if="isAdmin" class="button-secondary" to="/admin/users">Admin</NuxtLink>
-          <NuxtLink v-else-if="canManageProjects" class="button-secondary" to="/admin/projects">Projects</NuxtLink>
+          <NuxtLink v-if="!isAdmin && canManageProjects" class="button-secondary" to="/admin/projects">Projects</NuxtLink>
+          <AccountMenu
+            v-if="session?.data.user" :email="session.data.user.email" :figma-handle="session.data.user.figmaHandle"
+            :avatar-url="session.data.user.avatarUrl" :role="session.data.user.role" :has-password="session.data.user.hasPassword" />
         </nav>
       </header>
 
@@ -856,7 +857,7 @@ onBeforeUnmount(() => {
           :members="boardMembers" :feedback="boardSettingsFeedback.text" :error="boardSettingsFeedback.error"
           @set-publication="setSelectedBoardPublication" @set-layout="setSelectedBoardLayout"
           @copy-link="copySelectedBoardLink" @save-member="saveSelectedBoardMember"
-          @remove-member="removeSelectedBoardMember" @delete-board="deleteSelectedBoard"
+          @remove-member="removeSelectedBoardMember" @delete-board="deleteBoardDialogOpen = true"
           @dismiss-feedback="dismissBoardSettingsFeedback" />
         <button class="filter-panel-toggle is-expanded" type="button" aria-label="Hide board settings"
           aria-expanded="true" @click="closeBoardSettings">
@@ -982,7 +983,7 @@ onBeforeUnmount(() => {
                 'Arrange' }}</button>
               <button v-if="arrangeExpanded && arrangeSelectedIds.length"
                 class="selected-board-action-button remove-selected-button" type="button" :disabled="arrangeRemoving"
-                @click="removeArrangeSelection">Remove {{ arrangeSelectedIds.length }}</button>
+                @click="removeArrangeDialogOpen = true">Remove {{ arrangeSelectedIds.length }}</button>
               <button class="button-secondary selected-board-action-button selected-board-settings-button"
                 type="button" aria-label="Board settings"
                 title="Board settings" :aria-expanded="boardSettingsExpanded" @click="openBoardSettings">
@@ -1037,6 +1038,17 @@ onBeforeUnmount(() => {
           assets</span>
       </div>
     </main>
+    <AppDialog
+      v-model:open="deleteBoardDialogOpen" :title="`Delete “${selectedBoard?.title ?? 'board'}”?`"
+      description="This permanently deletes the board, removes member access, and disables its public link. This action cannot be undone."
+      :confirm-label="boardSettingsBusy ? 'Deleting board…' : 'Delete board'" :busy="boardSettingsBusy"
+      :error="boardSettingsFeedback.error ? boardSettingsFeedback.text : ''" @confirm="deleteSelectedBoard" />
+    <AppDialog
+      v-model:open="removeArrangeDialogOpen"
+      :title="`Remove ${arrangeSelectedIds.length} ${arrangeSelectedIds.length === 1 ? 'item' : 'items'}?`"
+      :description="`Remove the selected ${arrangeSelectedIds.length === 1 ? 'item' : 'items'} from ${selectedBoard?.title ?? 'this board'}? The assets will remain in the library.`"
+      :confirm-label="arrangeRemoving ? 'Removing…' : 'Remove from board'" :busy="arrangeRemoving"
+      @confirm="removeArrangeSelection" />
     <AssetOverlay v-if="selectedAssetId" :asset-id="selectedAssetId" :asset-ids="displayedAssets.map(asset => asset.id)"
       :preview-url="selectedAssetPreviewUrl" :preview-urls="assetPreviewUrls" :mime-types="assetMimeTypes" @close="closeAsset"
       @deleted="handleAssetDeleted" @navigate="navigateAsset" @renamed="handleAssetRenamed" />
@@ -1080,8 +1092,14 @@ main {
   top: 50%;
   left: 50%;
   width: clamp(7rem, 8vw, 9rem);
-  height: auto;
   transform: translate(-50%, -50%)
+}
+
+.library-wordmark svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  color: #0f0f0f
 }
 
 .brand {
@@ -1359,7 +1377,7 @@ button {
 
 .board-tabs {
   display: flex;
-  gap: var(--space);
+  gap: calc(var(--space)*1.25);
   padding: 0 var(--space);
   overflow-x: auto;
   overscroll-behavior-x: none;
@@ -1648,11 +1666,12 @@ button {
 }
 
 .header-identity {
+  --identity-avatar-size: 36px;
   min-width: 0;
   min-height: var(--control-height);
   display: flex;
   align-items: center;
-  gap: calc(var(--space)/2)
+  gap: 0
 }
 
 .board-create-button {
@@ -1672,28 +1691,6 @@ button {
   fill: none;
   stroke: currentColor;
   stroke-width: 1.8
-}
-
-.account-link {
-  width: calc(var(--control-height) - var(--space)/2);
-  height: calc(var(--control-height) - var(--space)/2);
-  flex: 0 0 auto;
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-  border-radius: 50%;
-  background: var(--color-surface)
-}
-
-.account-link img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover
-}
-
-.account-link:hover {
-  opacity: 1
 }
 
 .mobile-filter-search.mobile-filter-search {

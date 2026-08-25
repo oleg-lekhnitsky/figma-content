@@ -1,48 +1,6 @@
 <script setup lang="ts">
 definePageMeta({ middleware: 'auth' })
-type Role = 'viewer'|'contributor'|'editor'|'admin'
-interface User { id:string; email:string|null; figma_handle:string|null; role:Role; is_active:boolean; last_login_at:string|null; has_password:boolean; must_change_password:boolean }
-interface SessionResponse { data: { authenticated:boolean; user?: { role:string; workspace?:{ name:string }|null } } }
-const { data: session } = await useFetch<SessionResponse>('/api/auth/session')
-if (session.value?.data?.user?.role !== 'admin') await navigateTo('/library')
-const { data, refresh } = await useFetch<{data:{users:User[]}}>('/api/admin/users')
-const email = ref(''); const temporaryPassword = ref(''); const role = ref<Role>('viewer'); const message = ref(''); const errorMessage = ref('')
-const invite = async () => { message.value=''; errorMessage.value=''; try { await $fetch('/api/admin/users',{method:'POST',body:{email:email.value,role:role.value,...(temporaryPassword.value?{temporaryPassword:temporaryPassword.value}:{})}}); email.value=''; temporaryPassword.value=''; await refresh(); message.value='User access saved.' } catch { errorMessage.value='Unable to save this user. Use a valid email and a temporary password with at least 12 characters.' } }
-const update = async (user:User, change:Partial<{role:Role;isActive:boolean}>) => { await $fetch(`/api/admin/users/${user.id}`,{method:'PATCH',body:change}); await refresh() }
-const revoke = async (user:User) => { await $fetch(`/api/admin/users/${user.id}/revoke-sessions`,{method:'POST'}); message.value=`Sessions revoked for ${user.email ?? user.figma_handle}.` }
+await navigateTo('/library?workspaceSettings=1', { replace: true })
 </script>
-<template>
-  <div class="admin-shell">
-    <header class="toolbar">
-      <WorkspaceSwitcher class="identity" />
-      <nav aria-label="Administration"><NuxtLink to="/admin/users" aria-current="page">Users</NuxtLink><NuxtLink to="/admin/projects">Projects</NuxtLink><NuxtLink to="/admin/audit-log">Audit log</NuxtLink></nav>
-      <span class="count">{{ data?.data.users.length ?? 0 }} approved</span>
-      <NuxtLink class="close" to="/library" aria-label="Close administration"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19" /></svg></NuxtLink>
-    </header>
-    <main>
-      <section class="intro"><p>Access management</p><h1>People with access<br>to the library.</h1></section>
-      <form class="invite" @submit.prevent="invite">
-        <span>Add or update someone</span>
-        <div class="invite-fields"><label><span>Email</span><input v-model="email" required type="email" name="email" autocomplete="off"></label><label><span>Temporary password</span><input v-model="temporaryPassword" type="password" name="temporaryPassword" autocomplete="new-password" minlength="12" maxlength="128"></label><label><span>Role</span><select v-model="role" name="role"><option>viewer</option><option>contributor</option><option>editor</option><option>admin</option></select></label><button class="button-secondary" type="submit">Save user</button></div>
-      </form>
-      <p class="message" role="status" aria-live="polite">{{ message }}</p>
-      <p v-if="errorMessage" class="message error-message" role="alert">{{ errorMessage }}</p>
-      <section class="people" aria-label="Approved users">
-        <div class="labels" aria-hidden="true"><span>Person</span><span>Role</span><span>Access</span><span>Sessions</span></div>
-        <article v-for="user in data?.data.users" :key="user.id" class="person">
-          <div class="person-name"><strong>{{ user.email ?? user.figma_handle }}</strong><span>{{ user.has_password ? (user.must_change_password ? 'Temporary password set' : 'Password sign-in active') : user.figma_handle ? `@${user.figma_handle}` : 'Figma sign-in only' }}</span><span>Last active {{ user.last_login_at ? new Date(user.last_login_at).toLocaleDateString() : 'never' }}</span></div>
-          <label><span class="sr-only">Role for {{ user.email }}</span><select class="text-control" :value="user.role" @change="update(user,{role:($event.target as HTMLSelectElement).value as Role})"><option>viewer</option><option>contributor</option><option>editor</option><option>admin</option></select></label>
-          <button class="text-action" :class="{muted:!user.is_active}" @click="update(user,{isActive:!user.is_active})">{{ user.is_active?'Active':'Disabled' }}</button>
-          <button class="button-secondary" @click="revoke(user)">Revoke all</button>
-        </article>
-      </section>
-    </main>
-  </div>
-</template>
-<style scoped>
-.admin-shell{--space:clamp(14px,1.25vw,24px);--ink:#111;--muted:rgb(17 17 17/.48);min-height:100vh;color:var(--ink);background:#f1f0ec;font-size:14px}.toolbar{position:sticky;z-index:3;top:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-items:start;gap:var(--space);padding:var(--space);background:rgb(241 240 236/.94);backdrop-filter:blur(14px)}.identity{font-weight:760;letter-spacing:-.025em;text-decoration:none}.toolbar nav{display:flex;gap:var(--space)}.toolbar nav a,.count{color:var(--muted);text-decoration:none}.toolbar nav [aria-current=page]{color:var(--ink)}.count{text-align:right}.close{width:44px;height:44px;margin-top:-10px;justify-self:end;display:grid;place-items:center;border-radius:50%;background:#e4e2dc;transition-property:scale,opacity;transition-duration:150ms}.close:hover{opacity:.65}.close:active{scale:.96}.close svg{width:22px;fill:none;stroke:currentColor;stroke-width:1.7}main{padding:clamp(4rem,9vw,9rem) var(--space) 6rem}.intro{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--space);margin-bottom:clamp(5rem,11vw,11rem)}.intro p{grid-column:1;margin:0;color:var(--muted)}h1{grid-column:2/5;margin:0;font-size:clamp(3.5rem,8.4vw,9rem);font-weight:600;letter-spacing:-.065em;line-height:.86}.invite{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--space);align-items:center;padding:var(--space) 0;border-top:1px solid rgb(17 17 17/.2);border-bottom:1px solid rgb(17 17 17/.2)}.invite>span{color:var(--muted)}input,select,button{font:inherit;color:inherit}.invite input,.invite select{width:100%;box-sizing:border-box;padding:0 0 6px;border:0;border-bottom:1px solid rgb(17 17 17/.22);border-radius:0;background:transparent}.invite button{justify-self:end;padding:0;border:0;background:transparent;font-weight:650;cursor:pointer}.message{min-height:1.25rem;margin:10px 0;color:var(--muted)}.people{margin-top:clamp(3rem,7vw,7rem)}.labels,.person{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:var(--space)}.labels{padding-bottom:10px;color:var(--muted);font-size:12px}.person{align-items:start;padding:14px 0;border-top:1px solid rgb(17 17 17/.18)}.person-name{display:grid}.person-name strong{font-weight:550}.person-name span{color:var(--muted);font-size:12px}.text-control,.text-action{width:auto;margin:0;padding:0;border:0;background:transparent;text-align:left;cursor:pointer}.text-control{appearance:none;background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);background-position:calc(100% - 7px) 8px,calc(100% - 3px) 8px;background-size:4px 4px;background-repeat:no-repeat;padding-right:16px}.text-action:hover,.invite button:hover,.toolbar a:hover{opacity:.55}.muted{color:var(--muted)}:is(a,button):focus-visible{outline:2px solid currentColor;outline-offset:3px}.sr-only{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0,0,0,0)}@media(max-width:720px){.toolbar{grid-template-columns:1fr auto}.toolbar nav{grid-row:2}.count{display:none}.close{grid-column:2;grid-row:1/3}.intro{grid-template-columns:1fr}.intro p,h1{grid-column:1}h1{font-size:clamp(3.2rem,16vw,6rem)}.invite{grid-template-columns:1fr}.invite button{justify-self:start}.labels{display:none}.person{grid-template-columns:1fr 1fr}.person-name{grid-column:1/-1;margin-bottom:8px}}@media(prefers-reduced-motion:reduce){.close{transition:none}.close:active{scale:1}}
-.admin-shell{--ink:var(--color-fg);--muted:var(--color-muted);background:var(--color-bg)}.toolbar{background:var(--color-bg)}.close{background:var(--color-surface)}
-.person>label,.text-action{min-height:44px;display:flex;align-items:flex-start}.person>label{cursor:pointer}.text-action{justify-content:flex-start;line-height:1.15}.person-name strong,.text-control,.text-action{padding-top:0;line-height:1.15}
-.invite{grid-template-columns:1.1fr 1.4fr 1.4fr 1fr auto}.invite label{display:grid;gap:6px}.invite label>span{color:var(--color-muted);font-size:12px}.invite input,.invite select{min-height:32px}.error-message{margin-top:-8px;color:#a20f0f}@media(max-width:900px){.invite{grid-template-columns:1fr 1fr}.invite>span{grid-column:1/-1}.invite button{justify-self:start}}@media(max-width:520px){.invite{grid-template-columns:1fr}}
-.intro,.invite,.labels,.person{grid-template-columns:var(--admin-columns)}.invite{border:0}.invite>span{align-self:start}.invite-fields{grid-column:2/5;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:end;gap:var(--space)}.invite-fields .button-secondary{grid-column:1/-1;justify-self:start;margin-top:4px}.person{align-items:center}.person>label{align-items:center}.person .text-action{align-items:center}@media(max-width:900px){.invite-fields{grid-column:1/-1;grid-template-columns:1fr 1fr}.invite-fields .button-secondary{justify-self:start}}@media(max-width:720px){.intro{grid-template-columns:1fr}.labels{display:none}.person{grid-template-columns:1fr 1fr}.person-name{grid-column:1/-1}.invite{grid-template-columns:1fr}}@media(max-width:520px){.invite-fields{grid-template-columns:1fr}}
-</style>
+
+<template><span /></template>

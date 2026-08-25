@@ -52,6 +52,7 @@
   --font-size-body-compact: .875rem;
   --font-size-label: .75rem;
   --font-size-caption: .6875rem;
+  --letter-spacing-caption: .01em;
   --font-size-control: .875rem;
   --font-family-ui:
     "ABC Diatype Cyrillic Trial", "Helvetica Now Display", "Helvetica Neue",
@@ -319,6 +320,8 @@ textarea {
 .workspace-switcher {
   min-width: 0;
 }
+
+
 .app-popover-content {
   position: fixed;
   z-index: 100;
@@ -436,6 +439,7 @@ textarea {
   color: color-mix(in srgb, var(--material-tinted-fg) 64%, transparent);
   font-size: var(--font-size-caption);
   font-weight: 500;
+  letter-spacing: var(--letter-spacing-caption);
   text-transform: capitalize;
 }
 .workspace-popover button svg {

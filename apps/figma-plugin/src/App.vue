@@ -63,6 +63,37 @@ const reviewBoardLabel = (board: ReviewBoard) => board.review_month
   ? `${board.title} · ${new Intl.DateTimeFormat(undefined, { month: 'short', year: 'numeric' }).format(new Date(`${board.review_month}T12:00:00`))}`
   : board.title
 const post = (message: UiMessage) => parent.postMessage({ pluginMessage: message }, '*')
+const clearAccountAvatar = () => {
+  if (accountAvatarUrl.value) URL.revokeObjectURL(accountAvatarUrl.value)
+  accountAvatarUrl.value = ''
+}
+const clearSession = (message = '') => {
+  post({ type: 'save-session', token: null })
+  token.value = ''
+  clearAccountAvatar()
+  account.value = null
+  projects.value = []
+  availableTags.value = []
+  reviewBoards.value = []
+  reviewBoardId.value = ''
+  workspaces.value = []
+  workspaceId.value = ''
+  busy.value = false
+  for (const frame of frames.value) {
+    if (frame.progress === 'done') continue
+    frame.progress = 'idle'
+    frame.error = undefined
+  }
+  authState.value = 'signed-out'
+  globalError.value = message
+}
+const authenticatedFetch = async (input: string, init: RequestInit = {}) => {
+  const headers = new Headers(init.headers)
+  headers.set('Authorization', `Bearer ${token.value}`)
+  const response = await fetch(input, { ...init, headers })
+  if (response.status === 401) clearSession('Your session expired. Sign in again.')
+  return response
+}
 const savePreferences = () => post({ type: 'save-state', value: { layout: layoutMode.value, settings: { ...settings }, shared: { tags: shared.tags, projectId: shared.projectId, language: shared.language, contentType: shared.contentType } } })
 const resizePlugin = async () => {
   await nextTick()
@@ -77,7 +108,7 @@ const resolveExistingFrames = async () => {
   const sequence = ++resolveSequence
   const refs = frames.value.flatMap(frame => frame.fileKey ? [{ fileKey: frame.fileKey, nodeId: frame.id }] : [])
   if (!refs.length) return
-  const response = await fetch(`${appUrl}/api/plugin/assets/resolve`, {
+  const response = await authenticatedFetch(`${appUrl}/api/plugin/assets/resolve`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token.value}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ refs })
@@ -99,7 +130,7 @@ const createRequestId = () => {
 }
 
 const loadProjects = async () => {
-  const response = await fetch(`${appUrl}/api/projects`, { headers: { Authorization: `Bearer ${token.value}` } })
+  const response = await authenticatedFetch(`${appUrl}/api/projects`)
   if (!response.ok) throw new Error('Unable to load projects.')
   const payload = await response.json() as { data: { projects: Project[] } }
   projects.value = payload.data.projects
@@ -111,7 +142,7 @@ const createProject = async () => {
   if(existing){shared.projectId=existing.id;projectDraft.value='';announcement.value=`${existing.name} selected.`;return}
   projectBusy.value=true;globalError.value=''
   try {
-    const response=await fetch(`${appUrl}/api/projects`,{method:'POST',headers:{Authorization:`Bearer ${token.value}`,'Content-Type':'application/json'},body:JSON.stringify({name})})
+    const response=await authenticatedFetch(`${appUrl}/api/projects`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})})
     const payload=await response.json().catch(()=>null) as {data?:{project?:Project};error?:{message?:string}}|null
     if(!response.ok||!payload?.data?.project)throw new Error(payload?.error?.message||'Unable to create project.')
     projects.value.push(payload.data.project);projects.value.sort((a,b)=>a.name.localeCompare(b.name));shared.projectId=payload.data.project.id;projectDraft.value='';announcement.value=`${payload.data.project.name} created and selected.`
@@ -119,7 +150,7 @@ const createProject = async () => {
   finally{projectBusy.value=false}
 }
 const loadTags = async () => {
-  const response = await fetch(`${appUrl}/api/tags`, { headers: { Authorization: `Bearer ${token.value}` } })
+  const response = await authenticatedFetch(`${appUrl}/api/tags`)
   if (!response.ok) throw new Error('Unable to load tags.')
   const payload = await response.json() as { data: { tags: Tag[] } }
   availableTags.value = payload.data.tags
@@ -134,7 +165,7 @@ const createTag = async () => {
   if (existing) { selectTag(existing.name); tagDraft.value = ''; return }
   tagBusy.value = true; globalError.value = ''
   try {
-    const response = await fetch(`${appUrl}/api/tags`, { method:'POST', headers:{ Authorization:`Bearer ${token.value}`, 'Content-Type':'application/json' }, body:JSON.stringify({ name }) })
+    const response = await authenticatedFetch(`${appUrl}/api/tags`, { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ name }) })
     const payload = await response.json().catch(() => null) as { data?:{tag?:Tag}; error?:{message?:string} } | null
     if (!response.ok || !payload?.data?.tag) throw new Error(payload?.error?.message || 'Unable to add tag.')
     if (!availableTags.value.some(tag => tag.id === payload.data!.tag!.id)) availableTags.value.push(payload.data.tag)
@@ -148,35 +179,31 @@ const handleTagKeydown = (event: KeyboardEvent) => {
 }
 
 const loadWorkspaces = async () => {
-  const response = await fetch(`${appUrl}/api/plugin/workspaces`, { headers: { Authorization: `Bearer ${token.value}` } })
+  const response = await authenticatedFetch(`${appUrl}/api/plugin/workspaces`)
   if (!response.ok) throw new Error('Unable to load workspaces.')
   const payload = await response.json() as { data: { currentId: string; workspaces: Workspace[] } }
   workspaces.value = payload.data.workspaces
   workspaceId.value = payload.data.currentId
-}
-const clearAccountAvatar = () => {
-  if (accountAvatarUrl.value) URL.revokeObjectURL(accountAvatarUrl.value)
-  accountAvatarUrl.value = ''
 }
 const loadAccountAvatar = async () => {
   clearAccountAvatar()
   avatarFailed.value = false
   if (!account.value?.avatarUrl) return
   try {
-    const response = await fetch(`${appUrl}/api/plugin/avatar`, { headers: { Authorization: `Bearer ${token.value}` } })
+    const response = await authenticatedFetch(`${appUrl}/api/plugin/avatar`)
     if (!response.ok) throw new Error()
     accountAvatarUrl.value = URL.createObjectURL(await response.blob())
   } catch { avatarFailed.value = true }
 }
 const loadSession = async () => {
-  const response = await fetch(`${appUrl}/api/plugin/session`, { headers: { Authorization: `Bearer ${token.value}` } })
+  const response = await authenticatedFetch(`${appUrl}/api/plugin/session`)
   if (!response.ok) throw new Error('Unable to load your account.')
   const payload = await response.json() as { data: { user: PluginAccount } }
   account.value = payload.data.user
   await loadAccountAvatar()
 }
 const loadReviewBoards = async () => {
-  const response = await fetch(`${appUrl}/api/plugin/boards`, { headers: { Authorization: `Bearer ${token.value}` } })
+  const response = await authenticatedFetch(`${appUrl}/api/plugin/boards`)
   if (!response.ok) throw new Error('Unable to load monthly review boards.')
   const payload = await response.json() as { data: { boards: ReviewBoard[] } }
   reviewBoards.value = payload.data.boards
@@ -191,7 +218,7 @@ const switchWorkspace = async () => {
   if (!workspaceId.value) return
   workspaceBusy.value = true; globalError.value = ''
   try {
-    const response = await fetch(`${appUrl}/api/plugin/workspaces`, { method: 'POST', headers: { Authorization: `Bearer ${token.value}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ workspaceId: workspaceId.value }) })
+    const response = await authenticatedFetch(`${appUrl}/api/plugin/workspaces`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspaceId: workspaceId.value }) })
     const payload = await response.json().catch(() => null) as { data?: { token?: string }; error?: { message?: string } } | null
     if (!response.ok || !payload?.data?.token) throw new Error(payload?.error?.message || 'Unable to switch workspace.')
     token.value = payload.data.token; post({ type: 'save-session', token: token.value }); shared.projectId = ''; shared.tags = ''; reviewBoardId.value = ''; projects.value = []; availableTags.value = []; reviewBoards.value = []; await loadWorkspace(); announcement.value = 'Workspace changed.'
@@ -202,7 +229,7 @@ const switchWorkspace = async () => {
 const checkSession = async () => {
   if (!token.value) return authState.value = 'signed-out'
   try { await loadSession(); authState.value = 'signed-in'; await Promise.all([loadWorkspace(), resolveExistingFrames()]) }
-  catch { post({ type: 'save-session', token: null }); token.value = ''; account.value = null; authState.value = 'signed-out' }
+  catch { if (authState.value !== 'signed-out') clearSession() }
 }
 const openLogin = () => post({ type: 'open-external', url: `${appUrl}/oauth/figma/start?flow=plugin` })
 const exchangeCode = async () => {
@@ -224,7 +251,7 @@ const passwordLogin = async () => {
   } catch (error) { globalError.value = error instanceof Error ? error.message : 'Unable to sign in. Check your email and password.' }
   finally { authBusy.value = false }
 }
-const signOut = () => { post({ type: 'save-session', token: null }); token.value = ''; clearAccountAvatar(); account.value = null; projects.value = []; availableTags.value = []; reviewBoards.value = []; reviewBoardId.value = ''; workspaces.value = []; workspaceId.value = ''; authState.value = 'signed-out' }
+const signOut = () => clearSession()
 
 const reencodeJpg = async (bytes: Uint8Array, quality: number) => {
   const bitmap = await createImageBitmap(new Blob([new Uint8Array(bytes)], { type: 'image/png' }))
@@ -245,7 +272,7 @@ const upload = async () => {
       if (settings.format === 'MP4') {
         if (!frame.videoHash) throw new Error('No embedded video was found in this frame.')
         frame.progress = 'uploading'; announcement.value = `Importing ${frame.title}.`
-        response = await fetch(`${appUrl}/api/plugin/figma-video`, {
+        response = await authenticatedFetch(`${appUrl}/api/plugin/figma-video`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${token.value}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ fileKey: frame.fileKey, videoHash: frame.videoHash, metadata, assetId: frame.assetId && frame.existingAction === 'version' ? frame.assetId : null })
@@ -259,14 +286,14 @@ const upload = async () => {
         const extension = settings.format === 'JPG' ? 'jpg' : 'png'
         const form = new FormData(); form.append('file', blob, `${frame.name}.${extension}`); form.append('metadata', JSON.stringify(metadata))
         const endpoint = frame.assetId && frame.existingAction === 'version' ? `/api/assets/${frame.assetId}/version` : '/api/assets'
-        response = await fetch(`${appUrl}${endpoint}`, { method: 'POST', headers: { Authorization: `Bearer ${token.value}` }, body: form })
+        response = await authenticatedFetch(`${appUrl}${endpoint}`, { method: 'POST', body: form })
       }
       if (!response.ok) { const body = await response.json().catch(() => null) as { data?: { error?: { message?: string } }; error?: { message?: string } } | null; throw new Error(body?.data?.error?.message || body?.error?.message || 'Upload failed.') }
       const payload = await response.json() as { data: { asset: { id: string } } }
       frame.assetId = payload.data.asset.id
       frame.existingAction = 'version'
       if (reviewBoardId.value) {
-        const submission = await fetch(`${appUrl}/api/plugin/boards/${reviewBoardId.value}/assets`, {
+        const submission = await authenticatedFetch(`${appUrl}/api/plugin/boards/${reviewBoardId.value}/assets`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${token.value}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ assetId: payload.data.asset.id })
@@ -277,7 +304,10 @@ const upload = async () => {
         }
       }
       frame.progress = 'done'; completed++
-    } catch (error) { frame.progress = 'error'; frame.error = error instanceof Error ? error.message : 'Upload failed.' }
+    } catch (error) {
+      if (authState.value !== 'signed-in') break
+      frame.progress = 'error'; frame.error = error instanceof Error ? error.message : 'Upload failed.'
+    }
   }
   busy.value = false; announcement.value = `${completed} of ${eligible.value.length} frames ${reviewBoardId.value ? 'submitted' : 'uploaded'}.`; savePreferences()
 }

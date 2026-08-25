@@ -189,6 +189,12 @@ button.filter-dropdown-trigger { display: flex; align-items: center; white-space
 /* OEM journal-inspired full-screen filter takeover. */
 body:has(.selection-panel.selection-panel--filter-overlay) { overflow: hidden; }
 
+/* Persistent compact controls belong to the page below and must not show through
+   translucent modal drawers opened by independent components. */
+body:has(> .selection-panel.selection-panel--filter-overlay) > .selection-panel.selection-panel--bare:not(.selection-panel--filter-overlay) {
+  display: none;
+}
+
 /* Vue retains leaving content briefly; hide it before the container returns to pill layout. */
 .selection-panel:not(.selection-panel--filter-overlay) > .asset-filter-controls.filter-controls-leave-active {
   display: none;
@@ -714,6 +720,11 @@ body:has(.selection-panel.selection-panel--filter-overlay) { overflow: hidden; }
   font-weight: 500;
 }
 
+.panel-field::placeholder {
+  color: var(--filter-overlay-muted-color);
+  opacity: 1;
+}
+
 .panel-dropdown-trigger {
   position: relative;
   display: flex;
@@ -1029,6 +1040,23 @@ button.panel-dropdown-trigger:focus-visible {
   white-space: nowrap;
 }
 
+:is(.selection-panel--filter-overlay .filter-actions > button, .filter-action-button) {
+  transition: opacity 120ms ease-out, scale 120ms ease-out;
+}
+
+:is(.selection-panel--filter-overlay .filter-actions > button, .filter-action-button):not(:disabled):hover {
+  opacity: .8;
+}
+
+:is(.selection-panel--filter-overlay .filter-actions > button, .filter-action-button):not(:disabled):active {
+  scale: .96;
+}
+
+:is(.selection-panel--filter-overlay .filter-actions > button, .filter-action-button):disabled {
+  opacity: .45;
+  scale: 1;
+}
+
 
 
 .selection-panel--filter-overlay.selection-panel-enter-active,
@@ -1211,5 +1239,13 @@ button.panel-dropdown-trigger:focus-visible {
     animation-duration: .01ms;
     animation-delay: 0ms;
     transition-duration: .01ms;
+  }
+
+  :is(.selection-panel--filter-overlay .filter-actions > button, .filter-action-button) {
+    transition: none;
+  }
+
+  :is(.selection-panel--filter-overlay .filter-actions > button, .filter-action-button):not(:disabled):active {
+    scale: 1;
   }
 }

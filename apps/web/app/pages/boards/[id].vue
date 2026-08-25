@@ -54,8 +54,7 @@ const memberEmail = ref('')
 const memberRole = ref<'editor'|'contributor'|'viewer'>('contributor')
 const busy = ref(false)
 const contentBusy = ref(false)
-const deleteDialog = ref<HTMLDialogElement | null>(null)
-const deleteTrigger = ref<HTMLButtonElement | null>(null)
+const deleteDialogOpen = ref(false)
 const deleteError = ref('')
 const filtersExpanded = ref(false)
 const compactFiltersVisible = ref(true)
@@ -294,13 +293,13 @@ const removeMember = async (member:Member) => {
 }
 const openDeleteDialog = () => {
   deleteError.value=''
-  deleteDialog.value?.showModal()
+  deleteDialogOpen.value=true
 }
 const deleteBoard = async () => {
   busy.value=true; deleteError.value=''
   try {
     await apiFetch(`/api/shares/${id}`,{method:'DELETE'})
-    deleteDialog.value?.close()
+    deleteDialogOpen.value=false
     await navigateTo('/library')
   } catch { deleteError.value='Unable to delete this board. Check your connection and try again.' }
   finally { busy.value=false }
@@ -376,17 +375,14 @@ const deleteBoard = async () => {
       </section>
       <section v-if="collection.purpose !== 'portfolio' && canManageMembers && (collection.purpose !== 'review' || activeView === 'settings')" class="danger" aria-labelledby="danger-title">
         <div><p class="section-label">Danger zone</p><h2 id="danger-title">Delete board</h2></div>
-        <div class="danger-content"><p>Delete this board, its member access, and its public link.</p><button ref="deleteTrigger" class="button-secondary destructive-button" type="button" :disabled="busy" @click="openDeleteDialog">Delete board</button></div>
+        <div class="danger-content"><p>Delete this board, its member access, and its public link.</p><button class="button-secondary destructive-button" type="button" :disabled="busy" @click="openDeleteDialog">Delete board</button></div>
       </section>
     </main>
-    <dialog ref="deleteDialog" class="delete-dialog" aria-labelledby="delete-board-title" aria-describedby="delete-board-description" @close="deleteTrigger?.focus()">
-      <form method="dialog" @submit.prevent>
-        <h2 id="delete-board-title">Delete “{{ collection.title }}”?</h2>
-        <p id="delete-board-description">This permanently deletes the board, removes member access, and disables its public link. This action cannot be undone.</p>
-        <p class="delete-error" role="alert">{{ deleteError }}</p>
-        <div class="dialog-actions"><button class="button-secondary" type="submit" value="cancel" :disabled="busy" autofocus @click="deleteDialog?.close()">Cancel</button><button class="button-secondary destructive-button" type="button" :disabled="busy" @click="deleteBoard">{{ busy?'Deleting board…':'Delete board' }}</button></div>
-      </form>
-    </dialog>
+    <AppDialog
+      v-model:open="deleteDialogOpen" :title="`Delete “${collection.title}”?`"
+      description="This permanently deletes the board, removes member access, and disables its public link. This action cannot be undone."
+      :confirm-label="busy ? 'Deleting board…' : 'Delete board'" :busy="busy" :error="deleteError"
+      @confirm="deleteBoard" @close="deleteError = ''" />
   </div>
 </template>
 
@@ -731,48 +727,6 @@ const deleteBoard = async () => {
   color: var(--color-danger);
 }
 
-.delete-dialog {
-  width: min(32rem, calc(100% - 2 * var(--space)));
-  padding: 0;
-  border: 0;
-  border-radius: calc(var(--radius) * 3);
-  color: var(--color-fg);
-  background: var(--color-bg);
-  box-shadow: 0 24px 80px rgb(0 0 0 / .25);
-  overscroll-behavior: contain;
-}
-
-.delete-dialog::backdrop {
-  background: rgb(0 0 0 / .45);
-  backdrop-filter: blur(8px);
-}
-
-.delete-dialog form {
-  display: grid;
-  gap: var(--space);
-  padding: calc(var(--space)*1.5);
-}
-
-.delete-dialog h2,
-.delete-dialog p {
-  margin: 0;
-}
-
-.delete-dialog p {
-  color: var(--color-muted);
-}
-
-.delete-error {
-  min-height: 1.25em;
-  color: var(--color-danger) !important;
-}
-
-.dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: calc(var(--space) / 2);
-}
-
 .filter-panel-toggle {
   display: flex;
   align-items: center;
@@ -840,15 +794,6 @@ const deleteBoard = async () => {
 
   .danger > div:last-child {
     grid-column: 1;
-  }
-
-  .dialog-actions {
-    align-items: stretch;
-    flex-direction: column-reverse;
-  }
-
-  .dialog-actions button {
-    width: 100%;
   }
 
   .member-form {

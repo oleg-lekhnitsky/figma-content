@@ -12,6 +12,7 @@ export default defineEventHandler(async (event) => {
       figmaHandle: session.user.figma_handle,
       avatarUrl: session.user.avatar_url,
       role: session.user.role,
+      hasPassword: Boolean(session.user.password_hash),
       mustChangePassword: session.user.must_change_password,
       workspace: organization?.data ?? null
     }

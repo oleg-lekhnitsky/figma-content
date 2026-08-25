@@ -283,6 +283,7 @@ form {
   margin: var(--filter-overlay-group-gap) 0;
   color: var(--filter-overlay-muted-color);
   font-size: var(--font-size-caption);
+  letter-spacing: var(--letter-spacing-caption);
 }
 
 .auth-divider::before,

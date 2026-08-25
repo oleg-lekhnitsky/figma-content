@@ -87,6 +87,7 @@ const handleTriggerKeydown = async (event: KeyboardEvent) => {
 }
 
 const handleDocumentPointerDown = (event: PointerEvent) => {
+  if (!props.open) return
   const target = event.target as Node
   if (!anchor.value?.contains(target) && !panel.value?.contains(target)) close()
 }

@@ -34,6 +34,7 @@ export const userUpdateSchema = z.object({ role: roleSchema.optional(), isActive
   .refine(value => value.role !== undefined || value.isActive !== undefined, 'Provide at least one change.')
 
 export const workspaceCreateSchema = z.object({ name: z.string().trim().min(1).max(120) })
+export const workspaceUpdateSchema = z.object({ name: z.string().trim().min(1).max(120) })
 export const workspaceInviteSchema = z.object({
   email: z.email().trim().toLowerCase(),
   role: roleSchema.default('viewer')
