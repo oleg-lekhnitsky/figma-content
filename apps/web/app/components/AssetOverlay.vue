@@ -122,10 +122,8 @@ let pinchStartDistance = 1
 let pinchStartScale = 1
 let pinchFocalX = 0
 let pinchFocalY = 0
-let tapCandidate = false
-let tapStartAt = 0
-let tapStartX = 0
-let tapStartY = 0
+let gestureStartedOnPreview = false
+let gestureMoved = false
 let lastTapAt = 0
 let lastTapX = 0
 let lastTapY = 0
@@ -412,7 +410,7 @@ const beginPinch = () => {
   gestureX.value = 0
   gestureY.value = 0
   gestureActive.value = true
-  tapCandidate = false
+  gestureMoved = true
   lastTapAt = 0
 }
 const updatePinch = () => {
@@ -440,60 +438,29 @@ const beginPan = (pointerId: number, point: { x: number; y: number }) => {
   gestureAxis.value = 'pan'
   gestureActive.value = true
 }
-const startTapTouch = (event: TouchEvent) => {
-  const touch = event.touches[0]
-  const startedOnPreview = event.target instanceof Element && Boolean(event.target.closest('.current-preview'))
-  tapCandidate = canZoom.value && event.touches.length === 1 && startedOnPreview && Boolean(touch)
-  if (!tapCandidate || !touch) {
-    lastTapAt = 0
-    return
-  }
-  tapStartAt = performance.now()
-  tapStartX = touch.clientX
-  tapStartY = touch.clientY
-}
-const moveTapTouch = (event: TouchEvent) => {
-  const touch = event.touches[0]
-  if (!tapCandidate || event.touches.length !== 1 || !touch) {
-    tapCandidate = false
-    lastTapAt = 0
-    return
-  }
-  if (Math.hypot(touch.clientX - tapStartX, touch.clientY - tapStartY) > 12) {
-    tapCandidate = false
-    lastTapAt = 0
-  }
-}
-const finishTapTouch = (event: TouchEvent) => {
-  const touch = event.changedTouches[0]
+const handlePreviewClick = (event: MouseEvent) => {
   const now = performance.now()
-  const isTap = tapCandidate && event.touches.length === 0 && event.changedTouches.length === 1 && Boolean(touch)
-    && now - tapStartAt <= 280
-    && Math.hypot((touch?.clientX ?? 0) - tapStartX, (touch?.clientY ?? 0) - tapStartY) <= 12
-  tapCandidate = false
-  if (!isTap || !touch) {
+  if (!canZoom.value || !gestureStartedOnPreview || gestureMoved) {
     lastTapAt = 0
     return
   }
   const isSecondTap = lastTapAt > 0 && now - lastTapAt <= 360
-    && Math.hypot(touch.clientX - lastTapX, touch.clientY - lastTapY) <= 32
+    && Math.hypot(event.clientX - lastTapX, event.clientY - lastTapY) <= 32
   if (isSecondTap) {
     lastTapAt = 0
-    toggleZoom(touch.clientX, touch.clientY)
+    toggleZoom(event.clientX, event.clientY)
     return
   }
   lastTapAt = now
-  lastTapX = touch.clientX
-  lastTapY = touch.clientY
-}
-const cancelTapTouch = () => {
-  tapCandidate = false
-  lastTapAt = 0
+  lastTapX = event.clientX
+  lastTapY = event.clientY
 }
 const startGesture = (event: PointerEvent) => {
   if (event.pointerType !== 'touch' || editing.value || gestureSettling.value) return
   allowsOpeningViewTransition.value = false
   clearTimeout(openingViewTransitionTimer)
+  gestureStartedOnPreview = canZoom.value
+  gestureMoved = false
   if (canZoom.value) {
     zoomPointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
     ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
@@ -512,6 +479,10 @@ const moveGesture = (event: PointerEvent) => {
   if (gestureAxis.value === 'pinch') return updatePinch()
   if (!gestureActive.value || event.pointerId !== gesturePointerId) return
   if (gestureAxis.value === 'pan') {
+    if (Math.hypot(event.clientX - panStartX, event.clientY - panStartY) > 8) {
+      gestureMoved = true
+      lastTapAt = 0
+    }
     const constrained = constrainZoom(
       panStartOffsetX + event.clientX - panStartX,
       panStartOffsetY + event.clientY - panStartY
@@ -524,6 +495,7 @@ const moveGesture = (event: PointerEvent) => {
   const y = event.clientY - gestureStartY
   if (!gestureAxis.value && Math.hypot(x, y) > 8) {
     gestureAxis.value = Math.abs(x) > Math.abs(y) ? 'x' : 'y'
+    gestureMoved = true
     lastTapAt = 0
   }
   if (gestureAxis.value === 'x') {
@@ -651,7 +623,7 @@ watch(() => props.assetId, id => {
           :class="{ 'skeleton-visual': !resolvedPreviewUrl, 'is-dragging': isMobile && gestureActive, 'is-zoomed': zoomActive, 'allows-opening-view-transition': allowsOpeningViewTransition && !showInitialSkeleton }"
           :style="assetVisualStyle" aria-describedby="mobile-gesture-hint" @pointerdown="startGesture"
           @pointermove="moveGesture" @pointerup="finishGesture" @pointercancel="cancelGesture"
-          @touchstart="startTapTouch" @touchmove="moveTapTouch" @touchend="finishTapTouch" @touchcancel="cancelTapTouch"
+          @click="handlePreviewClick"
           @transitionend="finishSwipeTransition"><span id="mobile-gesture-hint" class="sr-only">Swipe left or right to
             browse assets. Pull down to close. Pinch or double-tap to zoom an image.</span><button class="pull-handle" type="button"
             aria-label="Close asset details" @pointerdown.stop @click="close" />
