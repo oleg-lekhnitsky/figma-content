@@ -308,7 +308,7 @@ const gestureStyle = computed(() => ({
   opacity: String(Math.max(.42, 1 - Math.max(0, gestureY.value) / 320))
 }))
 const dialogGestureStyle = computed<Record<string, string>>(() => ({
-  '--asset-backdrop-opacity': String(Math.max(0, 1 - Math.max(0, gestureY.value) / 320))
+  '--asset-backdrop-tint-amount': `${Math.max(0, 1 - Math.max(0, gestureY.value) / 320) * 100}%`
 }))
 const assetVisualStyle = computed(() => {
   if (isMobile.value) return gestureStyle.value
@@ -648,11 +648,10 @@ watch(() => props.assetId, id => {
 }
 
 .asset-dialog::backdrop {
-  opacity: var(--asset-backdrop-opacity, 1);
-  background: rgb(255 255 255 / .72);
+  background: color-mix(in srgb, var(--filter-overlay-backdrop-background) var(--asset-backdrop-tint-amount, 100%), transparent);
   backdrop-filter: blur(var(--filter-overlay-blur));
   -webkit-backdrop-filter: blur(var(--filter-overlay-blur));
-  transition-property: opacity, background-color, backdrop-filter, -webkit-backdrop-filter;
+  transition-property: background-color;
   transition-duration: .2s;
   transition-timing-function: ease-out
 }
@@ -668,10 +667,9 @@ watch(() => props.assetId, id => {
 }
 
 .asset-dialog.is-closing::backdrop {
-  opacity: 0;
   background: transparent;
-  backdrop-filter: blur(0);
-  -webkit-backdrop-filter: blur(0)
+  backdrop-filter: blur(var(--filter-overlay-blur));
+  -webkit-backdrop-filter: blur(var(--filter-overlay-blur))
 }
 
 @starting-style {
