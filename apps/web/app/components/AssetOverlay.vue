@@ -385,7 +385,6 @@ const zoomAt = (scale: number, clientX?: number, clientY?: number) => {
   zoomY.value = targetScale === 1 ? 0 : constrained.y
 }
 const toggleZoom = (event?: MouseEvent) => {
-  if (event?.target instanceof Element && event.target.closest('button')) return
   if (zoomActive.value) resetZoom()
   else zoomAt(2, event?.clientX, event?.clientY)
 }
@@ -586,20 +585,18 @@ watch(() => props.assetId, id => {
           :class="{ 'skeleton-visual': !resolvedPreviewUrl, 'is-dragging': isMobile && gestureActive, 'is-zoomed': zoomActive, 'allows-opening-view-transition': allowsOpeningViewTransition && !showInitialSkeleton }"
           :style="assetVisualStyle" aria-describedby="mobile-gesture-hint" @pointerdown="startGesture"
           @pointermove="moveGesture" @pointerup="finishGesture" @pointercancel="resetGesture"
-          @dblclick.prevent="toggleZoom" @transitionend="finishSwipeTransition"><span id="mobile-gesture-hint" class="sr-only">Swipe left or right to
+          @transitionend="finishSwipeTransition"><span id="mobile-gesture-hint" class="sr-only">Swipe left or right to
             browse assets. Pull down to close. Pinch or double-tap to zoom an image.</span><button class="pull-handle" type="button"
             aria-label="Close asset details" @pointerdown.stop @click="close" />
           <template v-if="isMobile">
             <AssetMedia v-for="slide in mobileSlides" :key="slide.id"
               :class="[`${slide.position}-preview`, { 'swipe-preview': slide.position !== 'current' }]"
               :src="slide.url" :style="mobileSlideStyle(slide.position)" :mime-type="slide.mimeType"
-              :alt="slide.alt" loading="eager" fetchpriority="high" draggable="false" />
+              :alt="slide.alt" loading="eager" fetchpriority="high" draggable="false"
+              @dblclick.stop.prevent="slide.position === 'current' && toggleZoom($event)" />
           </template>
           <AssetMedia v-else-if="resolvedPreviewUrl" class="current-preview" :src="resolvedPreviewUrl"
             :mime-type="resolvedMimeType" :alt="`Preview of ${asset.title}`" loading="eager" fetchpriority="high" draggable="false" />
-          <button v-if="canZoom" class="asset-zoom-toggle" type="button"
-            :aria-label="zoomActive ? 'Reset image zoom' : 'Zoom image to 200%'"
-            :aria-pressed="zoomActive" @pointerdown.stop @click.stop="toggleZoom()">{{ zoomActive ? '1×' : '2×' }}</button>
           <button class="details-hint" type="button" aria-label="Show asset details"
             @pointerdown.stop @click="revealDetails"><svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="m6 9 6 6 6-6" />
@@ -1563,7 +1560,8 @@ li span {
   }
 
   .asset-visual .current-preview {
-    transform: translate3d(0, 0, 0)
+    transform: translate3d(0, 0, 0);
+    pointer-events: auto
   }
 
   .asset-visual.allows-opening-view-transition .current-preview {
@@ -1605,31 +1603,6 @@ li span {
     height: 5px;
     border-radius: 999px;
     background: color-mix(in srgb, var(--asset-overlay-fg) 34%, transparent)
-  }
-
-  .asset-zoom-toggle {
-    position: absolute;
-    z-index: 5;
-    top: max(calc(var(--space) / 2), env(safe-area-inset-top));
-    right: max(var(--space), env(safe-area-inset-right));
-    width: 44px;
-    height: 44px;
-    min-height: 44px;
-    padding: 0;
-    border: 0;
-    border-radius: 50%;
-    color: var(--asset-overlay-fg);
-    background: var(--material-tinted-bg);
-    font: inherit;
-    font-size: var(--font-size-label);
-    font-weight: 700;
-    transition-property: transform, background-color;
-    transition-duration: 120ms;
-    transition-timing-function: cubic-bezier(.2, 0, 0, 1)
-  }
-
-  .asset-zoom-toggle:active {
-    transform: scale(.96)
   }
 
   .details-hint {
@@ -1714,7 +1687,6 @@ li span {
   .asset-dialog,
   .asset-dialog::backdrop,
   .asset-navigation,
-  .asset-zoom-toggle,
   .asset-visual :is(img, video) {
     transition-duration: .01ms
   }
