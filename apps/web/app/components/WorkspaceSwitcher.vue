@@ -10,12 +10,20 @@ interface Workspace {
   previewAssets: Array<{ id: string; title: string; previewUrl: string }>
 }
 
+interface WorkspaceContributor {
+  id: string
+  email: string | null
+  figma_handle: string | null
+  avatar_url: string | null
+}
+
 type WorkspaceRole = 'viewer' | 'contributor' | 'editor' | 'admin'
 
 interface WorkspaceMember {
   id: string
   email: string | null
   figma_handle: string | null
+  avatar_url: string | null
   role: WorkspaceRole
   is_active: boolean
   is_self: boolean
@@ -71,11 +79,12 @@ const memberRoleMenuOpen = ref('')
 const membersMessage = ref('')
 const memberFeedback = ref<Record<string, string>>({})
 const memberFeedbackTimers = new Map<string, ReturnType<typeof setTimeout>>()
-const { data, refresh } = await useFetch<{ data: { currentId: string; workspaces: Workspace[] } }>('/api/workspaces')
+const { data, refresh } = await useFetch<{ data: { currentId: string; workspaces: Workspace[]; contributors: { items: WorkspaceContributor[]; total: number } } }>('/api/workspaces')
 const workspaces = computed(() => data.value?.data.workspaces ?? [])
 const currentId = computed(() => data.value?.data.currentId ?? '')
 const current = computed(() => workspaces.value.find(workspace => workspace.id === currentId.value))
-const otherWorkspaceCount = computed(() => Math.max(0, workspaces.value.length - 1))
+const contributors = computed(() => data.value?.data.contributors.items ?? [])
+const remainingContributorCount = computed(() => Math.max(0, (data.value?.data.contributors.total ?? 0) - contributors.value.length))
 watch(current, workspace => { workspaceName.value = workspace?.name ?? '' }, { immediate: true })
 watch(() => route.query.workspaceSettings, value => {
   if (value === '1') open.value = true
@@ -129,6 +138,15 @@ const workspaceMonogram = (name = 'Workspace') => name
   .map(word => word[0])
   .join('')
   .toLocaleUpperCase()
+const contributorName = (contributor: WorkspaceContributor) => contributor.figma_handle ?? contributor.email ?? 'Contributor'
+const contributorInitial = (contributor: WorkspaceContributor) => contributorName(contributor).trim().charAt(0).toLocaleUpperCase() || '?'
+const workspaceTriggerLabel = computed(() => {
+  const workspaceName = current.value?.name ?? 'Content Library'
+  if (!contributors.value.length) return `Current workspace: ${workspaceName}. Choose workspace.`
+  const names = contributors.value.map(contributorName).join(', ')
+  const remainder = remainingContributorCount.value ? `, and ${remainingContributorCount.value} more` : ''
+  return `Current workspace: ${workspaceName}. Contributors: ${names}${remainder}. Choose workspace.`
+})
 
 const switchWorkspace = async (workspace: Pick<Workspace, 'id'>) => {
   if (workspace.id === currentId.value || switchingId.value) {
@@ -310,10 +328,16 @@ const deleteWorkspace = async () => {
   <div class="workspace-switcher">
     <button
       class="workspace-avatar-trigger" type="button"
-      :aria-label="`Current workspace: ${current?.name ?? 'Content Library'}. Choose workspace.`"
+      :aria-label="workspaceTriggerLabel"
       :aria-expanded="open" @click="open = true">
       <span class="workspace-avatar" aria-hidden="true">{{ workspaceMonogram(current?.name ?? 'Content Library') }}</span>
-      <span v-if="otherWorkspaceCount" class="workspace-more" aria-hidden="true">+{{ otherWorkspaceCount }}</span>
+      <span
+        v-for="(contributor, index) in contributors" :key="contributor.id" class="workspace-contributor"
+        :style="{ zIndex: contributors.length - index }" :title="contributorName(contributor)" aria-hidden="true">
+        <img v-if="contributor.avatar_url" :src="contributor.avatar_url" alt="">
+        <span v-else>{{ contributorInitial(contributor) }}</span>
+      </span>
+      <span v-if="remainingContributorCount" class="workspace-more" aria-hidden="true">+{{ remainingContributorCount }}</span>
     </button>
 
     <SelectionPanel :visible="open" label="Choose workspace" wide overlay raised @close="closePanel">
@@ -398,6 +422,10 @@ const deleteWorkspace = async () => {
             <p v-if="membersMessage" class="workspace-management-message" role="status" aria-live="polite">{{ membersMessage }}</p>
             <div v-if="members.length" class="workspace-member-list">
               <article v-for="member in members" :key="member.id" class="workspace-member-card">
+                <span class="workspace-member-avatar" aria-hidden="true">
+                  <img v-if="member.avatar_url" :src="member.avatar_url" alt="">
+                  <span v-else>{{ contributorInitial(member) }}</span>
+                </span>
                 <div class="workspace-member-copy">
                   <div class="workspace-member-heading">
                     <strong>{{ member.email ?? member.figma_handle }}</strong>
@@ -512,6 +540,7 @@ const deleteWorkspace = async () => {
 }
 
 .workspace-avatar,
+.workspace-contributor,
 .workspace-more {
   position: relative;
   box-sizing: border-box;
@@ -530,14 +559,27 @@ const deleteWorkspace = async () => {
   line-height: 1;
 }
 
-.workspace-avatar { z-index: 2; }
+.workspace-avatar { z-index: 7; }
 
+.workspace-contributor,
 .workspace-more {
   z-index: 1;
   margin-left: calc(var(--space)  / -3);
   color: var(--color-fg);
   background: var(--color-surface);
   white-space: nowrap;
+}
+
+.workspace-contributor {
+  overflow: hidden;
+  border-radius: 50%;
+}
+
+.workspace-contributor img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
 }
 
 .workspace-panel { min-width: min(30rem, calc(100vw - var(--space) * 2)); }
@@ -698,7 +740,37 @@ const deleteWorkspace = async () => {
 
 .workspace-member-list { display: grid; gap: calc(var(--space) / 2); }
 .workspace-member-card {
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+.workspace-member-avatar {
+  position: relative;
+  width: auto;
+  height: 100%;
+  aspect-ratio: 1;
+  align-self: stretch;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  color: var(--color-fg);
+  background: var(--color-surface);
+  font: inherit;
+  line-height: 1;
+}
+.workspace-member-avatar img,
+.workspace-member-avatar > span {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.workspace-member-avatar img {
+  display: block;
+  object-fit: cover;
+}
+.workspace-member-avatar > span {
+  display: grid;
+  place-items: center;
 }
 .workspace-member-copy {
   min-width: 0;
@@ -711,6 +783,7 @@ const deleteWorkspace = async () => {
   display: flex;
   align-items: center;
   gap: calc(var(--space) / 3);
+  line-height: 1.2;
 }
 .workspace-member-copy strong {
   min-width: 0;
@@ -718,7 +791,7 @@ const deleteWorkspace = async () => {
   overflow: hidden;
   font-size: var(--filter-action-font-size);
   font-weight: 500;
-  line-height: 1.1;
+  line-height: inherit;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -805,8 +878,8 @@ const deleteWorkspace = async () => {
   .workspace-invitation-card { grid-template-columns: minmax(0, 1fr); }
   .workspace-invitation-actions { justify-content: stretch; }
   .workspace-invitation-actions .panel-secondary-action { flex: 1 1 0; }
-  .workspace-member-card { grid-template-columns: minmax(0, 1fr); }
-  .workspace-member-controls { justify-content: stretch; }
+  .workspace-member-card { grid-template-columns: auto minmax(0, 1fr); }
+  .workspace-member-controls { grid-column: 1 / -1; justify-content: stretch; }
   .workspace-member-role { width: auto; flex: 1 1 auto; }
 }
 </style>

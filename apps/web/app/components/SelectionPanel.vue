@@ -83,7 +83,6 @@ const emit = defineEmits<{ close: []; afterLeave: [] }>()
 }
 
 .selection-panel :slotted(strong) {
-  padding: 0 10px;
   white-space: nowrap
 }
 

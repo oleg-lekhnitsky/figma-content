@@ -802,11 +802,12 @@ onBeforeUnmount(() => {
         </div>
         <p class="count sr-only" role="status" aria-live="polite">{{ resultMessage }}</p>
         <nav aria-label="Library controls">
-          <NuxtLink class="button-secondary" to="/portfolio">Portfolio</NuxtLink><button v-if="canShare"
-            class="button-secondary button-icon board-create-button" type="button" aria-label="Create board"
+          <button
+            v-if="canShare" class="button-secondary button-icon board-create-button" type="button" aria-label="Create board"
             title="Create board" @click="openBoardCreator()">
             <Plus :size="20" aria-hidden="true" />
           </button>
+          <NuxtLink class="button-secondary" to="/portfolio">Portfolio</NuxtLink>
           <ShareCollection ref="boardCreator" hide-trigger :current-filters="currentBoardFilters"
             @created="handleBoardCreated" @open-change="boardCreatorExpanded = $event" />
           <NuxtLink v-if="!isAdmin && canManageProjects" class="button-secondary" to="/admin/projects">Projects</NuxtLink>

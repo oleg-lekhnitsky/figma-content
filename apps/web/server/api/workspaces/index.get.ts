@@ -32,5 +32,19 @@ export default defineEventHandler(async (event) => {
     }))).filter((asset): asset is { id:string; title:string; previewUrl:string } => Boolean(asset))
     return { ...workspace, previewAssets }
   }))
-  return { data: { currentId: session.user.organization_id, workspaces: workspacesWithPreviews } }
+  const { data: contributors, count: contributorCount, error: contributorError } = await useSupabaseAdmin().from('allowed_users')
+    .select('id,email,figma_handle,avatar_url', { count: 'exact' })
+    .eq('organization_id', session.user.organization_id)
+    .eq('is_active', true)
+    .in('role', ['contributor', 'editor', 'admin'])
+    .order('created_at')
+    .limit(6)
+  if (contributorError) throw databaseError('list workspace contributors', contributorError)
+  return {
+    data: {
+      currentId: session.user.organization_id,
+      workspaces: workspacesWithPreviews,
+      contributors: { items: contributors ?? [], total: contributorCount ?? contributors?.length ?? 0 }
+    }
+  }
 })

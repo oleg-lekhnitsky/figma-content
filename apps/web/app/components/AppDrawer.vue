@@ -13,11 +13,19 @@ const closing = ref(false)
 const dragY = ref(0)
 const dragging = ref(false)
 const dismissing = ref(false)
+const sheetHeight = ref(1)
+const backdropOpacity = computed(() => Math.max(0, 1 - dragY.value / sheetHeight.value))
 let pointerId: number | undefined
+let pendingDrag = false
+let startedFromHandle = false
+let startX = 0
 let startY = 0
 let lastY = 0
 let lastTime = 0
 let releaseVelocity = 0
+let scrollSource: HTMLElement | null = null
+let suppressHandleClick = false
+let suppressClickTimer: ReturnType<typeof setTimeout> | undefined
 let previousBodyOverflow = ''
 let previousRootOverflow = ''
 let previousBodyPosition = ''
@@ -27,12 +35,35 @@ let lockedScrollY = 0
 let pageScrollLocked = false
 let returnFocusTo: HTMLElement | null = null
 let closeTimer: ReturnType<typeof setTimeout> | undefined
+let appRoot: HTMLElement | null = null
+let appRootWasInert = false
+
+const sheetContent = () => drawerRoot.value?.querySelector<HTMLElement>('.asset-filter-controls, .video-mobile-panel') ?? null
+
+const updateSheetHeight = () => {
+  sheetHeight.value = Math.max(1, sheetContent()?.offsetHeight ?? window.innerHeight)
+}
+
+const setBackgroundInert = (inert: boolean) => {
+  if (inert) {
+    appRoot = document.getElementById('__nuxt')
+    if (!appRoot) return
+    appRootWasInert = appRoot.inert
+    appRoot.inert = true
+    return
+  }
+  if (appRoot) appRoot.inert = appRootWasInert
+  appRoot = null
+}
 
 const resetGesture = () => {
   dragY.value = 0
   dragging.value = false
   dismissing.value = false
   pointerId = undefined
+  pendingDrag = false
+  startedFromHandle = false
+  scrollSource = null
 }
 
 const resetScroll = async () => {
@@ -92,9 +123,12 @@ watch(() => props.open, async (open) => {
     closing.value = false
     resetGesture()
     lockPageScroll()
+    setBackgroundInert(true)
     void resetScroll()
+    requestAnimationFrame(updateSheetHeight)
     return
   }
+  setBackgroundInert(false)
   unlockPageScroll()
   closing.value = true
   closeTimer = setTimeout(finishClose, 400)
@@ -131,39 +165,82 @@ const handleKeydown = (event: KeyboardEvent) => {
 }
 
 const handleClick = (event: MouseEvent) => {
-  if ((event.target as HTMLElement).closest('.filter-sheet-handle')) requestClose()
+  if (!(event.target as HTMLElement).closest('.filter-sheet-handle')) return
+  event.preventDefault()
+  event.stopPropagation()
+  if (suppressHandleClick) {
+    suppressHandleClick = false
+    return
+  }
+  requestClose()
 }
 
 const startDrag = (event: PointerEvent) => {
   if (event.pointerType !== 'touch' || !props.dismissible) return
-  const handle = (event.target as HTMLElement).closest<HTMLElement>('.filter-sheet-handle')
-  if (!handle) return
+  const target = event.target as HTMLElement
+  const handle = target.closest<HTMLElement>('.filter-sheet-handle')
+  const scrollContainer = target.closest<HTMLElement>('.filter-sheet-content, .video-panel-scroll')
+  const interactive = target.closest('button, input, select, textarea, a, [contenteditable="true"]')
+  if (!handle && (!scrollContainer || scrollContainer.scrollTop > 0 || interactive)) return
   pointerId = event.pointerId
+  pendingDrag = !handle
+  startedFromHandle = Boolean(handle)
+  scrollSource = scrollContainer
+  startX = event.clientX
   startY = lastY = event.clientY
   lastTime = performance.now()
   releaseVelocity = 0
   dismissing.value = false
-  dragging.value = true
-  handle.setPointerCapture(event.pointerId)
+  dragging.value = Boolean(handle)
+  updateSheetHeight()
+  if (handle) drawerRoot.value?.setPointerCapture(event.pointerId)
 }
 
 const moveDrag = (event: PointerEvent) => {
-  if (!dragging.value || event.pointerId !== pointerId) return
+  if (event.pointerId !== pointerId) return
+  const deltaX = event.clientX - startX
+  const deltaY = event.clientY - startY
+  if (pendingDrag) {
+    if (Math.abs(deltaX) > Math.abs(deltaY) || deltaY < 0 || (scrollSource?.scrollTop ?? 0) > 0) {
+      pointerId = undefined
+      pendingDrag = false
+      scrollSource = null
+      return
+    }
+    if (deltaY < 6) return
+    pendingDrag = false
+    dragging.value = true
+    drawerRoot.value?.setPointerCapture(event.pointerId)
+  }
+  if (!dragging.value) return
+  if (event.cancelable) event.preventDefault()
   const now = performance.now()
   const elapsed = now - lastTime
   if (elapsed > 0) releaseVelocity = (event.clientY - lastY) / elapsed
   lastY = event.clientY
   lastTime = now
-  dragY.value = Math.max(0, event.clientY - startY)
+  const distance = Math.max(0, deltaY)
+  const overflow = Math.max(0, distance - sheetHeight.value)
+  dragY.value = distance <= sheetHeight.value ? distance : sheetHeight.value + Math.sqrt(overflow) * 4
+  if (startedFromHandle && distance > 4) suppressHandleClick = true
 }
 
 const finishDrag = (event: PointerEvent) => {
-  if (!dragging.value || event.pointerId !== pointerId) return
+  if (event.pointerId !== pointerId) return
+  if (pendingDrag) {
+    pointerId = undefined
+    pendingDrag = false
+    scrollSource = null
+    return
+  }
+  if (!dragging.value) return
   const velocity = performance.now() - lastTime < 120 ? releaseVelocity : 0
   dragging.value = false
   pointerId = undefined
-  const content = drawerRoot.value?.querySelector<HTMLElement>('.asset-filter-controls, .video-mobile-panel')
+  const content = sheetContent()
   const dismissDistance = Math.min(96, (content?.offsetHeight ?? window.innerHeight) * .18)
+  clearTimeout(suppressClickTimer)
+  suppressClickTimer = setTimeout(() => { suppressHandleClick = false }, 350)
   if (dragY.value > dismissDistance || velocity > .45) {
     dismissing.value = true
     requestAnimationFrame(() => {
@@ -176,7 +253,7 @@ const finishDrag = (event: PointerEvent) => {
 }
 
 const cancelDrag = (event: PointerEvent) => {
-  if (!dragging.value || event.pointerId !== pointerId) return
+  if (event.pointerId !== pointerId) return
   resetGesture()
 }
 
@@ -185,13 +262,17 @@ onMounted(() => {
   if (props.open) {
     returnFocusTo = document.activeElement instanceof HTMLElement ? document.activeElement : null
     lockPageScroll()
+    setBackgroundInert(true)
     void resetScroll()
+    requestAnimationFrame(updateSheetHeight)
   }
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeydown)
   clearTimeout(closeTimer)
+  clearTimeout(suppressClickTimer)
+  setBackgroundInert(false)
   unlockPageScroll()
 })
 </script>
@@ -212,8 +293,8 @@ onBeforeUnmount(() => {
         aria-modal="true"
         tabindex="-1"
         :aria-label="label"
-        :style="{ '--sheet-drag-y': `${dragY}px` }"
-        @click="handleClick"
+        :style="{ '--sheet-drag-y': `${dragY}px`, '--sheet-backdrop-opacity': backdropOpacity }"
+        @click.capture="handleClick"
         @click.self="requestClose"
         @pointerdown="startDrag"
         @pointermove="moveDrag"

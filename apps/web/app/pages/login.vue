@@ -92,23 +92,20 @@ const startFigmaLogin = async () => {
 
       <div class="auth-divider" aria-hidden="true"><span>or</span></div>
 
-      <section class="figma-option" aria-labelledby="figma-title">
-        <div>
-          <h2 id="figma-title">Figma account</h2>
-          <p v-if="figmaErrorMessage" id="figma-message" class="figma-error" role="alert">{{ figmaErrorMessage }}</p>
-          <p v-else id="figma-message" role="status">{{ figmaSubmitting ? 'Opening Figma…' : 'For team members with approved access.' }}</p>
-        </div>
+      <div class="figma-option">
+        <p id="figma-status" class="figma-status" role="status">{{ figmaSubmitting ? 'Opening Figma…' : '' }}</p>
+        <p id="figma-error" class="figma-error" role="alert">{{ figmaErrorMessage }}</p>
         <button
           class="auth-figma"
           type="button"
           :disabled="figmaSubmitting"
           :aria-busy="figmaSubmitting"
-          aria-describedby="figma-message"
+          :aria-describedby="figmaErrorMessage ? 'figma-error' : figmaSubmitting ? 'figma-status' : undefined"
           @click="startFigmaLogin"
         >
           Continue with Figma
         </button>
-      </section>
+      </div>
     </section>
   </main>
 </template>
@@ -298,30 +295,20 @@ form {
   gap: var(--space);
 }
 
-.figma-option > div {
-  display: grid;
-  gap: var(--filter-date-label-gap);
-}
-
-.figma-option h2,
-.figma-option p {
+.figma-status,
+.figma-error {
   margin: 0;
-}
-
-.figma-option h2 {
-  font-size: var(--font-size-body);
-  font-weight: 600;
-  letter-spacing: -0.015em;
-  line-height: 1;
-}
-
-.figma-option p {
   color: var(--filter-overlay-muted-color);
   font-size: var(--font-size-label);
 }
 
-.figma-option .figma-error {
+.figma-error {
   color: color-mix(in srgb, var(--color-danger) 42%, #fff);
+}
+
+.figma-status:empty,
+.figma-error:empty {
+  display: none;
 }
 
 .auth-figma.auth-figma {
