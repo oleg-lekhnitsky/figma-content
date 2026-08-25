@@ -4,8 +4,11 @@ const refreshing = ref(false)
 const enabled = ref(false)
 
 const triggerDistance = 72
+const directionThreshold = 6
+let startX = 0
 let startY = 0
 let tracking = false
+let directionLocked = false
 
 const progress = computed(() => Math.min(pull.value / triggerDistance, 1))
 const indicatorStyle = computed(() => ({
@@ -23,30 +26,65 @@ const isScrollableTarget = (target: EventTarget | null) => {
   return false
 }
 
+const isInteractionBlocked = () => {
+  const appRoot = document.getElementById('__nuxt')
+  return Boolean(appRoot?.inert || document.querySelector('[role="dialog"][aria-modal="true"]'))
+}
+
+const resetPull = () => {
+  pull.value = 0
+  tracking = false
+  directionLocked = false
+}
+
 const startPull = (event: TouchEvent) => {
-  if (!enabled.value || refreshing.value || window.scrollY > 0 || event.touches.length !== 1) return
+  if (!enabled.value || refreshing.value) return
+  resetPull()
+  if (isInteractionBlocked() || window.scrollY > 0 || event.touches.length !== 1) return
   if (isScrollableTarget(event.target)) return
-  startY = event.touches[0]?.clientY ?? 0
+  const touch = event.touches[0]
+  if (!touch) return
+  startX = touch.clientX
+  startY = touch.clientY
   tracking = true
 }
 
 const movePull = (event: TouchEvent) => {
-  if (!tracking || event.touches.length !== 1) return
-  const distance = (event.touches[0]?.clientY ?? startY) - startY
-  if (distance <= 0) {
-    pull.value = 0
-    tracking = false
+  if (!tracking) return
+  if (event.touches.length !== 1) {
+    resetPull()
     return
   }
-  event.preventDefault()
-  pull.value = Math.min(Math.pow(distance, 0.82), triggerDistance + 18)
+  if (isInteractionBlocked() || window.scrollY > 0) {
+    resetPull()
+    return
+  }
+  const touch = event.touches[0]
+  if (!touch) return
+  const deltaX = touch.clientX - startX
+  const deltaY = touch.clientY - startY
+  if (!directionLocked) {
+    if (Math.max(Math.abs(deltaX), Math.abs(deltaY)) < directionThreshold) return
+    if (deltaY <= 0 || Math.abs(deltaX) > Math.abs(deltaY)) {
+      resetPull()
+      return
+    }
+    directionLocked = true
+  }
+  if (deltaY <= 0) {
+    resetPull()
+    return
+  }
+  if (event.cancelable) event.preventDefault()
+  pull.value = Math.min(Math.pow(deltaY, 0.82), triggerDistance + 18)
 }
 
 const finishPull = async () => {
   if (!tracking) return
   tracking = false
-  if (pull.value < triggerDistance) {
-    pull.value = 0
+  directionLocked = false
+  if (isInteractionBlocked() || pull.value < triggerDistance) {
+    resetPull()
     return
   }
   refreshing.value = true
@@ -69,14 +107,14 @@ onMounted(() => {
   window.addEventListener('touchstart', startPull, { passive: true })
   window.addEventListener('touchmove', movePull, { passive: false })
   window.addEventListener('touchend', finishPull, { passive: true })
-  window.addEventListener('touchcancel', finishPull, { passive: true })
+  window.addEventListener('touchcancel', resetPull, { passive: true })
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('touchstart', startPull)
   window.removeEventListener('touchmove', movePull)
   window.removeEventListener('touchend', finishPull)
-  window.removeEventListener('touchcancel', finishPull)
+  window.removeEventListener('touchcancel', resetPull)
 })
 </script>
 
