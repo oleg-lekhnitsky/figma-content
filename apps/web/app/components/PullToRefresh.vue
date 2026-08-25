@@ -94,7 +94,7 @@ const finishPull = async () => {
   refreshing.value = true
   pull.value = triggerDistance
   try {
-    await refreshNuxtData()
+    await runPullRefresh()
   } finally {
     window.setTimeout(() => {
       refreshing.value = false
@@ -170,7 +170,7 @@ onBeforeUnmount(() => {
   border: 2px solid currentColor;
   border-top-color: transparent;
   border-radius: 50%;
-  rotate: calc(var(--pull-progress) * 270deg)
+  transform: rotate(calc(var(--pull-progress) * 270deg))
 }
 
 .pull-refresh.is-ready span {
@@ -179,11 +179,13 @@ onBeforeUnmount(() => {
 
 .pull-refresh.is-refreshing span {
   border-top-color: transparent;
+  will-change: transform;
   animation: pull-refresh-spin .7s linear infinite
 }
 
 @keyframes pull-refresh-spin {
-  to { rotate: 360deg }
+  from { transform: rotate(0deg) }
+  to { transform: rotate(360deg) }
 }
 
 @media (prefers-reduced-motion: reduce) {

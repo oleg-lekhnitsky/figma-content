@@ -118,8 +118,8 @@ const { data, status: loadStatus, error, refresh } = await useLazyFetch<AssetLis
   watch: [query],
   immediate: !selectedBoardId.value
 })
-const { data: projectData } = await useLazyFetch<{ data: { projects: Project[] } }>('/api/projects')
-const { data: tagData } = await useLazyFetch<{ data: { tags: Tag[] } }>('/api/tags')
+const { data: projectData, refresh: refreshProjects } = await useLazyFetch<{ data: { projects: Project[] } }>('/api/projects')
+const { data: tagData, refresh: refreshTags } = await useLazyFetch<{ data: { tags: Tag[] } }>('/api/tags')
 const { data: boardData, refresh: refreshBoards } = await useLazyFetch<BoardList>('/api/shares')
 const boardCreator = ref<{ openCreate: () => Promise<void>; openCreateFromCurrentView: () => Promise<void> }>()
 const handleBoardCreated = async (boardId: string) => {
@@ -315,6 +315,20 @@ const { data: selectedBoardData, status: selectedBoardStatus, error: selectedBoa
   const response = await $fetch<BoardContent>(`/api/shares/${boardId}/content`)
   return { boardId, assets: response.data.assets }
 }, { watch: [selectedBoardId] })
+let forceAssetMediaReload = false
+const refreshLibraryData = async () => {
+  page.value = 1
+  forceAssetMediaReload = true
+  try {
+    await nextTick()
+    await Promise.all([refresh(), refreshProjects(), refreshTags(), refreshBoards()])
+    if (selectedBoardId.value) await refreshSelectedBoard()
+    await nextTick()
+  } finally {
+    forceAssetMediaReload = false
+  }
+}
+usePullRefreshHandler(refreshLibraryData)
 watch(selectedCollection, collection => {
   if (collection?.purpose === 'portfolio') void navigateTo('/portfolio', { replace: true })
 }, { immediate: true })
@@ -599,7 +613,7 @@ const mediaResourceKey = (value: string | null | undefined) => {
 const preserveMountedPreview = (previous: string | null | undefined, incoming: string | null | undefined) => (
   previous && incoming && mediaResourceKey(previous) === mediaResourceKey(incoming) ? previous : incoming
 )
-const reconcileAssetMedia = (incoming: AssetCard, previous?: AssetCard): AssetCard => previous ? {
+const reconcileAssetMedia = (incoming: AssetCard, previous?: AssetCard): AssetCard => previous && !forceAssetMediaReload ? {
   ...incoming,
   previewUrl: preserveMountedPreview(previous.previewUrl, incoming.previewUrl) ?? incoming.previewUrl,
   preview2xUrl: preserveMountedPreview(previous.preview2xUrl, incoming.preview2xUrl)
@@ -611,7 +625,7 @@ watch(() => data.value?.data, (next) => {
   if (next.page <= 1) submitters.value = next.submitters ?? []
   const incoming = next.assets ?? []
   if (next.page <= 1) {
-    if (incoming.map(asset => `${asset.id}:${asset.updated_at}`).join('|') === assets.value.map(asset => `${asset.id}:${asset.updated_at}`).join('|')) return
+    if (!forceAssetMediaReload && incoming.map(asset => `${asset.id}:${asset.updated_at}`).join('|') === assets.value.map(asset => `${asset.id}:${asset.updated_at}`).join('|')) return
     const previous = new Map(assets.value.map(asset => [asset.id, asset]))
     assets.value = incoming.map(asset => reconcileAssetMedia(asset, previous.get(asset.id)))
     return
@@ -1073,6 +1087,7 @@ main {
 }
 
 .index-toolbar {
+  --identity-avatar-size: 36px;
   position: relative;
   z-index: 4;
   display: grid;
@@ -1089,14 +1104,16 @@ main {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: clamp(7rem, 8vw, 9rem);
+  width: auto;
+  height: var(--identity-avatar-size);
+  aspect-ratio: 1133 / 268;
   transform: translate(-50%, -50%)
 }
 
 .library-wordmark svg {
   display: block;
   width: 100%;
-  height: auto;
+  height: 100%;
   color: #0f0f0f
 }
 
@@ -1664,7 +1681,6 @@ button {
 }
 
 .header-identity {
-  --identity-avatar-size: 36px;
   min-width: 0;
   min-height: var(--control-height);
   display: flex;
