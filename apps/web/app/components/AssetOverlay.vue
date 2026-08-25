@@ -307,6 +307,9 @@ const gestureStyle = computed(() => ({
   transform: `translate3d(0, ${Math.max(0, gestureY.value)}px, 0)`,
   opacity: String(Math.max(.42, 1 - Math.max(0, gestureY.value) / 320))
 }))
+const dialogGestureStyle = computed<Record<string, string>>(() => ({
+  '--asset-backdrop-opacity': String(Math.max(0, 1 - Math.max(0, gestureY.value) / 320))
+}))
 const assetVisualStyle = computed(() => {
   if (isMobile.value) return gestureStyle.value
   const thumbnail = thumbnailPreviewUrl.value
@@ -364,7 +367,11 @@ const finishGesture = (event: PointerEvent) => {
   const x = gestureX.value
   const y = gestureY.value
   gesturePointerId = undefined
-  if (axis === 'y' && y > 90) return close()
+  if (axis === 'y' && y > 90) {
+    gestureActive.value = false
+    gestureAxis.value = ''
+    return close()
+  }
   if (axis === 'y' && y < -56) { resetGesture(); return revealDetails() }
   const destination = x < 0 ? nextAssetId.value : previousAssetId.value
   if (axis === 'x' && Math.abs(x) > 56 && destination) {
@@ -402,7 +409,8 @@ watch(() => props.assetId, id => {
 
 <template>
   <Teleport to="body">
-    <dialog ref="dialog" class="asset-dialog" :class="{ 'is-closing': isClosing }" aria-label="Asset details"
+    <dialog ref="dialog" class="asset-dialog" :class="{ 'is-closing': isClosing, 'is-gesture-active': gestureActive }"
+      :style="dialogGestureStyle" aria-label="Asset details"
       @cancel.prevent="cancelOverlay" @keydown="handleAssetNavigationKey">
       <main v-if="showInitialSkeleton" class="overlay-content overlay-loading"
         :class="{ 'is-revealing': skeletonRevealing }" role="status" aria-label="Loading asset details">
@@ -640,12 +648,17 @@ watch(() => props.assetId, id => {
 }
 
 .asset-dialog::backdrop {
+  opacity: var(--asset-backdrop-opacity, 1);
   background: rgb(255 255 255 / .72);
   backdrop-filter: blur(var(--filter-overlay-blur));
   -webkit-backdrop-filter: blur(var(--filter-overlay-blur));
-  transition-property: background-color, backdrop-filter;
+  transition-property: opacity, background-color, backdrop-filter, -webkit-backdrop-filter;
   transition-duration: .2s;
   transition-timing-function: ease-out
+}
+
+.asset-dialog.is-gesture-active::backdrop {
+  transition-duration: 0s
 }
 
 .asset-dialog.is-closing {
@@ -655,8 +668,10 @@ watch(() => props.assetId, id => {
 }
 
 .asset-dialog.is-closing::backdrop {
+  opacity: 0;
   background: transparent;
-  backdrop-filter: blur(0)
+  backdrop-filter: blur(0);
+  -webkit-backdrop-filter: blur(0)
 }
 
 @starting-style {
@@ -666,8 +681,10 @@ watch(() => props.assetId, id => {
   }
 
   .asset-dialog[open]::backdrop {
+    opacity: 0;
     background: transparent;
-    backdrop-filter: blur(0)
+    backdrop-filter: blur(0);
+    -webkit-backdrop-filter: blur(0)
   }
 }
 
@@ -1356,7 +1373,7 @@ li span {
     overflow-y: auto;
     overscroll-behavior-x: none;
     overscroll-behavior-y: none;
-    touch-action: pan-y
+    touch-action: pan-y pinch-zoom
   }
 
   .overlay-loading {
@@ -1372,7 +1389,7 @@ li span {
     border-radius: 0;
     background: transparent;
     clip-path: none;
-    touch-action: none;
+    touch-action: pinch-zoom;
     user-select: none
   }
 

@@ -32,7 +32,7 @@ const pageScrollTop = () => Math.max(window.scrollY, document.scrollingElement?.
 
 const isInteractionBlocked = () => {
   const appRoot = document.getElementById('__nuxt')
-  return Boolean(appRoot?.inert || document.querySelector('[role="dialog"][aria-modal="true"]'))
+  return Boolean(appRoot?.inert || document.querySelector('dialog[open], [role="dialog"][aria-modal="true"]'))
 }
 
 const resetPull = () => {
