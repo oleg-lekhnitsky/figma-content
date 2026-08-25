@@ -15,16 +15,15 @@ const dragging = ref(false)
 const dismissing = ref(false)
 const sheetHeight = ref(1)
 const backdropOpacity = computed(() => Math.max(0, 1 - dragY.value / sheetHeight.value))
-let pointerId: number | undefined
+let touchId: number | undefined
 let pendingDrag = false
-let startedFromHandle = false
 let startX = 0
 let startY = 0
 let lastY = 0
 let lastTime = 0
 let releaseVelocity = 0
 let scrollSource: HTMLElement | null = null
-let suppressHandleClick = false
+let suppressClick = false
 let suppressClickTimer: ReturnType<typeof setTimeout> | undefined
 let previousBodyOverflow = ''
 let previousRootOverflow = ''
@@ -60,9 +59,8 @@ const resetGesture = () => {
   dragY.value = 0
   dragging.value = false
   dismissing.value = false
-  pointerId = undefined
+  touchId = undefined
   pendingDrag = false
-  startedFromHandle = false
   scrollSource = null
 }
 
@@ -165,44 +163,48 @@ const handleKeydown = (event: KeyboardEvent) => {
 }
 
 const handleClick = (event: MouseEvent) => {
+  if (suppressClick) {
+    event.preventDefault()
+    event.stopPropagation()
+    suppressClick = false
+    return
+  }
   if (!(event.target as HTMLElement).closest('.filter-sheet-handle')) return
   event.preventDefault()
   event.stopPropagation()
-  if (suppressHandleClick) {
-    suppressHandleClick = false
-    return
-  }
   requestClose()
 }
 
-const startDrag = (event: PointerEvent) => {
-  if (event.pointerType !== 'touch' || !props.dismissible) return
-  const target = event.target as HTMLElement
+const findTouch = (touches: TouchList) => Array.from(touches).find(touch => touch.identifier === touchId)
+
+const startDrag = (event: TouchEvent) => {
+  if (!props.dismissible || event.touches.length !== 1 || !(event.target instanceof HTMLElement)) return
+  const target = event.target
   const handle = target.closest<HTMLElement>('.filter-sheet-handle')
   const scrollContainer = target.closest<HTMLElement>('.filter-sheet-content, .video-panel-scroll')
-  const interactive = target.closest('button, input, select, textarea, a, [contenteditable="true"]')
-  if (!handle && (!scrollContainer || scrollContainer.scrollTop > 0 || interactive)) return
-  pointerId = event.pointerId
+  if (!handle && (!scrollContainer || scrollContainer.scrollTop > 0)) return
+  const touch = event.touches[0]
+  if (!touch) return
+  touchId = touch.identifier
   pendingDrag = !handle
-  startedFromHandle = Boolean(handle)
   scrollSource = scrollContainer
-  startX = event.clientX
-  startY = lastY = event.clientY
+  startX = touch.clientX
+  startY = lastY = touch.clientY
   lastTime = performance.now()
   releaseVelocity = 0
   dismissing.value = false
   dragging.value = Boolean(handle)
   updateSheetHeight()
-  if (handle) drawerRoot.value?.setPointerCapture(event.pointerId)
 }
 
-const moveDrag = (event: PointerEvent) => {
-  if (event.pointerId !== pointerId) return
-  const deltaX = event.clientX - startX
-  const deltaY = event.clientY - startY
+const moveDrag = (event: TouchEvent) => {
+  const touch = findTouch(event.touches)
+  if (!touch) return
+  const deltaX = touch.clientX - startX
+  const deltaY = touch.clientY - startY
   if (pendingDrag) {
     if (Math.abs(deltaX) > Math.abs(deltaY) || deltaY < 0 || (scrollSource?.scrollTop ?? 0) > 0) {
-      pointerId = undefined
+      touchId = undefined
       pendingDrag = false
       scrollSource = null
       return
@@ -210,25 +212,24 @@ const moveDrag = (event: PointerEvent) => {
     if (deltaY < 6) return
     pendingDrag = false
     dragging.value = true
-    drawerRoot.value?.setPointerCapture(event.pointerId)
   }
   if (!dragging.value) return
   if (event.cancelable) event.preventDefault()
   const now = performance.now()
   const elapsed = now - lastTime
-  if (elapsed > 0) releaseVelocity = (event.clientY - lastY) / elapsed
-  lastY = event.clientY
+  if (elapsed > 0) releaseVelocity = (touch.clientY - lastY) / elapsed
+  lastY = touch.clientY
   lastTime = now
   const distance = Math.max(0, deltaY)
   const overflow = Math.max(0, distance - sheetHeight.value)
   dragY.value = distance <= sheetHeight.value ? distance : sheetHeight.value + Math.sqrt(overflow) * 4
-  if (startedFromHandle && distance > 4) suppressHandleClick = true
+  if (distance > 4) suppressClick = true
 }
 
-const finishDrag = (event: PointerEvent) => {
-  if (event.pointerId !== pointerId) return
+const finishDrag = (event: TouchEvent) => {
+  if (!findTouch(event.changedTouches)) return
   if (pendingDrag) {
-    pointerId = undefined
+    touchId = undefined
     pendingDrag = false
     scrollSource = null
     return
@@ -236,11 +237,11 @@ const finishDrag = (event: PointerEvent) => {
   if (!dragging.value) return
   const velocity = performance.now() - lastTime < 120 ? releaseVelocity : 0
   dragging.value = false
-  pointerId = undefined
+  touchId = undefined
   const content = sheetContent()
   const dismissDistance = Math.min(96, (content?.offsetHeight ?? window.innerHeight) * .18)
   clearTimeout(suppressClickTimer)
-  suppressClickTimer = setTimeout(() => { suppressHandleClick = false }, 350)
+  suppressClickTimer = setTimeout(() => { suppressClick = false }, 350)
   if (dragY.value > dismissDistance || velocity > .45) {
     dismissing.value = true
     requestAnimationFrame(() => {
@@ -252,8 +253,8 @@ const finishDrag = (event: PointerEvent) => {
   dragY.value = 0
 }
 
-const cancelDrag = (event: PointerEvent) => {
-  if (event.pointerId !== pointerId) return
+const cancelDrag = () => {
+  if (touchId === undefined) return
   resetGesture()
 }
 
@@ -296,10 +297,10 @@ onBeforeUnmount(() => {
         :style="{ '--sheet-drag-y': `${dragY}px`, '--sheet-backdrop-opacity': backdropOpacity }"
         @click.capture="handleClick"
         @click.self="requestClose"
-        @pointerdown="startDrag"
-        @pointermove="moveDrag"
-        @pointerup="finishDrag"
-        @pointercancel="cancelDrag">
+        @touchstart.passive="startDrag"
+        @touchmove="moveDrag"
+        @touchend="finishDrag"
+        @touchcancel="cancelDrag">
         <slot />
       </div>
     </Transition>

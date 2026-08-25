@@ -1073,8 +1073,8 @@ button.panel-dropdown-trigger:focus-visible {
     overflow: hidden !important;
     overscroll-behavior: contain;
     background: transparent !important;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
+    backdrop-filter: blur(var(--filter-overlay-blur)) !important;
+    -webkit-backdrop-filter: blur(var(--filter-overlay-blur)) !important;
   }
 
   .selection-panel.selection-panel--filter-overlay::before {
@@ -1085,8 +1085,6 @@ button.panel-dropdown-trigger:focus-visible {
     pointer-events: none;
     opacity: var(--sheet-backdrop-opacity, 1);
     background: var(--filter-overlay-backdrop-background);
-    backdrop-filter: blur(var(--filter-overlay-blur));
-    -webkit-backdrop-filter: blur(var(--filter-overlay-blur));
   }
 
   .selection-panel.selection-panel--filter-overlay > * {
