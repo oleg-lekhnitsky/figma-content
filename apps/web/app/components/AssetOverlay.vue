@@ -104,10 +104,24 @@ const gestureX = ref(0)
 const gestureY = ref(0)
 const gestureActive = ref(false)
 const gestureSettling = ref(false)
-const gestureAxis = ref<'x' | 'y' | ''>('')
+const gestureAxis = ref<'x' | 'y' | 'pan' | 'pinch' | ''>('')
+const zoomScale = ref(1)
+const zoomX = ref(0)
+const zoomY = ref(0)
+const zoomPointers = new Map<number, { x: number; y: number }>()
+const zoomActive = computed(() => zoomScale.value > 1.01)
+const canZoom = computed(() => isMobile.value && Boolean(resolvedPreviewUrl.value) && !resolvedMimeType.value?.startsWith('video/'))
 let gesturePointerId: number | undefined
 let gestureStartX = 0
 let gestureStartY = 0
+let panStartX = 0
+let panStartY = 0
+let panStartOffsetX = 0
+let panStartOffsetY = 0
+let pinchStartDistance = 1
+let pinchStartScale = 1
+let pinchFocalX = 0
+let pinchFocalY = 0
 let swipeNavigationTarget = ''
 let swipeTimer: ReturnType<typeof setTimeout> | undefined
 let openingViewTransitionTimer: ReturnType<typeof setTimeout> | undefined
@@ -277,6 +291,7 @@ const addToBoard = async (targetBoardId = boardId.value) => {
 const formatBytes = (bytes: number) => `${(bytes / 1_048_576).toFixed(1)} MB`
 const navigateAsset = (id?: string) => {
   if (!id || editing.value) return
+  resetZoom(false)
   actionError.value = ''
   actionMessage.value = ''
   boardId.value = ''
@@ -321,14 +336,112 @@ const assetVisualStyle = computed(() => {
   }
   return background
 })
-const currentPreviewStyle = computed(() => isMobile.value ? { transform: `translate3d(${gestureX.value}px, 0, 0)` } : undefined)
+const currentPreviewStyle = computed(() => isMobile.value ? {
+  transform: `translate3d(${gestureX.value + zoomX.value}px, ${zoomY.value}px, 0) scale(${zoomScale.value})`
+} : undefined)
 const previousPreviewStyle = computed(() => ({ transform: `translate3d(calc(-100% + ${gestureX.value}px), 0, 0)` }))
 const nextPreviewStyle = computed(() => ({ transform: `translate3d(calc(100% + ${gestureX.value}px), 0, 0)` }))
 const mobileSlideStyle = (position: string) => position === 'previous' ? previousPreviewStyle.value : position === 'next' ? nextPreviewStyle.value : currentPreviewStyle.value
+const clamp = (value: number, minimum: number, maximum: number) => Math.min(maximum, Math.max(minimum, value))
+const zoomBounds = (scale = zoomScale.value) => {
+  const visual = assetVisual.value
+  const media = visual?.querySelector<HTMLElement>('.current-preview')
+  if (!visual || !media || !asset.value?.width || !asset.value.height) return { x: 0, y: 0 }
+  const style = getComputedStyle(media)
+  const availableWidth = Math.max(1, media.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight))
+  const availableHeight = Math.max(1, media.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom))
+  const imageRatio = asset.value.width / asset.value.height
+  const availableRatio = availableWidth / availableHeight
+  const renderedWidth = imageRatio > availableRatio ? availableWidth : availableHeight * imageRatio
+  const renderedHeight = imageRatio > availableRatio ? availableWidth / imageRatio : availableHeight
+  return {
+    x: Math.max(0, (renderedWidth * scale - availableWidth) / 2),
+    y: Math.max(0, (renderedHeight * scale - availableHeight) / 2)
+  }
+}
+const constrainZoom = (x: number, y: number, scale = zoomScale.value) => {
+  const bounds = zoomBounds(scale)
+  return { x: clamp(x, -bounds.x, bounds.x), y: clamp(y, -bounds.y, bounds.y) }
+}
+function resetZoom(animate = true) {
+  if (!animate) gestureActive.value = true
+  zoomScale.value = 1
+  zoomX.value = 0
+  zoomY.value = 0
+  if (!animate) nextTick(() => { gestureActive.value = false })
+}
+const zoomAt = (scale: number, clientX?: number, clientY?: number) => {
+  const visual = assetVisual.value
+  if (!visual || !canZoom.value) return
+  const rect = visual.getBoundingClientRect()
+  const targetScale = clamp(scale, 1, 4)
+  const pointX = (clientX ?? rect.left + rect.width / 2) - rect.left - rect.width / 2
+  const pointY = (clientY ?? rect.top + rect.height / 2) - rect.top - rect.height / 2
+  const localX = (pointX - zoomX.value) / zoomScale.value
+  const localY = (pointY - zoomY.value) / zoomScale.value
+  const constrained = constrainZoom(pointX - localX * targetScale, pointY - localY * targetScale, targetScale)
+  zoomScale.value = targetScale
+  zoomX.value = targetScale === 1 ? 0 : constrained.x
+  zoomY.value = targetScale === 1 ? 0 : constrained.y
+}
+const toggleZoom = (event?: MouseEvent) => {
+  if (event?.target instanceof Element && event.target.closest('button')) return
+  if (zoomActive.value) resetZoom()
+  else zoomAt(2, event?.clientX, event?.clientY)
+}
+const pointerPair = () => Array.from(zoomPointers.values()).slice(0, 2)
+const beginPinch = () => {
+  const [first, second] = pointerPair()
+  const visual = assetVisual.value
+  if (!first || !second || !visual) return
+  const rect = visual.getBoundingClientRect()
+  const midpointX = (first.x + second.x) / 2
+  const midpointY = (first.y + second.y) / 2
+  pinchStartDistance = Math.max(1, Math.hypot(second.x - first.x, second.y - first.y))
+  pinchStartScale = zoomScale.value
+  pinchFocalX = (midpointX - rect.left - rect.width / 2 - zoomX.value) / zoomScale.value
+  pinchFocalY = (midpointY - rect.top - rect.height / 2 - zoomY.value) / zoomScale.value
+  gesturePointerId = undefined
+  gestureAxis.value = 'pinch'
+  gestureX.value = 0
+  gestureY.value = 0
+  gestureActive.value = true
+}
+const updatePinch = () => {
+  const [first, second] = pointerPair()
+  const visual = assetVisual.value
+  if (!first || !second || !visual) return
+  const rect = visual.getBoundingClientRect()
+  const midpointX = (first.x + second.x) / 2
+  const midpointY = (first.y + second.y) / 2
+  const distance = Math.hypot(second.x - first.x, second.y - first.y)
+  const scale = clamp(pinchStartScale * distance / pinchStartDistance, 1, 4)
+  const x = midpointX - rect.left - rect.width / 2 - pinchFocalX * scale
+  const y = midpointY - rect.top - rect.height / 2 - pinchFocalY * scale
+  const constrained = constrainZoom(x, y, scale)
+  zoomScale.value = scale
+  zoomX.value = scale === 1 ? 0 : constrained.x
+  zoomY.value = scale === 1 ? 0 : constrained.y
+}
+const beginPan = (pointerId: number, point: { x: number; y: number }) => {
+  gesturePointerId = pointerId
+  panStartX = point.x
+  panStartY = point.y
+  panStartOffsetX = zoomX.value
+  panStartOffsetY = zoomY.value
+  gestureAxis.value = 'pan'
+  gestureActive.value = true
+}
 const startGesture = (event: PointerEvent) => {
   if (event.pointerType !== 'touch' || editing.value || gestureSettling.value) return
   allowsOpeningViewTransition.value = false
   clearTimeout(openingViewTransitionTimer)
+  if (canZoom.value) {
+    zoomPointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
+    ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
+    if (zoomPointers.size >= 2) return beginPinch()
+    if (zoomActive.value) return beginPan(event.pointerId, { x: event.clientX, y: event.clientY })
+  }
   gesturePointerId = event.pointerId
   gestureStartX = event.clientX
   gestureStartY = event.clientY
@@ -337,7 +450,18 @@ const startGesture = (event: PointerEvent) => {
     ; (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
 }
 const moveGesture = (event: PointerEvent) => {
+  if (zoomPointers.has(event.pointerId)) zoomPointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
+  if (gestureAxis.value === 'pinch') return updatePinch()
   if (!gestureActive.value || event.pointerId !== gesturePointerId) return
+  if (gestureAxis.value === 'pan') {
+    const constrained = constrainZoom(
+      panStartOffsetX + event.clientX - panStartX,
+      panStartOffsetY + event.clientY - panStartY
+    )
+    zoomX.value = constrained.x
+    zoomY.value = constrained.y
+    return
+  }
   const x = event.clientX - gestureStartX
   const y = event.clientY - gestureStartY
   if (!gestureAxis.value && Math.hypot(x, y) > 8) gestureAxis.value = Math.abs(x) > Math.abs(y) ? 'x' : 'y'
@@ -359,10 +483,36 @@ const resetGesture = () => {
   gesturePointerId = undefined
   gestureX.value = 0
   gestureY.value = 0
+  zoomPointers.clear()
 }
-const revealDetails = () => overlayContent.value?.scrollTo({ top: window.innerHeight, behavior: 'smooth' })
+const revealDetails = () => {
+  resetZoom()
+  overlayContent.value?.scrollTo({ top: window.innerHeight, behavior: 'smooth' })
+}
 const finishGesture = (event: PointerEvent) => {
+  zoomPointers.delete(event.pointerId)
+  if (gestureAxis.value === 'pinch') {
+    if (zoomPointers.size >= 2) { beginPinch(); return }
+    if (zoomActive.value && zoomPointers.size === 1) {
+      const [remaining] = zoomPointers.entries()
+      if (remaining) beginPan(remaining[0], remaining[1])
+      return
+    }
+    gestureActive.value = false
+    gestureAxis.value = ''
+    if (!zoomActive.value) resetZoom()
+    return
+  }
   if (!gestureActive.value || event.pointerId !== gesturePointerId) return
+  if (gestureAxis.value === 'pan') {
+    gesturePointerId = undefined
+    gestureActive.value = false
+    gestureAxis.value = ''
+    const constrained = constrainZoom(zoomX.value, zoomY.value)
+    zoomX.value = constrained.x
+    zoomY.value = constrained.y
+    return
+  }
   const axis = gestureAxis.value
   const x = gestureX.value
   const y = gestureY.value
@@ -395,6 +545,7 @@ const finishSwipeTransition = (event: TransitionEvent) => {
   completeSwipe()
 }
 watch(() => props.assetId, id => {
+  resetZoom(false)
   if (!swipeNavigationTarget || id !== swipeNavigationTarget) return
   clearTimeout(swipeTimer)
   swipeNavigationTarget = ''
@@ -432,11 +583,11 @@ watch(() => props.assetId, id => {
           asset.</strong><button @click="refresh()">Try again</button></div>
       <main v-if="asset" ref="overlayContent" class="overlay-content">
         <section ref="assetVisual" class="asset-visual"
-          :class="{ 'skeleton-visual': !resolvedPreviewUrl, 'is-dragging': isMobile && gestureActive, 'allows-opening-view-transition': allowsOpeningViewTransition && !showInitialSkeleton }"
+          :class="{ 'skeleton-visual': !resolvedPreviewUrl, 'is-dragging': isMobile && gestureActive, 'is-zoomed': zoomActive, 'allows-opening-view-transition': allowsOpeningViewTransition && !showInitialSkeleton }"
           :style="assetVisualStyle" aria-describedby="mobile-gesture-hint" @pointerdown="startGesture"
           @pointermove="moveGesture" @pointerup="finishGesture" @pointercancel="resetGesture"
-          @transitionend="finishSwipeTransition"><span id="mobile-gesture-hint" class="sr-only">Swipe left or right to
-            browse assets. Pull down to close.</span><button class="pull-handle" type="button"
+          @dblclick.prevent="toggleZoom" @transitionend="finishSwipeTransition"><span id="mobile-gesture-hint" class="sr-only">Swipe left or right to
+            browse assets. Pull down to close. Pinch or double-tap to zoom an image.</span><button class="pull-handle" type="button"
             aria-label="Close asset details" @pointerdown.stop @click="close" />
           <template v-if="isMobile">
             <AssetMedia v-for="slide in mobileSlides" :key="slide.id"
@@ -446,6 +597,9 @@ watch(() => props.assetId, id => {
           </template>
           <AssetMedia v-else-if="resolvedPreviewUrl" class="current-preview" :src="resolvedPreviewUrl"
             :mime-type="resolvedMimeType" :alt="`Preview of ${asset.title}`" loading="eager" fetchpriority="high" draggable="false" />
+          <button v-if="canZoom" class="asset-zoom-toggle" type="button"
+            :aria-label="zoomActive ? 'Reset image zoom' : 'Zoom image to 200%'"
+            :aria-pressed="zoomActive" @pointerdown.stop @click.stop="toggleZoom()">{{ zoomActive ? '1×' : '2×' }}</button>
           <button class="details-hint" type="button" aria-label="Show asset details"
             @pointerdown.stop @click="revealDetails"><svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="m6 9 6 6 6-6" />
@@ -1387,7 +1541,7 @@ li span {
     border-radius: 0;
     background: transparent;
     clip-path: none;
-    touch-action: pinch-zoom;
+    touch-action: none;
     user-select: none
   }
 
@@ -1402,6 +1556,10 @@ li span {
 
   .asset-visual.is-dragging :is(img, video) {
     transition-duration: 0s
+  }
+
+  .asset-visual.is-zoomed .current-preview {
+    will-change: transform
   }
 
   .asset-visual .current-preview {
@@ -1447,6 +1605,31 @@ li span {
     height: 5px;
     border-radius: 999px;
     background: color-mix(in srgb, var(--asset-overlay-fg) 34%, transparent)
+  }
+
+  .asset-zoom-toggle {
+    position: absolute;
+    z-index: 5;
+    top: max(calc(var(--space) / 2), env(safe-area-inset-top));
+    right: max(var(--space), env(safe-area-inset-right));
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    color: var(--asset-overlay-fg);
+    background: var(--material-tinted-bg);
+    font: inherit;
+    font-size: var(--font-size-label);
+    font-weight: 700;
+    transition-property: transform, background-color;
+    transition-duration: 120ms;
+    transition-timing-function: cubic-bezier(.2, 0, 0, 1)
+  }
+
+  .asset-zoom-toggle:active {
+    transform: scale(.96)
   }
 
   .details-hint {
@@ -1530,7 +1713,9 @@ li span {
 
   .asset-dialog,
   .asset-dialog::backdrop,
-  .asset-navigation {
+  .asset-navigation,
+  .asset-zoom-toggle,
+  .asset-visual :is(img, video) {
     transition-duration: .01ms
   }
 
