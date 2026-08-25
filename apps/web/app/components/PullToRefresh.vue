@@ -3,7 +3,9 @@ const pull = ref(0)
 const refreshing = ref(false)
 const enabled = ref(false)
 
-const triggerDistance = 72
+const triggerDistance = 60
+const pullResistance = 0.65
+const maxPullDistance = triggerDistance + 18
 const directionThreshold = 6
 let startX = 0
 let startY = 0
@@ -13,18 +15,20 @@ let directionLocked = false
 const progress = computed(() => Math.min(pull.value / triggerDistance, 1))
 const indicatorStyle = computed(() => ({
   '--pull-progress': progress.value,
-  transform: `translate3d(-50%, ${Math.min(pull.value, triggerDistance + 18)}px, 0)`
+  transform: `translate3d(-50%, ${Math.min(pull.value, maxPullDistance)}px, 0)`
 }))
 
-const isScrollableTarget = (target: EventTarget | null) => {
+const hasScrolledScrollableTarget = (target: EventTarget | null) => {
   let element = target instanceof HTMLElement ? target : null
   while (element && element !== document.body) {
     const style = getComputedStyle(element)
-    if (/(auto|scroll)/.test(style.overflowY) && element.scrollHeight > element.clientHeight) return true
+    if (/(auto|scroll)/.test(style.overflowY) && element.scrollHeight > element.clientHeight && element.scrollTop > 0) return true
     element = element.parentElement
   }
   return false
 }
+
+const pageScrollTop = () => Math.max(window.scrollY, document.scrollingElement?.scrollTop ?? 0)
 
 const isInteractionBlocked = () => {
   const appRoot = document.getElementById('__nuxt')
@@ -40,8 +44,8 @@ const resetPull = () => {
 const startPull = (event: TouchEvent) => {
   if (!enabled.value || refreshing.value) return
   resetPull()
-  if (isInteractionBlocked() || window.scrollY > 0 || event.touches.length !== 1) return
-  if (isScrollableTarget(event.target)) return
+  if (isInteractionBlocked() || pageScrollTop() > 0 || event.touches.length !== 1) return
+  if (hasScrolledScrollableTarget(event.target)) return
   const touch = event.touches[0]
   if (!touch) return
   startX = touch.clientX
@@ -55,7 +59,7 @@ const movePull = (event: TouchEvent) => {
     resetPull()
     return
   }
-  if (isInteractionBlocked() || window.scrollY > 0) {
+  if (isInteractionBlocked() || pageScrollTop() > 0 || hasScrolledScrollableTarget(event.target)) {
     resetPull()
     return
   }
@@ -76,7 +80,7 @@ const movePull = (event: TouchEvent) => {
     return
   }
   if (event.cancelable) event.preventDefault()
-  pull.value = Math.min(Math.pow(deltaY, 0.82), triggerDistance + 18)
+  pull.value = Math.min(deltaY * pullResistance, maxPullDistance)
 }
 
 const finishPull = async () => {
@@ -102,7 +106,9 @@ const finishPull = async () => {
 onMounted(() => {
   const standalone = window.matchMedia('(display-mode: standalone)').matches
     || (navigator as Navigator & { standalone?: boolean }).standalone === true
-  enabled.value = standalone && /iPad|iPhone|iPod/.test(navigator.userAgent)
+  const appleTouchDevice = /iPad|iPhone|iPod/.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  enabled.value = standalone && appleTouchDevice && navigator.maxTouchPoints > 0
   if (!enabled.value) return
   window.addEventListener('touchstart', startPull, { passive: true })
   window.addEventListener('touchmove', movePull, { passive: false })
@@ -135,7 +141,7 @@ onBeforeUnmount(() => {
 .pull-refresh {
   position: fixed;
   z-index: 9999;
-  top: calc(env(safe-area-inset-top) - 44px);
+  top: max(8px, calc(env(safe-area-inset-top) - 36px));
   left: 50%;
   width: 36px;
   height: 36px;

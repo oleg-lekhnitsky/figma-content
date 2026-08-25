@@ -288,10 +288,9 @@ const deleteSelectedBoard = async () => {
     boardSettingsFeedback.error = true
   } finally { boardSettingsBusy.value = false }
 }
-const dynamicBoardFilters = reactive({ search: '', projectIds: [] as string[], tagIds: [] as string[], dateFrom: '', dateTo: '' })
+const dynamicBoardFilters = reactive({ projectIds: [] as string[], tagIds: [] as string[], dateFrom: '', dateTo: '' })
 const hydrateDynamicBoardFilters = (board: BoardSummary | null | undefined) => {
   const filters = board?.mode === 'dynamic' ? board.filters : null
-  dynamicBoardFilters.search = filters?.search ?? ''
   dynamicBoardFilters.projectIds = [...(filters?.projectIds?.length ? filters.projectIds : filters?.projectId ? [filters.projectId] : [])]
   dynamicBoardFilters.tagIds = [...(filters?.tagIds?.length ? filters.tagIds : filters?.tagId ? [filters.tagId] : [])]
   dynamicBoardFilters.dateFrom = filters?.dateFrom?.slice(0, 10) ?? ''
@@ -491,7 +490,7 @@ const currentBoardFilters = computed(() => ({
 }))
 const hasFilters = computed(() => Boolean(search.value || status.value || projectIds.value.length || tagIds.value.length || uploadedBys.value.length || dateRange.value !== 'all'))
 const activeFilterCount = computed(() => [status.value, projectIds.value.length, tagIds.value.length, uploadedBys.value.length, dateRange.value !== 'all'].filter(Boolean).length)
-const dynamicBoardFilterCount = computed(() => [dynamicBoardFilters.search, dynamicBoardFilters.projectIds.length, dynamicBoardFilters.tagIds.length, dynamicBoardFilters.dateFrom || dynamicBoardFilters.dateTo].filter(Boolean).length)
+const dynamicBoardFilterCount = computed(() => [dynamicBoardFilters.projectIds.length, dynamicBoardFilters.tagIds.length, dynamicBoardFilters.dateFrom || dynamicBoardFilters.dateTo].filter(Boolean).length)
 const clearFilters = () => {
   search.value = ''
   status.value = ''
@@ -557,14 +556,14 @@ const toggleSearch = () => {
 }
 const isoBoardDate = (value: string, end = false) => value ? new Date(`${value}T${end ? '23:59:59.999' : '00:00:00.000'}`).toISOString() : null
 let dynamicBoardSaveTimer: ReturnType<typeof setTimeout> | undefined
-watch(() => [dynamicBoardFilters.search, dynamicBoardFilters.projectIds.join(','), dynamicBoardFilters.tagIds.join(','), dynamicBoardFilters.dateFrom, dynamicBoardFilters.dateTo], () => {
+watch(() => [dynamicBoardFilters.projectIds.join(','), dynamicBoardFilters.tagIds.join(','), dynamicBoardFilters.dateFrom, dynamicBoardFilters.dateTo], () => {
   if (!selectedDynamicBoard.value || hydratingDynamicBoard) return
   clearTimeout(dynamicBoardSaveTimer)
   dynamicBoardSaveTimer = setTimeout(async () => {
     const board = selectedDynamicBoard.value
     if (!board) return
     const filters = {
-      search: dynamicBoardFilters.search, projectId: null, tagId: null,
+      search: '', projectId: null, tagId: null,
       projectIds: dynamicBoardFilters.projectIds, tagIds: dynamicBoardFilters.tagIds,
       uploadedBy: board.filters.uploadedBy,
       dateFrom: isoBoardDate(dynamicBoardFilters.dateFrom), dateTo: isoBoardDate(dynamicBoardFilters.dateTo, true)
@@ -577,7 +576,6 @@ watch(() => [dynamicBoardFilters.search, dynamicBoardFilters.projectIds.join(','
   }, 350)
 })
 const clearDynamicBoardFilters = () => {
-  dynamicBoardFilters.search = ''
   dynamicBoardFilters.projectIds = []
   dynamicBoardFilters.tagIds = []
   dynamicBoardFilters.dateFrom = ''
@@ -934,10 +932,9 @@ onBeforeUnmount(() => {
       <template v-else>
         <SelectionPanel v-if="selectedDynamicBoard" :visible="filtersExpanded" label="Board asset filters" wide overlay
           raised @close="closeFilters" @after-leave="finishExpandedPanelClose">
-          <AssetFilterControls v-model:search="dynamicBoardFilters.search"
-            v-model:project-ids="dynamicBoardFilters.projectIds" v-model:tag-ids="dynamicBoardFilters.tagIds"
+          <AssetFilterControls v-model:project-ids="dynamicBoardFilters.projectIds" v-model:tag-ids="dynamicBoardFilters.tagIds"
             v-model:date-from="dynamicBoardFilters.dateFrom" v-model:date-to="dynamicBoardFilters.dateTo"
-            :projects="projects" :tags="tags" heading="Filters" show-search expanded
+            :projects="projects" :tags="tags" heading="Filters" expanded
             :actions-visible="Boolean(dynamicBoardFilterCount)">
             <template #actions><button class="clear-filters-button" type="button"
                 @click="clearDynamicBoardFilters">Clear filters</button></template>

@@ -223,7 +223,7 @@ const createCollection = async () => {
         contentStrategy: review || portfolio ? 'manual' : mode.value === 'dynamic' ? 'dynamic' : usingCurrentFilters.value ? 'snapshot' : 'manual',
         filters: review
           ? { search: '', projectId: null, tagId: null, projectIds: [], tagIds: [], uploadedBy: null, dateFrom: reviewStart?.toISOString(), dateTo: reviewEnd?.toISOString() }
-          : { search: searchFilter.value, projectId: null, tagId: null, projectIds: projectIds.value, tagIds: tagIds.value, uploadedBy: usingCurrentFilters.value ? props.currentFilters?.uploadedBy ?? null : null, ...datesForRange() },
+          : { search: mode.value === 'dynamic' ? '' : searchFilter.value, projectId: null, tagId: null, projectIds: projectIds.value, tagIds: tagIds.value, uploadedBy: usingCurrentFilters.value ? props.currentFilters?.uploadedBy ?? null : null, ...datesForRange() },
         expiresAt: null,
         reviewMonth: review ? `${reviewMonth.value}-01` : null,
         submissionDeadline: review ? isoAt(submissionDeadline.value, true) : null,

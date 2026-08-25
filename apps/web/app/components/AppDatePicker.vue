@@ -22,7 +22,6 @@ const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 const open = ref(false)
 const trigger = ref<HTMLButtonElement>()
 const calendar = ref<HTMLElement>()
-const labelId = useId()
 
 const parseDate = (value: string) => {
   const match = props.precision === 'month'
@@ -56,7 +55,7 @@ const weekdayFormatter = new Intl.DateTimeFormat('en-US', { weekday: 'short' })
 const weekdays = Array.from({ length: 7 }, (_, index) => weekdayFormatter.format(new Date(2024, 0, index + 1)).replace('.', ''))
 const displayValue = computed(() => selectedDate.value
   ? props.precision === 'month' ? monthFormatter.format(selectedDate.value) : dateFormatter.format(selectedDate.value)
-  : props.precision === 'month' ? 'Choose month' : 'Choose date')
+  : '')
 
 const sameDay = (first?: Date, second?: Date) => Boolean(first && second && toDayValue(first) === toDayValue(second))
 const today = new Date()
@@ -211,11 +210,13 @@ const clear = () => {
 
 <template>
   <div class="date-field app-date-picker" :class="`app-date-picker--${surface}`">
-    <span :id="labelId" class="app-date-picker-label filter-option-label">{{ label }}</span>
     <AppPopover :open="open" :width="320" align="start" haspopup="dialog" @update:open="setOpen">
       <template #trigger="{ triggerProps }">
-        <button ref="trigger" v-bind="triggerProps" class="app-date-picker-trigger" type="button" :aria-label="`${label}: ${displayValue}`">
-          <span>{{ displayValue }}</span>
+        <button ref="trigger" v-bind="triggerProps" class="app-date-picker-trigger" type="button" :aria-label="`${label}: ${displayValue || 'No date selected'}`">
+          <span class="app-date-picker-trigger-copy" :class="{ 'has-value': displayValue }">
+            <span class="app-date-picker-trigger-label">{{ label }}</span>
+            <span v-if="displayValue" class="app-date-picker-trigger-value">{{ displayValue }}</span>
+          </span>
           <Calendar :size="16" weight="Outline" :stroke-width="2" aria-hidden="true" />
         </button>
       </template>
@@ -296,6 +297,29 @@ const clear = () => {
   font-size: var(--filter-control-font-size);
   font-weight: 500;
   text-align: start;
+}
+.app-date-picker-trigger-copy {
+  min-width: 0;
+  display: grid;
+  align-content: center;
+  line-height: 1.05;
+}
+.app-date-picker-trigger-label {
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+}
+.app-date-picker-trigger-copy.has-value {
+  gap: 2px;
+}
+.app-date-picker-trigger-copy.has-value .app-date-picker-trigger-label {
+  color: var(--filter-overlay-muted-color);
+  font-size: var(--filter-caption-size);
+}
+.app-date-picker-trigger-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .app-date-picker-trigger:focus-visible,
 .app-calendar button:focus-visible {

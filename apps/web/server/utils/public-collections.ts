@@ -67,7 +67,7 @@ export const boardPreviewForCollection = async (collection: {
 }, options: { includePreviews?: boolean } = {}) => {
   let ids: string[]
   if (collection.mode === 'dynamic') {
-    ids = await applyDynamicBoardOrder(collection.id, await matchingApprovedAssetIds(collection.organization_id, collection.filters))
+    ids = await applyDynamicBoardOrder(collection.id, await matchingApprovedAssetIds(collection.organization_id, { ...collection.filters, search: '' }))
   } else {
     const { data, error } = await useSupabaseAdmin().from('public_collection_assets')
       .select('asset_id').eq('collection_id', collection.id).order('position', { ascending: true, nullsFirst: false }).limit(500)
@@ -103,7 +103,7 @@ export const publicAssetsForCollection = async (
 ) => {
   let ids: string[]
   if (collection.mode === 'dynamic') {
-    ids = await applyDynamicBoardOrder(collection.id, await matchingApprovedAssetIds(collection.organization_id, collection.filters))
+    ids = await applyDynamicBoardOrder(collection.id, await matchingApprovedAssetIds(collection.organization_id, { ...collection.filters, search: '' }))
   } else {
     const { data, error } = await useSupabaseAdmin().from('public_collection_assets')
       .select('asset_id').eq('collection_id', collection.id).order('position', { ascending: true, nullsFirst: false }).limit(500)
