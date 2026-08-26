@@ -19,10 +19,8 @@ const copyCode = async () => {
 
       <template v-if="hasCode">
         <div class="auth-content">
-          <p class="auth-copy">Copy this one-time code, return to the plugin, and paste it there within one minute.</p>
           <div class="auth-code" aria-label="One-time authentication code"><code>{{ code }}</code></div>
           <button class="auth-submit" type="button" @click="copyCode">{{ copied ? 'Code copied' : 'Copy one-time code' }}</button>
-          <p class="auth-status" role="status" aria-live="polite">{{ copied ? 'The code is ready to paste in Figma.' : '' }}</p>
         </div>
       </template>
 
@@ -67,8 +65,7 @@ const copyCode = async () => {
   gap: var(--space);
 }
 
-.auth-copy,
-.auth-status {
+.auth-copy {
   margin: 0;
   color: var(--filter-overlay-muted-color);
   font-size: var(--font-size-label);
@@ -115,10 +112,6 @@ const copyCode = async () => {
 .auth-submit.auth-submit:hover { background: #fff; }
 .auth-submit.auth-submit:active { scale: .96; }
 .auth-submit.auth-submit:focus-visible { outline: 2px solid var(--filter-overlay-panel-color); outline-offset: 2px; }
-
-.auth-status {
-  min-height: 1.15em;
-}
 
 @media (max-width: 520px) {
   .auth-shell { place-items: center; }

@@ -93,17 +93,16 @@ const startFigmaLogin = async () => {
       <div class="auth-divider" aria-hidden="true"><span>or</span></div>
 
       <div class="figma-option">
-        <p id="figma-status" class="figma-status" role="status">{{ figmaSubmitting ? 'Opening Figma…' : '' }}</p>
         <p id="figma-error" class="figma-error" role="alert">{{ figmaErrorMessage }}</p>
         <button
           class="auth-figma"
           type="button"
           :disabled="figmaSubmitting"
           :aria-busy="figmaSubmitting"
-          :aria-describedby="figmaErrorMessage ? 'figma-error' : figmaSubmitting ? 'figma-status' : undefined"
+          :aria-describedby="figmaErrorMessage ? 'figma-error' : undefined"
           @click="startFigmaLogin"
         >
-          Continue with Figma
+          {{ figmaSubmitting ? 'Opening Figma…' : 'Continue with Figma' }}
         </button>
       </div>
     </section>
@@ -295,7 +294,6 @@ form {
   gap: var(--space);
 }
 
-.figma-status,
 .figma-error {
   margin: 0;
   color: var(--filter-overlay-muted-color);
@@ -306,7 +304,6 @@ form {
   color: color-mix(in srgb, var(--color-danger) 42%, #fff);
 }
 
-.figma-status:empty,
 .figma-error:empty {
   display: none;
 }

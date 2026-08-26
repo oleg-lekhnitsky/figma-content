@@ -1442,7 +1442,6 @@ button {
   gap: calc(var(--space)*1.25);
   padding: 0 var(--space);
   overflow-x: auto;
-  overscroll-behavior-x: none;
   background: var(--color-bg);
   scrollbar-width: none
 }
