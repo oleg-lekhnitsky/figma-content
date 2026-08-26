@@ -27,6 +27,7 @@ const props = withDefaults(defineProps<{
   canApprove?: boolean
   editableTitles?: boolean
   playVideos?: boolean
+  instantOpen?: boolean
   viewSettings?: BoardViewSettings
 }>(), {
   interactive: false,
@@ -42,13 +43,15 @@ const props = withDefaults(defineProps<{
   animateChanges: false,
   canApprove: false,
   editableTitles: false,
-  playVideos: true
+  playVideos: true,
+  instantOpen: false
 })
 const emit = defineEmits<{
   toggleSelection: [asset: T]
   reorder: [fromIndex: number, toIndex: number]
   toggleApproval: [asset: T]
   rename: [asset: T, title: string]
+  open: [id: string]
 }>()
 const inheritedViewSettings = inject<Ref<BoardViewSettings> | undefined>('boardViewSettings', undefined)
 const effectiveViewSettings = computed(() => props.viewSettings ?? inheritedViewSettings?.value)
@@ -65,7 +68,6 @@ const mediaFallbacks = (asset: T) => {
 }
 
 const route = useRoute()
-const router = useRouter()
 const loadedImages = reactive(new Set<string>())
 const selectedIdSet = computed(() => new Set(props.selectedIds))
 const isSelected = (id: string) => selectedIdSet.value.has(id)
@@ -101,16 +103,23 @@ const openAsset = (event: MouseEvent, id: string) => {
     return
   }
   if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-  const transitionDocument = document as Document & { startViewTransition?: (update: () => Promise<void>) => { finished: Promise<void>; skipTransition?: () => void } }
-  if (!transitionDocument.startViewTransition || !window.matchMedia('(max-width: 760px)').matches || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  if (!props.instantOpen) return
   event.preventDefault()
+  const transitionDocument = document as Document & { startViewTransition?: (update: () => Promise<void>) => { finished: Promise<void>; skipTransition?: () => void } }
+  if (!transitionDocument.startViewTransition || !window.matchMedia('(max-width: 760px)').matches || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    emit('open', id)
+    return
+  }
   const media = (event.currentTarget as HTMLElement).querySelector<HTMLElement>('img,video')
-  if (!media) return void router.push(assetLink(id))
+  if (!media) {
+    emit('open', id)
+    return
+  }
   media.style.viewTransitionName = 'asset-preview'
   try {
     activeViewTransition?.skipTransition?.()
     const transition = transitionDocument.startViewTransition(async () => {
-      await router.push(assetLink(id))
+      emit('open', id)
       media.style.viewTransitionName = ''
       await nextTick()
     })
@@ -122,7 +131,7 @@ const openAsset = (event: MouseEvent, id: string) => {
   } catch {
     media.style.viewTransitionName = ''
     activeViewTransition = undefined
-    void router.push(assetLink(id))
+    emit('open', id)
   }
 }
 const cancelQuickActionsHold = () => {

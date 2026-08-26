@@ -15,13 +15,13 @@ const assetTitleInput = ref<HTMLTextAreaElement>()
 const moreOpen = ref(false)
 const deleteDialogOpen = ref(false)
 const deleting = ref(false)
-const { data, error, status: assetStatus, refresh } = useLazyFetch<{ data: { asset: AssetDetail } }>(() => `/api/assets/${props.assetId}`)
+const { data, error, status: assetStatus, refresh, execute: loadAsset } = useLazyFetch<{ data: { asset: AssetDetail } }>(() => `/api/assets/${props.assetId}`, { immediate: false })
 const { data: previewData, execute: loadFullPreview } = useLazyFetch<{ data: { id: string; url: string } }>(() => `/api/assets/${props.assetId}/preview`, { immediate: false })
-const { data: session } = useLazyFetch<SessionResponse>('/api/auth/session')
-const { data: boardData, status: boardStatus, refresh: refreshBoards } = useLazyFetch<{ data: { collections: Board[] } }>('/api/shares')
+const { data: session, execute: loadSession } = useLazyFetch<SessionResponse>('/api/auth/session', { immediate: false })
+const { data: boardData, status: boardStatus, refresh: refreshBoards, execute: loadBoards } = useLazyFetch<{ data: { collections: Board[] } }>('/api/shares', { immediate: false })
 const boardCreator = ref<{ openCreate: () => Promise<void> }>()
-const { data: projectData } = useLazyFetch<{ data: { projects: Option[] } }>('/api/projects')
-const { data: campaignData } = useLazyFetch<{ data: { campaigns: Option[] } }>('/api/campaigns')
+const { data: projectData, execute: loadProjects } = useLazyFetch<{ data: { projects: Option[] } }>('/api/projects', { immediate: false })
+const { data: campaignData, execute: loadCampaigns } = useLazyFetch<{ data: { campaigns: Option[] } }>('/api/campaigns', { immediate: false })
 const fetchedAsset = computed(() => data.value?.data.asset)
 const retainedAsset = shallowRef<AssetDetail>()
 watch(fetchedAsset, next => { if (next) retainedAsset.value = next }, { immediate: true })
@@ -132,6 +132,8 @@ let previousRootOverflow = ''
 let scrollLocked = false
 let closeTimer: ReturnType<typeof setTimeout> | undefined
 let mobileQuery: MediaQueryList | undefined
+let firstPaintFrame = 0
+let initialLoadFrame = 0
 const updateMobile = () => { isMobile.value = mobileQuery?.matches ?? false }
 const resetEditor = () => {
   if (!asset.value) return
@@ -172,7 +174,16 @@ onMounted(() => {
   lockPageScroll()
   dialog.value?.showModal()
   dialog.value?.focus({ preventScroll: true })
-  void loadFullPreview()
+  firstPaintFrame = requestAnimationFrame(() => {
+    initialLoadFrame = requestAnimationFrame(() => {
+      void loadAsset()
+      void loadFullPreview()
+      void loadSession()
+      void loadBoards()
+      void loadProjects()
+      void loadCampaigns()
+    })
+  })
   openingViewTransitionTimer = setTimeout(() => {
     allowsOpeningViewTransition.value = false
     if (pendingFullPreviewUrl.value) {
@@ -185,6 +196,8 @@ onBeforeUnmount(() => {
   clearTimeout(closeTimer)
   clearTimeout(swipeTimer)
   clearTimeout(openingViewTransitionTimer)
+  cancelAnimationFrame(firstPaintFrame)
+  cancelAnimationFrame(initialLoadFrame)
   mobileQuery?.removeEventListener('change', updateMobile)
   unlockPageScroll()
 })

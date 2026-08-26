@@ -739,18 +739,29 @@ const toggleAssetApproval = async (asset: AssetCard) => {
   try { await $fetch(`/api/assets/${asset.id}`, { method: 'PATCH', body: { status: asset.status } }) }
   catch { asset.status = previousStatus }
 }
-const selectedAssetId = computed(() => typeof route.query.asset === 'string' ? route.query.asset : '')
+const routedAssetId = computed(() => typeof route.query.asset === 'string' ? route.query.asset : '')
+const localAssetId = ref<string | null>(null)
+const selectedAssetId = computed(() => localAssetId.value ?? routedAssetId.value)
 const selectedAssetPreviewUrl = computed(() => {
   const selected = displayedAssets.value.find(asset => asset.id === selectedAssetId.value)
   return selected?.previewUrl ?? ''
 })
 const assetPreviewUrls = computed(() => Object.fromEntries(displayedAssets.value.map(asset => [asset.id, asset.previewUrl])))
 const assetMimeTypes = computed(() => Object.fromEntries(displayedAssets.value.map(asset => [asset.id, asset.mime_type])))
-const closeAsset = () => replaceLibraryQuery({ asset: undefined })
-const navigateAsset = (id: string) => router.replace({
-  path: '/library',
-  query: { ...route.query, ...persistedFilterQuery.value, asset: id }
-})
+let assetRouteRevision = 0
+let assetRouteSync = Promise.resolve()
+const selectAsset = (id: string) => {
+  localAssetId.value = id
+  const revision = ++assetRouteRevision
+  assetRouteSync = assetRouteSync.catch(() => undefined).then(async () => {
+    if (revision !== assetRouteRevision) return
+    await replaceLibraryQuery({ asset: id || undefined })
+    if (revision === assetRouteRevision && routedAssetId.value === id) localAssetId.value = null
+  })
+}
+const openAsset = (id: string) => selectAsset(id)
+const closeAsset = () => selectAsset('')
+const navigateAsset = (id: string) => selectAsset(id)
 const handleAssetDeleted = (id: string) => {
   assets.value = assets.value.filter(asset => asset.id !== id)
   if (data.value) {
@@ -1123,11 +1134,13 @@ onBeforeUnmount(() => {
         </div>
         <AssetMasonry v-else :key="selectedBoardId || 'all'" :assets="masonryAssets" :hidden="cardsHidden"
           :play-videos="!videoExpanded"
+          instant-open
           :stable-columns="false" :animate-changes="!cardsHidden" :can-approve="canApprove && !arrangeExpanded"
           :editable-titles="canRenameAssets && !arrangeExpanded" :view-settings="libraryView"
           :interactive="!arrangeExpanded" :reorderable="arrangeExpanded" :selectable="arrangeExpanded"
           :selected-ids="arrangeSelectedIds" @reorder="reorderSelectedBoardAssets"
-          @toggle-selection="toggleArrangeSelection" @toggle-approval="toggleAssetApproval" @rename="renameAsset" />
+          @toggle-selection="toggleArrangeSelection" @toggle-approval="toggleAssetApproval" @rename="renameAsset"
+          @open="openAsset" />
         <span class="sr-only" role="status" aria-live="polite">{{ assetRenameFeedback }}</span>
         <div v-if="canLoadMore" ref="loadMoreSentinel" class="load-more-sentinel" aria-hidden="true" />
         <span v-if="!selectedBoardId && loadStatus === 'pending' && assets.length" class="sr-only" role="status">Loading
