@@ -11,6 +11,7 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{ close: []; afterLeave: [] }>()
 const drawerRoot = ref<HTMLElement | null>(null)
+const rendered = ref(props.open)
 const closing = ref(false)
 const dragY = ref(0)
 const dragging = ref(false)
@@ -77,16 +78,24 @@ const resetScroll = async () => {
 
 const finishClose = () => {
   clearTimeout(closeTimer)
+  rendered.value = false
+}
+
+const finishLeave = () => {
+  if (props.open) return
   closing.value = false
   resetGesture()
+  setBackgroundInert(false)
   pageScrollLock.unlock()
   returnFocusTo?.focus({ preventScroll: true })
   returnFocusTo = null
+  emit('afterLeave')
 }
 
 watch(() => props.open, async (open) => {
   if (open) {
     clearTimeout(closeTimer)
+    rendered.value = true
     returnFocusTo = document.activeElement instanceof HTMLElement ? document.activeElement : null
     closing.value = false
     resetGesture()
@@ -96,9 +105,8 @@ watch(() => props.open, async (open) => {
     requestAnimationFrame(updateSheetHeight)
     return
   }
-  setBackgroundInert(false)
   closing.value = true
-  closeTimer = setTimeout(finishClose, 400)
+  closeTimer = setTimeout(finishClose, 260)
   await nextTick()
 }, { flush: 'sync' })
 
@@ -250,9 +258,9 @@ onBeforeUnmount(() => {
 
 <template>
   <Teleport to="body">
-    <Transition name="selection-panel" @after-leave="emit('afterLeave')">
+    <Transition name="selection-panel" @after-leave="finishLeave">
       <div
-        v-if="open"
+        v-if="rendered"
         ref="drawerRoot"
         class="selection-panel selection-panel--wide selection-panel--filter-overlay"
         :class="{
@@ -301,6 +309,11 @@ onBeforeUnmount(() => {
 
   .selection-panel.selection-panel--filter-closing:not(.selection-panel--sheet-dismissing) :deep(.asset-filter-controls) {
     animation: selection-sheet-out 260ms var(--filter-overlay-exit-easing) both;
+  }
+
+  .selection-panel.selection-panel--filter-closing::before {
+    opacity: 0;
+    transition: opacity 260ms var(--filter-overlay-exit-easing);
   }
 }
 

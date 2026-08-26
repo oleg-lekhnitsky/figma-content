@@ -48,7 +48,7 @@ const openMobilePanel = async (panel: MobilePanel, event: MouseEvent) => {
   await nextTick()
   mobilePanelClose.value?.focus()
 }
-const closeMobilePanel = async () => {
+const finishMobilePanelClose = async () => {
   if (!mobilePanel.value) return
   clearTimeout(mobileSheetCloseTimer)
   mobilePanel.value = null
@@ -58,6 +58,18 @@ const closeMobilePanel = async () => {
   mobileSheetPointerId = undefined
   await nextTick()
   mobilePanelTrigger.value?.focus()
+}
+const closeMobilePanel = () => {
+  if (!mobilePanel.value || mobileSheetDismissing.value) return
+  clearTimeout(mobileSheetCloseTimer)
+  const panel = document.getElementById(`video-mobile-${mobilePanel.value}`)
+  const sheetHeight = panel?.offsetHeight ?? Math.min(window.innerHeight * .5, 512)
+  mobileSheetDragging.value = false
+  mobileSheetPointerId = undefined
+  resetMobileSheetTouch()
+  mobileSheetDismissing.value = true
+  requestAnimationFrame(() => { mobileSheetDragY.value = sheetHeight + 48 })
+  mobileSheetCloseTimer = setTimeout(() => { void finishMobilePanelClose() }, 260)
 }
 const startMobileSheetDrag = (event: PointerEvent) => {
   if (event.pointerType !== 'touch' || mobileSheetDismissing.value) return
@@ -88,9 +100,7 @@ const finishMobileSheetDrag = (event: PointerEvent) => {
   mobileSheetPointerId = undefined
   const sheetHeight = Math.min(window.innerHeight * .5, 512)
   if (mobileSheetDragY.value > Math.min(96, sheetHeight * .18) || velocity > .45) {
-    mobileSheetDismissing.value = true
-    requestAnimationFrame(() => { mobileSheetDragY.value = sheetHeight + 48 })
-    mobileSheetCloseTimer = setTimeout(() => { void closeMobilePanel() }, 260)
+    closeMobilePanel()
     return
   }
   mobileSheetDragY.value = 0
@@ -169,9 +179,7 @@ const finishMobilePanelTouch = (event: TouchEvent) => {
   const panel = document.getElementById(`video-mobile-${mobilePanel.value}`)
   const sheetHeight = panel?.offsetHeight ?? Math.min(window.innerHeight * .5, 512)
   if (mobileSheetDragY.value > Math.min(96, sheetHeight * .18) || velocity > .45) {
-    mobileSheetDismissing.value = true
-    requestAnimationFrame(() => { mobileSheetDragY.value = sheetHeight + 48 })
-    mobileSheetCloseTimer = setTimeout(() => { void closeMobilePanel() }, 260)
+    closeMobilePanel()
     return
   }
   mobileSheetDragY.value = 0
@@ -323,7 +331,7 @@ const showAllAssets = () => {
     <button v-if="mobilePanel" class="video-mobile-backdrop" type="button" aria-label="Close video settings" data-drawer-gesture-boundary @click="closeMobilePanel" />
     <VideoTemplateBrowser id="video-mobile-templates" v-model="settings.templateId" class="video-mobile-panel" :class="{ 'is-mobile-open': mobilePanel === 'templates' }" :role="mobilePanel === 'templates' ? 'dialog' : undefined" :aria-modal="mobilePanel === 'templates' || undefined" aria-label="Choose a video template" data-drawer-gesture-boundary :templates="videoTemplates" :assets="activeAssets" />
     <VideoSceneInspector id="video-mobile-scene" v-model="settings" class="video-mobile-panel" :class="{ 'is-mobile-open': mobilePanel === 'scene' }" :role="mobilePanel === 'scene' ? 'dialog' : undefined" :aria-modal="mobilePanel === 'scene' || undefined" aria-label="Video settings" data-drawer-gesture-boundary :template="template" />
-    <aside class="video-composer-right">
+    <aside class="video-composer-right" :class="{ 'has-open-mobile-panel': mobilePanel === 'canvas' || mobilePanel === 'assets' }">
       <VideoCanvasInspector id="video-mobile-canvas" v-model="settings" class="video-mobile-panel" :class="{ 'is-mobile-open': mobilePanel === 'canvas' }" :role="mobilePanel === 'canvas' ? 'dialog' : undefined" :aria-modal="mobilePanel === 'canvas' || undefined" aria-label="Canvas settings" data-drawer-gesture-boundary />
       <section id="video-mobile-assets" class="video-panel video-assets-panel video-mobile-panel" :class="{ 'is-mobile-open': mobilePanel === 'assets' }" :role="mobilePanel === 'assets' ? 'dialog' : undefined" :aria-modal="mobilePanel === 'assets' || undefined" aria-label="Video assets" data-drawer-gesture-boundary>
         <div class="video-panel-scroll">
@@ -1495,7 +1503,6 @@ const showAllAssets = () => {
 
   .board-video-composer {
     --video-mobile-sheet-height: min(48%, 32rem);
-    --video-mobile-content-top: calc(max(var(--space), env(safe-area-inset-top)) + var(--control-height) + var(--space) / 2);
     --video-input-gap-mobile: calc(var(--space) / .75);
     --video-type-body: var(--font-size-body);
     --video-control-height: var(--range-control-height-mobile);
@@ -1510,28 +1517,6 @@ const showAllAssets = () => {
     padding: max(var(--space), env(safe-area-inset-top)) calc(var(--space)/1) calc(var(--space)/2);
     overflow: hidden;
     border-radius: var(--radius-mobile);
-  }
-
-  .board-video-composer.has-mobile-panel {
-    grid-template-rows: auto minmax(0, 1fr);
-  }
-
-  .board-video-composer.has-mobile-panel > .video-composer-center {
-    position: absolute;
-    z-index: 1;
-    inset: var(--video-mobile-content-top) var(--cluster-gap) var(--video-mobile-sheet-height);
-    width: auto;
-    height: auto;
-    align-self: auto
-  }
-
-  .board-video-composer.has-mobile-panel > .video-composer-center :deep(.video-stage) {
-    place-items: start center
-  }
-
-  .board-video-composer.has-mobile-panel > :deep(.video-timeline),
-  .board-video-composer.has-mobile-panel > .video-mobile-toolbar {
-    display: none;
   }
 
   .board-video-composer > *,
@@ -1701,6 +1686,11 @@ const showAllAssets = () => {
     to { translate: 0 0; opacity: 1 }
   }
 
+  @keyframes video-sheet-handle-in {
+    from { translate: -50% 2rem; opacity: 0 }
+    to { translate: -50% 0; opacity: 1 }
+  }
+
   .board-video-composer.is-mobile-sheet-dragging > :deep(.video-mobile-panel.is-mobile-open),
   .board-video-composer.is-mobile-sheet-dragging .video-composer-right > :deep(.video-mobile-panel.is-mobile-open),
   .board-video-composer.is-mobile-sheet-dragging .video-composer-right > .video-mobile-panel.is-mobile-open {
@@ -1716,6 +1706,21 @@ const showAllAssets = () => {
 
   .video-composer-right {
     display: contents
+  }
+
+  .video-composer-right.has-open-mobile-panel {
+    position: absolute;
+    z-index: 41;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    pointer-events: none
+  }
+
+  .video-composer-right.has-open-mobile-panel > :deep(.video-mobile-panel.is-mobile-open),
+  .video-composer-right.has-open-mobile-panel > .video-mobile-panel.is-mobile-open {
+    pointer-events: auto
   }
 
   .video-composer-right > :deep(.video-inspector.video-mobile-panel.is-mobile-open) {
@@ -1750,6 +1755,7 @@ const showAllAssets = () => {
     translate: -50% 0;
     transform: translate3d(0, var(--video-mobile-sheet-drag-y, 0), 0);
     transition: transform 180ms var(--filter-overlay-enter-easing);
+    animation: video-sheet-handle-in var(--filter-overlay-enter-duration) var(--filter-overlay-enter-easing) both;
     touch-action: none
   }
 
@@ -1758,6 +1764,7 @@ const showAllAssets = () => {
   }
 
   .board-video-composer.is-mobile-sheet-dismissing .video-mobile-sheet-handle {
+    animation: none;
     transition: transform 260ms var(--filter-overlay-exit-easing);
   }
 
@@ -2027,7 +2034,8 @@ const showAllAssets = () => {
 
   .board-video-composer > :deep(.video-mobile-panel.is-mobile-open),
   .video-composer-right > :deep(.video-mobile-panel.is-mobile-open),
-  .video-composer-right > .video-mobile-panel.is-mobile-open {
+  .video-composer-right > .video-mobile-panel.is-mobile-open,
+  .video-mobile-sheet-handle {
     animation: none
   }
 }

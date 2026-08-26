@@ -577,11 +577,12 @@ watch([selectedBoard, () => route.query.panel], ([board, panel]) => {
   if (board && panel === 'settings' && !boardSettingsExpanded.value) openBoardSettings()
 }, { immediate: true })
 const finishExpandedPanelClose = () => {
-  if (!filtersExpanded.value && !viewExpanded.value && !videoExpanded.value && !boardSettingsExpanded.value) compactFiltersVisible.value = true
+  if (!filtersExpanded.value && !viewExpanded.value && !videoExpanded.value && !boardSettingsExpanded.value && !boardCreatorExpanded.value) compactFiltersVisible.value = true
 }
-watch([filtersExpanded, viewExpanded, videoExpanded, boardSettingsExpanded, boardCreatorExpanded], (expanded) => {
-  if (expanded.every(value => !value)) compactFiltersVisible.value = true
-})
+const setBoardCreatorExpanded = (expanded: boolean) => {
+  boardCreatorExpanded.value = expanded
+  if (!expanded) finishExpandedPanelClose()
+}
 const searchInput = ref<HTMLInputElement | null>(null)
 const toggleSearch = async () => {
   searchExpanded.value = !searchExpanded.value
@@ -889,7 +890,7 @@ onBeforeUnmount(() => {
           </button>
           <NuxtLink class="button-secondary header-direct-action" to="/portfolio">Portfolio</NuxtLink>
           <ShareCollection ref="boardCreator" hide-trigger :current-filters="currentBoardFilters"
-            @created="handleBoardCreated" @open-change="boardCreatorExpanded = $event" />
+            @created="handleBoardCreated" @open-change="setBoardCreatorExpanded" />
           <NuxtLink v-if="!isAdmin && canManageProjects" class="button-secondary header-direct-action" to="/admin/projects">Projects</NuxtLink>
           <AccountMenu
             v-if="session?.data.user" ref="accountMenu" class="header-direct-action"
