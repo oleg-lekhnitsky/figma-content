@@ -1489,7 +1489,7 @@ const showAllAssets = () => {
 }
 
   .board-video-composer {
-    --video-mobile-sheet-height: min(48dvh, 32rem);
+    --video-mobile-sheet-height: calc(min(48dvh, 32rem) + env(safe-area-inset-bottom));
     --video-input-gap-mobile: calc(var(--space) / .75);
     --video-type-body: var(--font-size-body);
     --video-control-height: var(--range-control-height-mobile);
@@ -1501,7 +1501,7 @@ const showAllAssets = () => {
     grid-template-columns: 1fr;
     grid-template-rows: auto minmax(0, 1fr) auto auto;
     gap: calc(var(--space)/2);
-    padding: max(var(--space), env(safe-area-inset-top)) calc(var(--space)/1) max(calc(var(--space)/2), env(safe-area-inset-bottom));
+    padding: max(var(--space), env(safe-area-inset-top)) calc(var(--space)/1) calc(var(--space)/2 + env(safe-area-inset-bottom));
     overflow: hidden;
     border-radius: var(--radius-mobile);
   }
@@ -1604,7 +1604,7 @@ const showAllAssets = () => {
 
   .video-mobile-toolbar {
     z-index: 4;
-    bottom: max(calc(var(--space)/2), env(safe-area-inset-bottom));
+    bottom: calc(var(--space)/2 + env(safe-area-inset-bottom));
     grid-column: 1;
     grid-row: 4;
     order: 3;
