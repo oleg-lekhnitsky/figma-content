@@ -2121,7 +2121,8 @@ button {
   }
 
   .library-wordmark {
-    display: block
+    display: block;
+    height: calc(var(--identity-avatar-size) - 2px)
   }
 
   .index-toolbar nav {
