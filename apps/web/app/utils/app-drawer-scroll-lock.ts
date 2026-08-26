@@ -1,4 +1,6 @@
 interface ScrollLockSnapshot {
+  scrollX: number
+  scrollY: number
   bodyOverflow: string
   rootOverflow: string
   bodyOverscrollBehavior: string
@@ -27,8 +29,14 @@ const startTouch = (event: TouchEvent) => {
 
 const blockBackgroundTouch = (event: TouchEvent) => {
   if (event.touches.length !== 1 || !(event.target instanceof Element)) return
-  const touch = findTouch(event.touches)
+  const touch = findTouch(event.touches) ?? event.touches[0]
   if (!touch) return
+  if (touchId === undefined) {
+    touchId = touch.identifier
+    lastTouchY = touch.clientY
+    if (event.cancelable) event.preventDefault()
+    return
+  }
   const deltaY = touch.clientY - lastTouchY
   lastTouchY = touch.clientY
   const scrollContainer = event.target.closest<HTMLElement>('.filter-sheet-content, .video-panel-scroll, [data-drawer-scroll], .selection-panel--filter-overlay')
@@ -40,10 +48,17 @@ const blockBackgroundTouch = (event: TouchEvent) => {
   if (event.cancelable) event.preventDefault()
 }
 
+const pinBackgroundScroll = () => {
+  if (!snapshot || (window.scrollX === snapshot.scrollX && window.scrollY === snapshot.scrollY)) return
+  window.scrollTo(snapshot.scrollX, snapshot.scrollY)
+}
+
 const freezeApp = () => {
   appRoot = document.getElementById('__nuxt')
   if (!appRoot) return
   snapshot = {
+    scrollX: window.scrollX,
+    scrollY: window.scrollY,
     bodyOverflow: document.body.style.overflow,
     rootOverflow: document.documentElement.style.overflow,
     bodyOverscrollBehavior: document.body.style.overscrollBehavior,
@@ -55,12 +70,14 @@ const freezeApp = () => {
   document.body.style.overscrollBehavior = 'none'
   document.documentElement.style.overscrollBehavior = 'none'
   appRoot.style.touchAction = 'none'
+  window.addEventListener('scroll', pinBackgroundScroll, { passive: true })
   document.addEventListener('touchstart', startTouch, { capture: true, passive: true })
   document.addEventListener('touchmove', blockBackgroundTouch, { capture: true, passive: false })
 }
 
 const restoreApp = () => {
   if (!snapshot) return
+  window.removeEventListener('scroll', pinBackgroundScroll)
   document.removeEventListener('touchstart', startTouch, { capture: true })
   document.removeEventListener('touchmove', blockBackgroundTouch, { capture: true })
   document.body.style.overflow = snapshot.bodyOverflow
