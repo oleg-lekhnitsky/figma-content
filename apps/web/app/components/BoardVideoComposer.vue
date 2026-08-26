@@ -1520,7 +1520,7 @@ const showAllAssets = () => {
     grid-template-columns: 1fr;
     grid-template-rows: auto minmax(0, 1fr) auto auto;
     gap: calc(var(--space)/2);
-    padding: max(var(--space), env(safe-area-inset-top)) calc(var(--space)/1) calc(var(--space)/2);
+    padding: max(var(--space), env(safe-area-inset-top)) calc(var(--space)/1) max(calc(var(--space)/2), env(safe-area-inset-bottom));
     overflow: hidden;
     border-radius: var(--radius-mobile);
   }
@@ -1633,7 +1633,7 @@ const showAllAssets = () => {
     display: flex;
     justify-content: space-between;
     gap: 2px;
-    padding: 4px var(--filter-option-padding) max(4px, env(safe-area-inset-bottom));
+    padding: 4px var(--filter-option-padding);
     border-radius: calc(var(--radius)*1.5);
     color: var(--filter-overlay-panel-color);
     background: var(--filter-overlay-panel-background-mobile);
