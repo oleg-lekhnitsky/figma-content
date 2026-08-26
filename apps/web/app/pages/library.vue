@@ -2111,7 +2111,8 @@ button {
     grid-template-columns: 44px minmax(0, 1fr) 44px;
     gap: calc(var(--space)/2);
     margin: calc(var(--space)*-1) calc(var(--space)*-1) 0;
-    padding: max(var(--space), env(safe-area-inset-top)) var(--space) var(--space)
+    padding: max(var(--space), env(safe-area-inset-top)) var(--space) var(--space);
+    margin-bottom: calc(var(--space)*-.75);
   }
 
   .brand {
@@ -2123,6 +2124,10 @@ button {
     display: block;
     top: calc(50% - 4px);
     height: calc(var(--identity-avatar-size) - 2px)
+  }
+
+  .board-tabs button {
+    font-size: 1.125rem
   }
 
   .index-toolbar nav {
