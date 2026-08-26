@@ -1495,6 +1495,7 @@ const showAllAssets = () => {
 
   .board-video-composer {
     --video-mobile-sheet-height: min(48%, 32rem);
+    --video-mobile-content-top: calc(max(var(--space), env(safe-area-inset-top)) + var(--control-height) + var(--space) / 2);
     --video-input-gap-mobile: calc(var(--space) / .75);
     --video-type-body: var(--font-size-body);
     --video-control-height: var(--range-control-height-mobile);
@@ -1518,7 +1519,7 @@ const showAllAssets = () => {
   .board-video-composer.has-mobile-panel > .video-composer-center {
     position: absolute;
     z-index: 1;
-    inset: calc(max(var(--space), env(safe-area-inset-top)) + var(--control-height) - var(--space)*3) var(--cluster-gap) var(--video-mobile-sheet-height);
+    inset: var(--video-mobile-content-top) var(--cluster-gap) var(--video-mobile-sheet-height);
     width: auto;
     height: auto;
     align-self: auto
@@ -1609,14 +1610,13 @@ const showAllAssets = () => {
 
   .video-mobile-toolbar {
     z-index: 4;
-    bottom: max(calc(var(--space)/2), env(safe-area-inset-bottom));
     grid-column: 1;
     grid-row: 4;
     order: 3;
     display: flex;
     justify-content: space-between;
     gap: 2px;
-    padding: 4px var(--filter-option-padding);
+    padding: 4px var(--filter-option-padding) max(4px, env(safe-area-inset-bottom));
     border-radius: calc(var(--radius)*1.5);
     color: var(--filter-overlay-panel-color);
     background: var(--filter-overlay-panel-background-mobile);
@@ -1657,7 +1657,7 @@ const showAllAssets = () => {
   }
 
   .video-mobile-backdrop {
-    position: fixed;
+    position: absolute;
     z-index: 40;
     inset: 0;
     display: block;
@@ -1678,7 +1678,7 @@ const showAllAssets = () => {
   .board-video-composer > :deep(.video-mobile-panel.is-mobile-open),
   .video-composer-right > :deep(.video-mobile-panel.is-mobile-open),
   .video-composer-right > .video-mobile-panel.is-mobile-open {
-    position: fixed;
+    position: absolute;
     z-index: 41;
     inset: auto 0 0;
     width: 100%;
@@ -1735,7 +1735,7 @@ const showAllAssets = () => {
   }
 
   .video-mobile-sheet-handle {
-    position: fixed;
+    position: absolute;
     z-index: 42;
     left: 50%;
     bottom: calc(var(--video-mobile-sheet-height) - 44px);
