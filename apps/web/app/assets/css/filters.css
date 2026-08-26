@@ -72,8 +72,8 @@
   --filter-sheet-row-height-mobile: 3.75rem;
   --filter-sheet-group-gap-mobile: 1.375rem;
   --filter-sheet-inline-padding-mobile: calc(var(--space) * 2.0);
-  --filter-sheet-content-padding-mobile: calc(var(--space) * 3.5) var(--filter-sheet-inline-padding-mobile) max(calc(var(--space) * 3) , env(safe-area-inset-bottom));
   --filter-sheet-content-bottom-mobile: max(calc(var(--space) * 3), env(safe-area-inset-bottom));
+  --filter-sheet-content-padding-mobile: calc(var(--space) * 3.5) var(--filter-sheet-inline-padding-mobile) var(--filter-sheet-content-bottom-mobile);
   --filter-sheet-handle-size: var(--control-height);
   --filter-sheet-handle-thickness: .3125rem;
   --filter-sheet-drag-duration: 180ms;
@@ -1075,8 +1075,6 @@ button.panel-dropdown-trigger:focus-visible {
     flex-direction: column;
     align-items: end;
     justify-content: flex-end;
-    bottom: auto;
-    height: calc(var(--filter-overlay-height) + env(safe-area-inset-bottom));
     overflow: hidden !important;
     overscroll-behavior: contain;
     background: transparent !important;
@@ -1092,27 +1090,6 @@ button.panel-dropdown-trigger:focus-visible {
     pointer-events: none;
     opacity: var(--sheet-backdrop-opacity, 1);
     background: var(--filter-overlay-backdrop-background);
-  }
-
-  .selection-panel.selection-panel--filter-overlay::after {
-    content: '';
-    position: fixed;
-    z-index: 0;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    height: max(env(safe-area-inset-bottom), 1px);
-    pointer-events: none;
-    background: var(--filter-overlay-backdrop-background);
-    backdrop-filter: blur(var(--filter-overlay-blur));
-    -webkit-backdrop-filter: blur(var(--filter-overlay-blur));
-  }
-
-  .selection-panel.selection-panel--filter-overlay:has(> .asset-filter-controls)::after,
-  .selection-panel.selection-panel--filter-overlay:has(> .board-video-composer.has-mobile-panel)::after {
-    background: var(--filter-overlay-panel-background-mobile);
-    backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
-    -webkit-backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
   }
 
   .selection-panel.selection-panel--filter-overlay > * {
