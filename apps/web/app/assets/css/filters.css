@@ -1172,6 +1172,7 @@ button.panel-dropdown-trigger:focus-visible {
     align-items: stretch;
     gap: var(--filter-overlay-group-gap);
     padding: var(--filter-sheet-content-padding-mobile);
+    scroll-padding-bottom: var(--filter-sheet-content-bottom-mobile);
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior-y: contain;
