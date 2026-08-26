@@ -2121,6 +2121,7 @@ button {
 
   .library-wordmark {
     display: block;
+    top: calc(50% - 4px);
     height: calc(var(--identity-avatar-size) - 2px)
   }
 
