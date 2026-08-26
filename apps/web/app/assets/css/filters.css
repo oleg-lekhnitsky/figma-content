@@ -75,7 +75,7 @@
   --filter-sheet-content-padding-mobile: calc(var(--space) * 3.5) var(--filter-sheet-inline-padding-mobile) var(--filter-sheet-content-bottom-mobile);
   --filter-sheet-handle-size: var(--control-height);
   --filter-sheet-handle-thickness: .3125rem;
-  --filter-sheet-drag-duration: 180ms;
+  --filter-sheet-drag-duration: 120ms;
 }
 
 html { scrollbar-gutter: stable; }
@@ -1109,12 +1109,13 @@ button.panel-dropdown-trigger:focus-visible {
     padding: 0;
     overflow: hidden;
     border-radius: calc(var(--radius-mobile) * 2) calc(var(--radius-mobile) * 2) 0 0;
+    opacity: var(--sheet-content-opacity, 1);
     background: var(--filter-overlay-panel-background-mobile);
     backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
     -webkit-backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
     -webkit-overflow-scrolling: touch;
     transform: translate3d(0, var(--sheet-drag-y, 0px), 0);
-    transition: transform var(--filter-sheet-drag-duration) var(--filter-overlay-enter-easing);
+    transition: transform var(--filter-sheet-drag-duration) var(--filter-overlay-enter-easing), opacity var(--filter-sheet-drag-duration) var(--filter-overlay-enter-easing);
   }
 
   .selection-panel--filter-overlay .asset-filter-controls.board-view-controls {

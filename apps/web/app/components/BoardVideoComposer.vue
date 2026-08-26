@@ -38,7 +38,7 @@ let mobileSheetLastTime = 0
 let mobileSheetReleaseVelocity = 0
 let mobileSheetMoved = false
 let mobileSheetCloseTimer: ReturnType<typeof setTimeout> | undefined
-const mobileSheetExitDuration = 180
+const mobileSheetExitDuration = 120
 let stageMotionFrame: number | undefined
 let stopBackgroundPersistence: (() => void) | undefined
 const openMobilePanel = async (panel: MobilePanel, event: MouseEvent) => {
@@ -319,7 +319,7 @@ const showAllAssets = () => {
 </script>
 
 <template>
-  <div class="board-video-composer" :class="{ 'has-mobile-panel': mobilePanel, 'is-mobile-sheet-dragging': mobileSheetDragging, 'is-mobile-sheet-dismissing': mobileSheetDismissing, 'is-stage-motion-ready': stageMotionReady }" :style="{ '--video-mobile-sheet-drag-y': `${mobileSheetDragY}px`, '--sheet-backdrop-opacity': mobileSheetBackdropOpacity }" @touchstart.passive="startMobilePanelTouch" @touchmove="moveMobilePanelTouch" @touchend="finishMobilePanelTouch" @touchcancel="cancelMobilePanelTouch">
+  <div class="board-video-composer" :class="{ 'has-mobile-panel': mobilePanel, 'is-mobile-sheet-dragging': mobileSheetDragging, 'is-mobile-sheet-dismissing': mobileSheetDismissing, 'is-stage-motion-ready': stageMotionReady }" :style="{ '--video-mobile-sheet-drag-y': `${mobileSheetDragY}px`, '--sheet-backdrop-opacity': mobileSheetBackdropOpacity, '--sheet-content-opacity': mobileSheetBackdropOpacity }" @touchstart.passive="startMobilePanelTouch" @touchmove="moveMobilePanelTouch" @touchend="finishMobilePanelTouch" @touchcancel="cancelMobilePanelTouch">
     <header class="video-mobile-header">
       <button class="button-secondary button-icon video-mobile-header-back" type="button" aria-label="Close video editor" @click="emit('close')"><ChevronLeft :size="24" weight="Outline" aria-hidden="true" /></button>
       <h2>Video editor</h2>
@@ -1712,22 +1712,23 @@ const showAllAssets = () => {
     padding-bottom: 0;
     overflow: hidden;
     border-radius: calc(var(--radius-mobile)*2) calc(var(--radius-mobile)*2) 0 0;
+    opacity: var(--sheet-content-opacity, 1);
     background: var(--filter-overlay-panel-background-mobile);
     backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
     -webkit-backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
     transform: translate3d(0, var(--video-mobile-sheet-drag-y, 0), 0);
-    transition: transform 180ms var(--filter-overlay-enter-easing);
+    transition: transform var(--filter-sheet-drag-duration) var(--filter-overlay-enter-easing), opacity var(--filter-sheet-drag-duration) var(--filter-overlay-enter-easing);
     animation: video-sheet-in var(--filter-overlay-enter-duration) var(--filter-overlay-enter-easing) both
   }
 
   @keyframes video-sheet-in {
-    from { translate: 0 2rem; opacity: 0 }
-    to { translate: 0 0; opacity: 1 }
+    from { translate: 0 2rem }
+    to { translate: 0 0 }
   }
 
   @keyframes video-sheet-handle-in {
-    from { translate: -50% 2rem; opacity: 0 }
-    to { translate: -50% 0; opacity: 1 }
+    from { translate: -50% 2rem }
+    to { translate: -50% 0 }
   }
 
   .board-video-composer.is-mobile-sheet-dragging > :deep(.video-mobile-panel.is-mobile-open),
@@ -1740,7 +1741,7 @@ const showAllAssets = () => {
   .board-video-composer.is-mobile-sheet-dismissing .video-composer-right > :deep(.video-mobile-panel.is-mobile-open),
   .board-video-composer.is-mobile-sheet-dismissing .video-composer-right > .video-mobile-panel.is-mobile-open {
     animation: none;
-    transition: transform var(--filter-sheet-drag-duration) var(--filter-overlay-exit-easing);
+    transition: transform var(--filter-sheet-drag-duration) var(--filter-overlay-exit-easing), opacity var(--filter-sheet-drag-duration) var(--filter-overlay-exit-easing);
   }
 
   .video-composer-right {
@@ -1775,10 +1776,11 @@ const showAllAssets = () => {
     padding: 0;
     border: 0;
     color: var(--filter-overlay-panel-color);
+    opacity: var(--sheet-content-opacity, 1);
     background: transparent;
     translate: -50% 0;
     transform: translate3d(0, var(--video-mobile-sheet-drag-y, 0), 0);
-    transition: transform 180ms var(--filter-overlay-enter-easing);
+    transition: transform var(--filter-sheet-drag-duration) var(--filter-overlay-enter-easing), opacity var(--filter-sheet-drag-duration) var(--filter-overlay-enter-easing);
     animation: video-sheet-handle-in var(--filter-overlay-enter-duration) var(--filter-overlay-enter-easing) both;
     touch-action: none
   }
@@ -1789,7 +1791,7 @@ const showAllAssets = () => {
 
   .board-video-composer.is-mobile-sheet-dismissing .video-mobile-sheet-handle {
     animation: none;
-    transition: transform var(--filter-sheet-drag-duration) var(--filter-overlay-exit-easing);
+    transition: transform var(--filter-sheet-drag-duration) var(--filter-overlay-exit-easing), opacity var(--filter-sheet-drag-duration) var(--filter-overlay-exit-easing);
   }
 
   .video-mobile-sheet-handle > span {

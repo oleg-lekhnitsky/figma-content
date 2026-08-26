@@ -29,7 +29,7 @@ let scrollSource: HTMLElement | null = null
 let suppressClick = false
 let suppressClickTimer: ReturnType<typeof setTimeout> | undefined
 const pageScrollLock = createAppDrawerScrollLock()
-const drawerExitDuration = 180
+const drawerExitDuration = 120
 let returnFocusTo: HTMLElement | null = null
 let closeTimer: ReturnType<typeof setTimeout> | undefined
 let appRoot: HTMLElement | null = null
@@ -273,7 +273,7 @@ onBeforeUnmount(() => {
         aria-modal="true"
         tabindex="-1"
         :aria-label="label"
-        :style="{ '--sheet-drag-y': `${dragY}px`, '--sheet-backdrop-opacity': backdropOpacity }"
+        :style="{ '--sheet-drag-y': `${dragY}px`, '--sheet-backdrop-opacity': backdropOpacity, '--sheet-content-opacity': backdropOpacity }"
         @click.capture="handleClick"
         @click.self="requestClose"
         @touchstart.passive="startDrag"
@@ -305,11 +305,13 @@ onBeforeUnmount(() => {
 
   .selection-panel.selection-panel--sheet-dismissing :deep(.asset-filter-controls) {
     animation: none;
-    transition: transform var(--filter-sheet-drag-duration) var(--filter-overlay-exit-easing);
+    transition: transform var(--filter-sheet-drag-duration) var(--filter-overlay-exit-easing), opacity var(--filter-sheet-drag-duration) var(--filter-overlay-exit-easing);
   }
 
   .selection-panel.selection-panel--filter-closing:not(.selection-panel--sheet-dismissing) :deep(.asset-filter-controls) {
     animation: selection-sheet-out var(--filter-sheet-drag-duration) var(--filter-overlay-exit-easing) both;
+    opacity: 0;
+    transition: opacity var(--filter-sheet-drag-duration) var(--filter-overlay-exit-easing);
   }
 
   .selection-panel.selection-panel--filter-closing::before {
