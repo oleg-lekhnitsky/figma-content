@@ -29,6 +29,7 @@ let scrollSource: HTMLElement | null = null
 let suppressClick = false
 let suppressClickTimer: ReturnType<typeof setTimeout> | undefined
 const pageScrollLock = createAppDrawerScrollLock()
+const drawerExitDuration = 180
 let returnFocusTo: HTMLElement | null = null
 let closeTimer: ReturnType<typeof setTimeout> | undefined
 let appRoot: HTMLElement | null = null
@@ -106,7 +107,7 @@ watch(() => props.open, async (open) => {
     return
   }
   closing.value = true
-  closeTimer = setTimeout(finishClose, 260)
+  closeTimer = setTimeout(finishClose, drawerExitDuration)
   await nextTick()
 }, { flush: 'sync' })
 
@@ -304,16 +305,16 @@ onBeforeUnmount(() => {
 
   .selection-panel.selection-panel--sheet-dismissing :deep(.asset-filter-controls) {
     animation: none;
-    transition: transform 260ms var(--filter-overlay-exit-easing);
+    transition: transform var(--filter-sheet-drag-duration) var(--filter-overlay-exit-easing);
   }
 
   .selection-panel.selection-panel--filter-closing:not(.selection-panel--sheet-dismissing) :deep(.asset-filter-controls) {
-    animation: selection-sheet-out 260ms var(--filter-overlay-exit-easing) both;
+    animation: selection-sheet-out var(--filter-sheet-drag-duration) var(--filter-overlay-exit-easing) both;
   }
 
   .selection-panel.selection-panel--filter-closing::before {
     opacity: 0;
-    transition: opacity 260ms var(--filter-overlay-exit-easing);
+    transition: opacity var(--filter-sheet-drag-duration) var(--filter-overlay-exit-easing);
   }
 }
 

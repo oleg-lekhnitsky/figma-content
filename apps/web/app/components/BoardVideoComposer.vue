@@ -36,6 +36,7 @@ let mobileSheetLastTime = 0
 let mobileSheetReleaseVelocity = 0
 let mobileSheetMoved = false
 let mobileSheetCloseTimer: ReturnType<typeof setTimeout> | undefined
+const mobileSheetExitDuration = 180
 let stageMotionFrame: number | undefined
 let stopBackgroundPersistence: (() => void) | undefined
 const openMobilePanel = async (panel: MobilePanel, event: MouseEvent) => {
@@ -69,7 +70,7 @@ const closeMobilePanel = () => {
   resetMobileSheetTouch()
   mobileSheetDismissing.value = true
   requestAnimationFrame(() => { mobileSheetDragY.value = sheetHeight + 48 })
-  mobileSheetCloseTimer = setTimeout(() => { void finishMobilePanelClose() }, 260)
+  mobileSheetCloseTimer = setTimeout(() => { void finishMobilePanelClose() }, mobileSheetExitDuration)
 }
 const startMobileSheetDrag = (event: PointerEvent) => {
   if (event.pointerType !== 'touch' || mobileSheetDismissing.value) return
@@ -1701,7 +1702,7 @@ const showAllAssets = () => {
   .board-video-composer.is-mobile-sheet-dismissing .video-composer-right > :deep(.video-mobile-panel.is-mobile-open),
   .board-video-composer.is-mobile-sheet-dismissing .video-composer-right > .video-mobile-panel.is-mobile-open {
     animation: none;
-    transition: transform 260ms var(--filter-overlay-exit-easing);
+    transition: transform var(--filter-sheet-drag-duration) var(--filter-overlay-exit-easing);
   }
 
   .video-composer-right {
@@ -1765,7 +1766,7 @@ const showAllAssets = () => {
 
   .board-video-composer.is-mobile-sheet-dismissing .video-mobile-sheet-handle {
     animation: none;
-    transition: transform 260ms var(--filter-overlay-exit-easing);
+    transition: transform var(--filter-sheet-drag-duration) var(--filter-overlay-exit-easing);
   }
 
   .video-mobile-sheet-handle > span {
