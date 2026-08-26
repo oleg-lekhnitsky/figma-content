@@ -378,7 +378,7 @@ const showAllAssets = () => {
   gap: calc(var(--space)/2);
   align-items: stretch;
   width: 100%;
-  height: 100dvh;
+  height: 100%;
   min-height: 0;
   margin: 0 auto;
   padding: var(--space);
@@ -1434,7 +1434,7 @@ const showAllAssets = () => {
 @media(max-width:1180px) {
   .board-video-composer {
     height: auto;
-    min-height: calc(100dvh - var(--space)*2);
+    min-height: calc(100% - var(--space)*2);
     grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-rows: auto;
     align-items: start
@@ -1442,7 +1442,7 @@ const showAllAssets = () => {
 
   :deep(.video-panel) {
     height: auto;
-    max-height: calc(100dvh - 180px)
+    max-height: calc(100% - 180px)
   }
 
   :deep(.video-panel-scroll) {

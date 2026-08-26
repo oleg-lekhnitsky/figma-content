@@ -172,7 +172,7 @@ const handleNativeClose = () => {
 @media (max-width: 520px) {
   .app-dialog {
     width: 100%;
-    max-height: min(90dvh, 32rem);
+    max-height: min(90%, 32rem);
     margin: auto 0 0;
     border-radius: calc(var(--radius-mobile) * 2) calc(var(--radius-mobile) * 2) 0 0;
   }

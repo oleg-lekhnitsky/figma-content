@@ -368,7 +368,7 @@ type="button"
 <style scoped>
 .share-dialog {
   width: min(720px, calc(100% - var(--space) * 2));
-  max-height: calc(100dvh - var(--space) * 2);
+  max-height: calc(100% - var(--space) * 2);
   padding: 0;
   border: 0;
   border-radius: calc(var(--radius) * 1.5);
@@ -737,7 +737,7 @@ ul {
 @media (max-width: 600px) {
   .share-dialog {
     width: calc(100% - var(--space));
-    max-height: calc(100dvh - var(--space));
+    max-height: calc(100% - var(--space));
   }
 
   .board-grid {
