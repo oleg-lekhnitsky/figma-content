@@ -761,14 +761,29 @@ const handleAssetDeleted = (id: string) => {
 const toolbarVisible = ref(true)
 let lastScrollY = 0
 let scrollFrame = 0
+let toolbarScrollDirection = 0
+let toolbarDirectionalTravel = 0
 const updateToolbar = () => {
   cancelAnimationFrame(scrollFrame)
   scrollFrame = requestAnimationFrame(() => {
     const current = Math.max(window.scrollY, 0)
     const delta = current - lastScrollY
-    if (current <= 48 || delta < -2) toolbarVisible.value = true
-    else if (delta > 2) toolbarVisible.value = false
     lastScrollY = current
+    if (current <= 48) {
+      toolbarVisible.value = true
+      toolbarScrollDirection = 0
+      toolbarDirectionalTravel = 0
+      return
+    }
+    if (Math.abs(delta) < .5) return
+    const direction = delta > 0 ? 1 : -1
+    if (direction !== toolbarScrollDirection) {
+      toolbarScrollDirection = direction
+      toolbarDirectionalTravel = 0
+    }
+    toolbarDirectionalTravel += Math.abs(delta)
+    if (direction > 0 && toolbarDirectionalTravel >= 10) toolbarVisible.value = false
+    else if (direction < 0 && toolbarDirectionalTravel >= 6) toolbarVisible.value = true
   })
 }
 const refreshWhenVisible = () => {
@@ -1413,12 +1428,14 @@ button {
     z-index: 5;
     top: 0;
     background: var(--color-bg);
-    transition: transform .24s cubic-bezier(.2, 0, 0, 1)
+    backface-visibility: hidden;
+    will-change: transform;
+    transition: transform .18s cubic-bezier(.2, 0, 0, 1)
   }
 
   .library-top-chrome.toolbar-hidden {
     pointer-events: none;
-    transform: translateY(-100%)
+    transform: translate3d(0, -100%, 0)
   }
 
   .index-toolbar {

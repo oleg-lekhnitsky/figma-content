@@ -1495,8 +1495,8 @@ const showAllAssets = () => {
     --video-control-height: var(--range-control-height-mobile);
     position: relative;
     box-sizing: border-box;
-    height: calc(100dvh - var(--space));
-    max-height: calc(100dvh - var(--space));
+    height: 100%;
+    max-height: 100%;
     min-height: 0;
     grid-template-columns: 1fr;
     grid-template-rows: auto minmax(0, 1fr) auto auto;
