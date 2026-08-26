@@ -79,6 +79,7 @@ const finishClose = () => {
   clearTimeout(closeTimer)
   closing.value = false
   resetGesture()
+  pageScrollLock.unlock()
   returnFocusTo?.focus({ preventScroll: true })
   returnFocusTo = null
 }
@@ -96,7 +97,6 @@ watch(() => props.open, async (open) => {
     return
   }
   setBackgroundInert(false)
-  pageScrollLock.unlock()
   closing.value = true
   closeTimer = setTimeout(finishClose, 400)
   await nextTick()
