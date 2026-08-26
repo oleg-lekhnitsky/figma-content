@@ -1489,7 +1489,7 @@ const showAllAssets = () => {
 }
 
   .board-video-composer {
-    --video-mobile-sheet-height: min(48dvh, 32rem);
+    --video-mobile-sheet-height: min(48%, 32rem);
     --video-input-gap-mobile: calc(var(--space) / .75);
     --video-type-body: var(--font-size-body);
     --video-control-height: var(--range-control-height-mobile);
@@ -1501,7 +1501,7 @@ const showAllAssets = () => {
     grid-template-columns: 1fr;
     grid-template-rows: auto minmax(0, 1fr) auto auto;
     gap: calc(var(--space)/2);
-    padding: max(var(--space), env(safe-area-inset-top)) calc(var(--space)/1) max(calc(var(--space)/2), env(safe-area-inset-bottom));
+    padding: max(var(--space), env(safe-area-inset-top)) calc(var(--space)/1) calc(var(--space)/2);
     overflow: hidden;
     border-radius: var(--radius-mobile);
   }
@@ -1656,8 +1656,6 @@ const showAllAssets = () => {
     z-index: 40;
     inset: 0;
     display: block;
-    width: 100%;
-    height: 100%;
     padding: 0;
     border: 0;
     border-radius: 0;

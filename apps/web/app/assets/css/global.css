@@ -81,6 +81,18 @@ body {
   background: var(--color-bg);
 }
 
+html,
+body,
+#__nuxt {
+  width: 100%;
+  min-height: 100%;
+}
+
+html,
+body {
+  overscroll-behavior: none;
+}
+
 .material-tinted {
   color: var(--material-tinted-fg);
   background: var(--material-tinted-fallback-bg);
