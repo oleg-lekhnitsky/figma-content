@@ -582,6 +582,13 @@ const deleteWorkspace = async () => {
   object-fit: cover;
 }
 
+@media (max-width: 520px) {
+  .workspace-contributor,
+  .workspace-more {
+    display: none
+  }
+}
+
 .workspace-panel { min-width: min(30rem, calc(100vw - var(--space) * 2)); }
 .workspace-option-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: calc(var(--space) / 3); }
 

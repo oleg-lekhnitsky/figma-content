@@ -9,6 +9,7 @@ const props = withDefaults(defineProps<{
   align?: 'start' | 'end'
   haspopup?: boolean | 'menu' | 'listbox' | 'tree' | 'grid' | 'dialog'
   teleportTo?: string | HTMLElement
+  panelClass?: string
 }>(), {
   open: false,
   width: 'content',
@@ -16,7 +17,8 @@ const props = withDefaults(defineProps<{
   gutter: undefined,
   align: 'start',
   haspopup: true,
-  teleportTo: 'body'
+  teleportTo: 'body',
+  panelClass: ''
 })
 
 const emit = defineEmits<{ 'update:open': [value: boolean] }>()
@@ -142,7 +144,7 @@ defineExpose({ close, position })
         v-if="open"
         :id="contentId"
         ref="panel"
-        class="app-popover-content"
+        :class="['app-popover-content', panelClass]"
         :style="panelStyle"
         @keydown.esc.stop.prevent="close(true)"
       >

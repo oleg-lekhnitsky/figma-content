@@ -16,6 +16,8 @@ const initial = computed(() => displayName.value.trim().charAt(0).toUpperCase() 
 const isAdmin = computed(() => props.role === 'admin')
 
 const close = () => { open.value = false }
+const openMenu = () => { open.value = true }
+defineExpose({ openMenu })
 
 const signOut = async () => {
   if (signingOut.value) return
@@ -33,7 +35,7 @@ const signOut = async () => {
   <div class="account-menu">
     <button
       class="account-menu-trigger" type="button" :title="displayName"
-      aria-label="Open your account" :aria-expanded="open" @click="open = true">
+      aria-label="Open your account" :aria-expanded="open" @click="openMenu">
       <Profile :size="20" weight="Filled" aria-hidden="true" />
     </button>
 

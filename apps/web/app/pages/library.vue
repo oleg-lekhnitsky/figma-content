@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Gear2, Plus, Search, Xmark } from 'reicon-vue'
+import { Gear2, MoreH, Plus, Search, Xmark } from 'reicon-vue'
 import type { BoardLayout, BoardViewSettings } from '@content-library/shared'
 import BrandWordmark from '~/components/BrandWordmark.vue'
 
@@ -548,6 +548,8 @@ const closeBoardSettings = () => {
   if (route.query.panel === 'settings') void replaceLibraryQuery({ panel: undefined })
 }
 const boardCreatorExpanded = ref(false)
+const headerActionsOpen = ref(false)
+const accountMenu = ref<{ openMenu: () => void }>()
 const openBoardCreator = (fromCurrentView = false) => {
   compactFiltersVisible.value = false
   searchExpanded.value = false
@@ -558,6 +560,11 @@ const openBoardCreator = (fromCurrentView = false) => {
   boardCreatorExpanded.value = true
   if (fromCurrentView) void boardCreator.value?.openCreateFromCurrentView()
   else void boardCreator.value?.openCreate()
+}
+const openAccountMenu = async () => {
+  headerActionsOpen.value = false
+  await nextTick()
+  accountMenu.value?.openMenu()
 }
 watch([selectedBoard, () => route.query.panel], ([board, panel]) => {
   if (board && panel === 'settings' && !boardSettingsExpanded.value) openBoardSettings()
@@ -833,19 +840,34 @@ onBeforeUnmount(() => {
           <BrandWordmark />
         </div>
         <p class="count sr-only" role="status" aria-live="polite">{{ resultMessage }}</p>
-        <nav aria-label="Library controls">
+        <nav class="header-actions" aria-label="Library controls">
           <button
-            v-if="canShare" class="button-secondary button-icon board-create-button" type="button" aria-label="Create board"
+            v-if="canShare" class="button-secondary button-icon board-create-button header-direct-action" type="button" aria-label="Create board"
             title="Create board" @click="openBoardCreator()">
             <Plus :size="20" aria-hidden="true" />
           </button>
-          <NuxtLink class="button-secondary" to="/portfolio">Portfolio</NuxtLink>
+          <NuxtLink class="button-secondary header-direct-action" to="/portfolio">Portfolio</NuxtLink>
           <ShareCollection ref="boardCreator" hide-trigger :current-filters="currentBoardFilters"
             @created="handleBoardCreated" @open-change="boardCreatorExpanded = $event" />
-          <NuxtLink v-if="!isAdmin && canManageProjects" class="button-secondary" to="/admin/projects">Projects</NuxtLink>
+          <NuxtLink v-if="!isAdmin && canManageProjects" class="button-secondary header-direct-action" to="/admin/projects">Projects</NuxtLink>
           <AccountMenu
-            v-if="session?.data.user" :email="session.data.user.email" :figma-handle="session.data.user.figmaHandle"
+            v-if="session?.data.user" ref="accountMenu" class="header-direct-action"
+            :email="session.data.user.email" :figma-handle="session.data.user.figmaHandle"
             :avatar-url="session.data.user.avatarUrl" :role="session.data.user.role" :has-password="session.data.user.hasPassword" />
+          <AppDropdownMenu v-model:open="headerActionsOpen" class="mobile-header-overflow" align="end">
+            <template #trigger="{ triggerProps }">
+              <button v-bind="triggerProps" class="button-secondary button-icon mobile-header-more" type="button"
+                aria-label="More library actions">
+                <MoreH :size="20" aria-hidden="true" />
+              </button>
+            </template>
+            <template #default>
+              <button v-if="canShare" role="menuitem" type="button" @click="openBoardCreator()">Create board</button>
+              <NuxtLink role="menuitem" to="/portfolio">Portfolio</NuxtLink>
+              <NuxtLink v-if="!isAdmin && canManageProjects" role="menuitem" to="/admin/projects">Projects</NuxtLink>
+              <button v-if="session?.data.user" role="menuitem" type="button" @click="openAccountMenu">Account</button>
+            </template>
+          </AppDropdownMenu>
         </nav>
       </header>
 
@@ -1721,6 +1743,10 @@ button {
   background: var(--color-surface)
 }
 
+.mobile-header-overflow {
+  display: none
+}
+
 .board-create-button svg {
   fill: none;
   stroke: currentColor;
@@ -2078,7 +2104,7 @@ button {
   }
 
   .index-toolbar {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
     gap: calc(var(--space)/2);
     margin: calc(var(--space)*-1) calc(var(--space)*-1) 0;
     padding: max(var(--space), env(safe-area-inset-top)) var(--space) var(--space)
@@ -2089,19 +2115,42 @@ button {
     overflow: visible
   }
 
-  .index-toolbar nav {
-    min-width: 0;
-    grid-column: 2;
-    grid-row: 1;
-    justify-content: flex-start;
-    gap: calc(var(--space)/2);
-    overflow-x: auto;
-    overscroll-behavior-inline: contain;
-    scrollbar-width: none
+  .library-wordmark {
+    display: block
   }
 
-  .index-toolbar nav::-webkit-scrollbar {
+  .index-toolbar nav {
+    min-width: 0;
+    grid-column: 3;
+    grid-row: 1;
+    justify-content: flex-end;
+    overflow: visible
+  }
+
+  .index-toolbar nav.header-actions > .header-direct-action {
     display: none
+  }
+
+  .mobile-header-overflow {
+    display: block
+  }
+
+  .mobile-header-more {
+    position: relative;
+    width: var(--identity-avatar-size);
+    height: var(--identity-avatar-size);
+    min-width: var(--identity-avatar-size);
+    min-height: var(--identity-avatar-size);
+    padding: 0;
+    border-radius: 50%;
+    color: var(--color-fg);
+    background: var(--color-surface)
+  }
+
+  .mobile-header-more::before {
+    content: '';
+    position: absolute;
+    inset: -4px
   }
 
   .mobile-filter-search.mobile-filter-search {

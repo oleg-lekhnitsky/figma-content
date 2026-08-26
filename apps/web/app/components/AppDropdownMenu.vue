@@ -98,6 +98,7 @@ onBeforeUnmount(() => clearTimeout(typeaheadTimer))
     :gutter="gutter"
     :align="align"
     :teleport-to="teleportTo"
+    panel-class="app-dropdown-menu-popover"
     haspopup="menu"
     @update:open="setOpen"
   >
@@ -118,3 +119,30 @@ onBeforeUnmount(() => clearTimeout(typeaheadTimer))
     </template>
   </AppPopover>
 </template>
+
+<style scoped>
+@media (max-width: 520px) {
+  .app-dropdown-menu-content {
+    --menu-inset: calc(var(--space) * 2 / 3);
+    --menu-row-gap: calc(var(--space) / 6);
+    --menu-row-height: var(--control-height);
+    min-width: min(calc(var(--control-height) * 5), calc(100vw - var(--space) * 2));
+    padding: calc(var(--space) * 2 / 3);
+    border-radius: calc(var(--radius-mobile) + var(--space) / 3)
+  }
+
+  .app-dropdown-menu-content :deep([role^='menuitem']) {
+    border-radius: calc(var(--radius-mobile) - var(--space) / 3);
+    padding-inline: var(--space);
+    font-size: calc(var(--font-size-body) * 1.0625)
+  }
+
+  :global(.app-dropdown-menu-popover) {
+    scrollbar-width: none
+  }
+
+  :global(.app-dropdown-menu-popover::-webkit-scrollbar) {
+    display: none
+  }
+}
+</style>
