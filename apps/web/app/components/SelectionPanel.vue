@@ -6,6 +6,7 @@ const _props = withDefaults(defineProps<{
   wide?: boolean
   bare?: boolean
   raised?: boolean
+  scrollHidden?: boolean
   overlay?: boolean
   closeLabel?: string
   closeDisabled?: boolean
@@ -14,6 +15,7 @@ const _props = withDefaults(defineProps<{
   wide: false,
   bare: false,
   raised: false,
+  scrollHidden: false,
   overlay: false,
   closeLabel: '',
   closeDisabled: false
@@ -29,7 +31,7 @@ const emit = defineEmits<{ close: []; afterLeave: [] }>()
   <Teleport to="body">
     <Transition name="selection-panel" @after-leave="$emit('afterLeave')">
       <div
-        v-if="visible && !overlay" class="selection-panel" :class="{ 'selection-panel--wide': wide, 'selection-panel--bare': bare, 'selection-panel--raised': raised }" role="region"
+        v-if="visible && !overlay" class="selection-panel" :class="{ 'selection-panel--wide': wide, 'selection-panel--bare': bare, 'selection-panel--raised': raised, 'selection-panel--scroll-hidden': scrollHidden }" role="region"
         :aria-label="label">
         <slot />
         <button
@@ -59,6 +61,7 @@ const emit = defineEmits<{ close: []; afterLeave: [] }>()
   backdrop-filter: blur(80px) saturate(140%);
   -webkit-backdrop-filter: blur(40px) saturate(140%);
   transform: translateX(-50%);
+  transition: translate .24s cubic-bezier(.2, 0, 0, 1);
 }
 
 .selection-panel:not(.selection-panel--filter-overlay) {

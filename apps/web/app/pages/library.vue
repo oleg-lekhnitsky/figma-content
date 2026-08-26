@@ -101,6 +101,13 @@ const persistedFilterQuery = computed(() => ({
   dateTo: dateRange.value === 'custom' ? customDateTo.value || undefined : undefined,
   sort: sort.value !== 'newest' ? sort.value : undefined
 }))
+const replaceSearchQueryWithoutNavigation = () => {
+  if (!import.meta.client) return
+  const url = new URL(window.location.href)
+  if (search.value) url.searchParams.set('search', search.value)
+  else url.searchParams.delete('search')
+  window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
+}
 const dateFrom = computed(() => {
   if (dateRange.value === 'custom') return customDateFrom.value ? new Date(`${customDateFrom.value}T00:00:00`).toISOString() : ''
   const date = new Date()
@@ -575,8 +582,13 @@ const finishExpandedPanelClose = () => {
 watch([filtersExpanded, viewExpanded, videoExpanded, boardSettingsExpanded, boardCreatorExpanded], (expanded) => {
   if (expanded.every(value => !value)) compactFiltersVisible.value = true
 })
-const toggleSearch = () => {
+const searchInput = ref<HTMLInputElement | null>(null)
+const toggleSearch = async () => {
   searchExpanded.value = !searchExpanded.value
+  if (searchExpanded.value) {
+    await nextTick()
+    searchInput.value?.focus({ preventScroll: true })
+  }
 }
 const isoBoardDate = (value: string, end = false) => value ? new Date(`${value}T${end ? '23:59:59.999' : '00:00:00.000'}`).toISOString() : null
 let dynamicBoardSaveTimer: ReturnType<typeof setTimeout> | undefined
@@ -734,7 +746,10 @@ const selectedAssetPreviewUrl = computed(() => {
 const assetPreviewUrls = computed(() => Object.fromEntries(displayedAssets.value.map(asset => [asset.id, asset.previewUrl])))
 const assetMimeTypes = computed(() => Object.fromEntries(displayedAssets.value.map(asset => [asset.id, asset.mime_type])))
 const closeAsset = () => replaceLibraryQuery({ asset: undefined })
-const navigateAsset = (id: string) => router.replace({ path: '/library', query: { ...route.query, asset: id } })
+const navigateAsset = (id: string) => router.replace({
+  path: '/library',
+  query: { ...route.query, ...persistedFilterQuery.value, asset: id }
+})
 const handleAssetDeleted = (id: string) => {
   assets.value = assets.value.filter(asset => asset.id !== id)
   if (data.value) {
@@ -761,7 +776,12 @@ const refreshWhenVisible = () => {
   if (selectedBoardId.value) void refreshSelectedBoard()
   else void refresh()
 }
-watch([search, status, projectIds, tagIds, uploadedBys, dateRange, customDateFrom, customDateTo, sort], () => {
+watch(search, () => {
+  loadingNextPage.value = false
+  page.value = 1
+  replaceSearchQueryWithoutNavigation()
+})
+watch([status, projectIds, tagIds, uploadedBys, dateRange, customDateFrom, customDateTo, sort], () => {
   loadingNextPage.value = false
   page.value = 1
   void replaceLibraryQuery(persistedFilterQuery.value)
@@ -955,7 +975,7 @@ onBeforeUnmount(() => {
         </SelectionPanel>
         <SelectionPanel
           :visible="compactFiltersVisible && !filtersExpanded && !viewExpanded && !videoExpanded && !boardSettingsExpanded && !boardCreatorExpanded"
-          label="Asset filters" bare raised>
+          :scroll-hidden="!toolbarVisible && !searchExpanded" label="Asset filters" bare raised>
           <div class="mobile-control-blur compact-search-placeholder"
             :class="{ 'is-search-hidden': searchExpanded }" :aria-hidden="searchExpanded || undefined"
             :inert="searchExpanded || undefined"><button class="filter-panel-toggle"
@@ -977,8 +997,8 @@ onBeforeUnmount(() => {
                 </span></button></div>
           <Transition name="filter-controls">
             <form v-if="searchExpanded" class="mobile-search-form" role="search" @submit.prevent><label
-                class="search-field"><span class="sr-only">Search assets</span><input v-model="search" type="search"
-                  name="filter-search" placeholder="Search" autofocus></label></form>
+                class="search-field"><span class="sr-only">Search assets</span><input ref="searchInput" v-model="search"
+                  type="search" name="filter-search" placeholder="Search"></label></form>
           </Transition>
           <div class="mobile-control-blur"><button class="mobile-filter-search"
               :class="{ 'is-expanded': searchExpanded }" type="button"

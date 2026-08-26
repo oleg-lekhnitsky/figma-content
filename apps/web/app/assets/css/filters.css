@@ -207,6 +207,11 @@ body:has(> .selection-panel.selection-panel--filter-overlay) > .selection-panel.
   -webkit-backdrop-filter: none;
 }
 
+.selection-panel.selection-panel--bare.selection-panel--scroll-hidden:not(.selection-panel--filter-overlay) {
+  pointer-events: none;
+  translate: 0 calc(100% + var(--space) * 3);
+}
+
 .selection-panel.selection-panel--bare:not(.selection-panel--filter-overlay) > .mobile-control-blur {
   flex: 0 0 auto;
   display: flex;
