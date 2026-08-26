@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { createAppDrawerScrollLock } from '~/utils/app-drawer-scroll-lock'
+
 const props = withDefaults(defineProps<{
   open: boolean
   label: string
@@ -25,9 +27,7 @@ let releaseVelocity = 0
 let scrollSource: HTMLElement | null = null
 let suppressClick = false
 let suppressClickTimer: ReturnType<typeof setTimeout> | undefined
-let previousBodyOverflow = ''
-let previousRootOverflow = ''
-let pageScrollLocked = false
+const pageScrollLock = createAppDrawerScrollLock()
 let returnFocusTo: HTMLElement | null = null
 let closeTimer: ReturnType<typeof setTimeout> | undefined
 let appRoot: HTMLElement | null = null
@@ -75,22 +75,6 @@ const resetScroll = async () => {
   drawerRoot.value?.focus({ preventScroll: true })
 }
 
-const lockPageScroll = () => {
-  if (pageScrollLocked) return
-  pageScrollLocked = true
-  previousBodyOverflow = document.body.style.overflow
-  previousRootOverflow = document.documentElement.style.overflow
-  document.body.style.overflow = 'hidden'
-  document.documentElement.style.overflow = 'hidden'
-}
-
-const unlockPageScroll = () => {
-  if (!pageScrollLocked) return
-  pageScrollLocked = false
-  document.body.style.overflow = previousBodyOverflow
-  document.documentElement.style.overflow = previousRootOverflow
-}
-
 const finishClose = () => {
   clearTimeout(closeTimer)
   closing.value = false
@@ -105,14 +89,14 @@ watch(() => props.open, async (open) => {
     returnFocusTo = document.activeElement instanceof HTMLElement ? document.activeElement : null
     closing.value = false
     resetGesture()
-    lockPageScroll()
+    pageScrollLock.lock()
     setBackgroundInert(true)
     void resetScroll()
     requestAnimationFrame(updateSheetHeight)
     return
   }
   setBackgroundInert(false)
-  unlockPageScroll()
+  pageScrollLock.unlock()
   closing.value = true
   closeTimer = setTimeout(finishClose, 400)
   await nextTick()
@@ -248,7 +232,7 @@ onMounted(() => {
   window.addEventListener('keydown', handleKeydown)
   if (props.open) {
     returnFocusTo = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    lockPageScroll()
+    pageScrollLock.lock()
     setBackgroundInert(true)
     void resetScroll()
     requestAnimationFrame(updateSheetHeight)
@@ -260,7 +244,7 @@ onBeforeUnmount(() => {
   clearTimeout(closeTimer)
   clearTimeout(suppressClickTimer)
   setBackgroundInert(false)
-  unlockPageScroll()
+  pageScrollLock.unlock()
 })
 </script>
 

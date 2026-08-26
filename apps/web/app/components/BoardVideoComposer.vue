@@ -1481,6 +1481,11 @@ const showAllAssets = () => {
 
   }
 
+  :global(.selection-panel--filter-overlay:has(.board-video-composer.has-mobile-panel)) {
+    overflow-y: hidden !important;
+    overscroll-behavior-y: none;
+  }
+
   :deep(.video-template-list > .video-template-folder) {
   display: flex;
   align-items: center;
