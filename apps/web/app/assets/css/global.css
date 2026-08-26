@@ -32,7 +32,7 @@
   --material-tinted-blur: 1.5rem;
   --material-tinted-saturation: 115%;
   --radius: 16px;
-  --radius-mobile: calc(var(--radius) * 1.5);
+  --radius-mobile: calc(var(--radius) * 1.375);
   --control-height: 44px;
   --button-padding-inline: 1.25rem;
   --range-control-height-mobile: 3.25rem;

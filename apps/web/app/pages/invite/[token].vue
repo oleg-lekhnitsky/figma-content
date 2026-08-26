@@ -218,9 +218,10 @@ form { display: grid; gap: var(--space); }
 }
 
 @media (max-width: 520px) {
-  .auth-shell { place-items: stretch; }
+  .auth-shell { place-items: center; }
   .auth-panel {
-    min-height: calc(100dvh - var(--space) * 2);
+    height: max-content;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     justify-content: center;

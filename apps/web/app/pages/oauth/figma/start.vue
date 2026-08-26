@@ -106,11 +106,12 @@ onMounted(async () => {
 
 @media (max-width: 520px) {
   .oauth-shell {
-    place-items: stretch;
+    place-items: center;
   }
 
   .oauth-panel {
-    min-height: calc(100dvh - var(--space) * 2);
+    height: max-content;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     justify-content: center;

@@ -13,8 +13,8 @@ const radiusOptions: Array<{ value: BoardViewSettings['radius']; label: string }
   { value: 'large', label: 'Soft' }
 ]
 const gapOptions: Array<{ value: BoardViewSettings['gap']; label: string }> = [
-  { value: 'none', label: 'None' }, { value: 'tight', label: 'Tight' },
-  { value: 'default', label: 'Default' }, { value: 'wide', label: 'Wide' }
+  { value: 'none', label: 'None' }, { value: 'default', label: 'Default' },
+  { value: 'wide', label: 'Wide' }
 ]
 const columnOptions: Array<{ value: BoardViewSettings['columns']; label: string }> = [
   { value: 'even-fewer', label: 'Even fewer' }, { value: 'fewer', label: 'Fewer' },

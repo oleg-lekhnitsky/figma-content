@@ -793,7 +793,12 @@ watch([selectedBoardId, arrangeExpanded], ([, arranging]) => {
 onMounted(() => {
   try {
     const savedView = JSON.parse(localStorage.getItem(libraryViewStorageKey) ?? 'null') as Partial<BoardViewSettings> | null
-    if (savedView) libraryView.value = { ...defaultBoardView, ...savedView, radius: savedView.radius === 'default' ? 'small' : savedView.radius ?? defaultBoardView.radius }
+    if (savedView) libraryView.value = {
+      ...defaultBoardView,
+      ...savedView,
+      radius: savedView.radius === 'default' ? 'small' : savedView.radius ?? defaultBoardView.radius,
+      gap: savedView.gap === 'tight' ? 'default' : savedView.gap ?? defaultBoardView.gap
+    }
   } catch { localStorage.removeItem(libraryViewStorageKey) }
   lastScrollY = window.scrollY
   window.addEventListener('resize', resizeSelectedBoardTitle)

@@ -180,6 +180,7 @@ const findTouch = (touches: TouchList) => Array.from(touches).find(touch => touc
 const startDrag = (event: TouchEvent) => {
   if (!props.dismissible || event.touches.length !== 1 || !(event.target instanceof HTMLElement)) return
   const target = event.target
+  if (target.closest('[data-drawer-gesture-boundary]')) return
   const handle = target.closest<HTMLElement>('.filter-sheet-handle')
   const scrollContainer = target.closest<HTMLElement>('.filter-sheet-content, .video-panel-scroll')
   if (!handle && (!scrollContainer || scrollContainer.scrollTop > 0)) return

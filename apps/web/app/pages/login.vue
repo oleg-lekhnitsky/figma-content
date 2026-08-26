@@ -328,16 +328,17 @@ form {
 
 @media (max-width: 520px) {
   .auth-shell {
-    place-items: stretch;
+    place-items: center;
   }
 
   .auth-panel {
-    min-height: calc(100dvh - var(--space) * 2);
+    height: max-content;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     justify-content: center;
     padding: var(--filter-sheet-content-padding-mobile);
-    border-radius: var(--radius-mobile);
+    border-radius: calc(var(--radius-mobile)*1.5);
     background: var(--filter-overlay-panel-background-mobile);
   }
 

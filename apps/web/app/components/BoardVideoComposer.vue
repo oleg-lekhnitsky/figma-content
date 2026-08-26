@@ -25,6 +25,11 @@ const mobileSheetDragging = ref(false)
 const mobileSheetDismissing = ref(false)
 const stageMotionReady = ref(false)
 let mobileSheetPointerId: number | undefined
+let mobileSheetTouchId: number | undefined
+let mobileSheetTouchPending = false
+let mobileSheetTouchStartX = 0
+let mobileSheetTouchStartY = 0
+let mobileSheetTouchScrollSource: HTMLElement | null = null
 let mobileSheetStartY = 0
 let mobileSheetLastY = 0
 let mobileSheetLastTime = 0
@@ -103,6 +108,79 @@ const handleMobileSheetHandleClick = (event: MouseEvent) => {
     return
   }
   void closeMobilePanel()
+}
+const findMobileSheetTouch = (touches: TouchList) => Array.from(touches).find(touch => touch.identifier === mobileSheetTouchId)
+const resetMobileSheetTouch = () => {
+  mobileSheetTouchId = undefined
+  mobileSheetTouchPending = false
+  mobileSheetTouchScrollSource = null
+}
+const startMobilePanelTouch = (event: TouchEvent) => {
+  if (!mobilePanel.value || event.touches.length !== 1 || !(event.target instanceof HTMLElement)) return
+  const panel = event.target.closest<HTMLElement>('.video-mobile-panel.is-mobile-open')
+  const scrollSource = event.target.closest<HTMLElement>('.video-panel-scroll')
+  if (!panel || !scrollSource || scrollSource.scrollTop > 0) return
+  const touch = event.touches[0]
+  if (!touch) return
+  mobileSheetTouchId = touch.identifier
+  mobileSheetTouchPending = true
+  mobileSheetTouchStartX = touch.clientX
+  mobileSheetTouchStartY = touch.clientY
+  mobileSheetTouchScrollSource = scrollSource
+  mobileSheetLastY = touch.clientY
+  mobileSheetLastTime = performance.now()
+  mobileSheetReleaseVelocity = 0
+  mobileSheetMoved = false
+}
+const moveMobilePanelTouch = (event: TouchEvent) => {
+  const touch = findMobileSheetTouch(event.touches)
+  if (!touch) return
+  const deltaX = touch.clientX - mobileSheetTouchStartX
+  const deltaY = touch.clientY - mobileSheetTouchStartY
+  if (mobileSheetTouchPending) {
+    if (Math.abs(deltaX) > Math.abs(deltaY) || deltaY < 0 || (mobileSheetTouchScrollSource?.scrollTop ?? 0) > 0) {
+      resetMobileSheetTouch()
+      return
+    }
+    if (deltaY < 6) return
+    mobileSheetTouchPending = false
+    mobileSheetDragging.value = true
+  }
+  if (!mobileSheetDragging.value) return
+  if (event.cancelable) event.preventDefault()
+  const now = performance.now()
+  const elapsed = now - mobileSheetLastTime
+  if (elapsed > 0) mobileSheetReleaseVelocity = (touch.clientY - mobileSheetLastY) / elapsed
+  mobileSheetLastY = touch.clientY
+  mobileSheetLastTime = now
+  mobileSheetDragY.value = Math.max(0, deltaY)
+  if (mobileSheetDragY.value > 4) mobileSheetMoved = true
+}
+const finishMobilePanelTouch = (event: TouchEvent) => {
+  if (!findMobileSheetTouch(event.changedTouches)) return
+  if (mobileSheetTouchPending) {
+    resetMobileSheetTouch()
+    return
+  }
+  if (!mobileSheetDragging.value) return
+  const velocity = performance.now() - mobileSheetLastTime < 120 ? mobileSheetReleaseVelocity : 0
+  mobileSheetDragging.value = false
+  resetMobileSheetTouch()
+  const panel = document.getElementById(`video-mobile-${mobilePanel.value}`)
+  const sheetHeight = panel?.offsetHeight ?? Math.min(window.innerHeight * .5, 512)
+  if (mobileSheetDragY.value > Math.min(96, sheetHeight * .18) || velocity > .45) {
+    mobileSheetDismissing.value = true
+    requestAnimationFrame(() => { mobileSheetDragY.value = sheetHeight + 48 })
+    mobileSheetCloseTimer = setTimeout(() => { void closeMobilePanel() }, 260)
+    return
+  }
+  mobileSheetDragY.value = 0
+}
+const cancelMobilePanelTouch = () => {
+  if (mobileSheetTouchId === undefined) return
+  mobileSheetDragging.value = false
+  mobileSheetDragY.value = 0
+  resetMobileSheetTouch()
 }
 watch(() => props.assets.map(asset => asset.id), (ids) => {
   const available = new Set(ids)
@@ -227,7 +305,7 @@ const showAllAssets = () => {
 </script>
 
 <template>
-  <div class="board-video-composer" :class="{ 'has-mobile-panel': mobilePanel, 'is-mobile-sheet-dragging': mobileSheetDragging, 'is-mobile-sheet-dismissing': mobileSheetDismissing, 'is-stage-motion-ready': stageMotionReady }" :style="{ '--video-mobile-sheet-drag-y': `${mobileSheetDragY}px` }">
+  <div class="board-video-composer" :class="{ 'has-mobile-panel': mobilePanel, 'is-mobile-sheet-dragging': mobileSheetDragging, 'is-mobile-sheet-dismissing': mobileSheetDismissing, 'is-stage-motion-ready': stageMotionReady }" :style="{ '--video-mobile-sheet-drag-y': `${mobileSheetDragY}px` }" @touchstart.passive="startMobilePanelTouch" @touchmove="moveMobilePanelTouch" @touchend="finishMobilePanelTouch" @touchcancel="cancelMobilePanelTouch">
     <header class="video-mobile-header">
       <button class="button-secondary button-icon video-mobile-header-back" type="button" aria-label="Close video editor" @click="emit('close')"><ChevronLeft :size="24" weight="Outline" aria-hidden="true" /></button>
       <h2>Video editor</h2>
@@ -242,12 +320,12 @@ const showAllAssets = () => {
       <button type="button" aria-controls="video-mobile-canvas" :aria-expanded="mobilePanel === 'canvas'" @click="openMobilePanel('canvas', $event)">Canvas</button>
       <button type="button" aria-controls="video-mobile-assets" :aria-expanded="mobilePanel === 'assets'" @click="openMobilePanel('assets', $event)">Assets</button>
     </nav>
-    <button v-if="mobilePanel" class="video-mobile-backdrop" type="button" aria-label="Close video settings" @click="closeMobilePanel" />
-    <VideoTemplateBrowser id="video-mobile-templates" v-model="settings.templateId" class="video-mobile-panel" :class="{ 'is-mobile-open': mobilePanel === 'templates' }" :role="mobilePanel === 'templates' ? 'dialog' : undefined" :aria-modal="mobilePanel === 'templates' || undefined" aria-label="Choose a video template" :templates="videoTemplates" :assets="activeAssets" />
-    <VideoSceneInspector id="video-mobile-scene" v-model="settings" class="video-mobile-panel" :class="{ 'is-mobile-open': mobilePanel === 'scene' }" :role="mobilePanel === 'scene' ? 'dialog' : undefined" :aria-modal="mobilePanel === 'scene' || undefined" aria-label="Video settings" :template="template" />
+    <button v-if="mobilePanel" class="video-mobile-backdrop" type="button" aria-label="Close video settings" data-drawer-gesture-boundary @click="closeMobilePanel" />
+    <VideoTemplateBrowser id="video-mobile-templates" v-model="settings.templateId" class="video-mobile-panel" :class="{ 'is-mobile-open': mobilePanel === 'templates' }" :role="mobilePanel === 'templates' ? 'dialog' : undefined" :aria-modal="mobilePanel === 'templates' || undefined" aria-label="Choose a video template" data-drawer-gesture-boundary :templates="videoTemplates" :assets="activeAssets" />
+    <VideoSceneInspector id="video-mobile-scene" v-model="settings" class="video-mobile-panel" :class="{ 'is-mobile-open': mobilePanel === 'scene' }" :role="mobilePanel === 'scene' ? 'dialog' : undefined" :aria-modal="mobilePanel === 'scene' || undefined" aria-label="Video settings" data-drawer-gesture-boundary :template="template" />
     <aside class="video-composer-right">
-      <VideoCanvasInspector id="video-mobile-canvas" v-model="settings" class="video-mobile-panel" :class="{ 'is-mobile-open': mobilePanel === 'canvas' }" :role="mobilePanel === 'canvas' ? 'dialog' : undefined" :aria-modal="mobilePanel === 'canvas' || undefined" aria-label="Canvas settings" />
-      <section id="video-mobile-assets" class="video-panel video-assets-panel video-mobile-panel" :class="{ 'is-mobile-open': mobilePanel === 'assets' }" :role="mobilePanel === 'assets' ? 'dialog' : undefined" :aria-modal="mobilePanel === 'assets' || undefined" aria-label="Video assets">
+      <VideoCanvasInspector id="video-mobile-canvas" v-model="settings" class="video-mobile-panel" :class="{ 'is-mobile-open': mobilePanel === 'canvas' }" :role="mobilePanel === 'canvas' ? 'dialog' : undefined" :aria-modal="mobilePanel === 'canvas' || undefined" aria-label="Canvas settings" data-drawer-gesture-boundary />
+      <section id="video-mobile-assets" class="video-panel video-assets-panel video-mobile-panel" :class="{ 'is-mobile-open': mobilePanel === 'assets' }" :role="mobilePanel === 'assets' ? 'dialog' : undefined" :aria-modal="mobilePanel === 'assets' || undefined" aria-label="Video assets" data-drawer-gesture-boundary>
         <div class="video-panel-scroll">
         <header>
           <h2 class="filter-overlay-title">Assets</h2><span>{{ activeAssets.length }}/{{ assets.length }}</span>
@@ -271,7 +349,7 @@ const showAllAssets = () => {
         </div>
       </section>
     </aside>
-    <button v-if="mobilePanel" ref="mobilePanelClose" class="video-mobile-sheet-handle" type="button" aria-label="Close video settings" @pointerdown="startMobileSheetDrag" @pointermove="moveMobileSheetDrag" @pointerup="finishMobileSheetDrag" @pointercancel="cancelMobileSheetDrag" @click="handleMobileSheetHandleClick"><span aria-hidden="true" /></button>
+    <button v-if="mobilePanel" ref="mobilePanelClose" class="video-mobile-sheet-handle" type="button" aria-label="Close video settings" data-drawer-gesture-boundary @pointerdown="startMobileSheetDrag" @pointermove="moveMobileSheetDrag" @pointerup="finishMobileSheetDrag" @pointercancel="cancelMobileSheetDrag" @click="handleMobileSheetHandleClick"><span aria-hidden="true" /></button>
     <VideoTimeline :progress="progress" :duration="totalDuration" :playing="playing" @seek="seek" @toggle="togglePlayback">
       <p role="status" aria-live="polite">{{ feedback }}</p>
       <button class="button-primary video-export-button video-export-button--timeline" type="button" :disabled="exporting || !activeAssets.length" :aria-label="exporting ? 'Rendering video' : 'Download video'" :title="exporting ? 'Rendering video' : 'Download video'" @click="renderVideo"><Download3 class="video-export-icon" :size="20" weight="Outline" aria-hidden="true" /><span class="video-export-label">{{ exporting ? 'Rendering…' : 'Export video' }}</span></button>
