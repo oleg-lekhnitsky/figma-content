@@ -1853,7 +1853,7 @@ const showAllAssets = () => {
   }
 
   :deep(.video-panel) {
-    max-height: 58dvh
+    max-height: 58%
   }
 
   :deep(.video-template-list) {
