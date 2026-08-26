@@ -857,7 +857,8 @@ onBeforeUnmount(() => {
 <template>
   <div class="library-shell">
     <main id="main-content">
-      <header class="index-toolbar">
+      <div class="library-top-chrome" :class="{ 'toolbar-hidden': !toolbarVisible }">
+        <header class="index-toolbar">
         <div class="header-identity">
           <WorkspaceSwitcher class="brand" />
         </div>
@@ -894,18 +895,19 @@ onBeforeUnmount(() => {
             </template>
           </AppDropdownMenu>
         </nav>
-      </header>
+        </header>
 
-      <div v-if="boards.length" class="board-tabs-shell" :class="{ 'toolbar-hidden': !toolbarVisible }">
-        <nav class="board-tabs" aria-label="Browse boards">
-          <button type="button" :aria-pressed="!selectedBoardId" @click="selectBoard('')">All</button>
-          <button v-for="board in boards" :key="board.id" type="button"
-            :title="`${board.title} · ${board.publication_enabled ? 'Published' : 'Private'}`"
-            :aria-label="`Show ${board.title}, ${board.publication_enabled ? 'published' : 'private'}`"
-            :aria-pressed="selectedBoardId === board.id" @click="selectBoard(board.id)"><span
-              v-if="board.publication_enabled" class="board-tab-status" aria-hidden="true" /><span
-              class="board-tab-title">{{ board.title }}</span></button>
-        </nav>
+        <div v-if="boards.length" class="board-tabs-shell" :class="{ 'toolbar-hidden': !toolbarVisible }">
+          <nav class="board-tabs" aria-label="Browse boards">
+            <button type="button" :aria-pressed="!selectedBoardId" @click="selectBoard('')">All</button>
+            <button v-for="board in boards" :key="board.id" type="button"
+              :title="`${board.title} · ${board.publication_enabled ? 'Published' : 'Private'}`"
+              :aria-label="`Show ${board.title}, ${board.publication_enabled ? 'published' : 'private'}`"
+              :aria-pressed="selectedBoardId === board.id" @click="selectBoard(board.id)"><span
+                v-if="board.publication_enabled" class="board-tab-status" aria-hidden="true" /><span
+                class="board-tab-title">{{ board.title }}</span></button>
+          </nav>
+        </div>
       </div>
 
       <SelectionPanel :visible="viewExpanded" label="Library view" wide overlay raised
@@ -1406,6 +1408,19 @@ button {
 }
 
 @media(max-width:520px) {
+  .library-top-chrome {
+    position: sticky;
+    z-index: 5;
+    top: 0;
+    background: var(--color-bg);
+    transition: transform .24s cubic-bezier(.2, 0, 0, 1)
+  }
+
+  .library-top-chrome.toolbar-hidden {
+    pointer-events: none;
+    transform: translateY(-100%)
+  }
+
   .index-toolbar {
     grid-template-columns: 1fr auto;
     gap: 8px
@@ -2142,8 +2157,16 @@ button {
 
   .library-wordmark {
     display: block;
-    top: calc(50% - 4px);
+    top: calc(max(var(--space), env(safe-area-inset-top)) + 22px);
     height: calc(var(--identity-avatar-size) - 2px)
+  }
+
+  .board-tabs-shell,
+  .board-tabs-shell.toolbar-hidden {
+    position: static;
+    pointer-events: auto;
+    opacity: 1;
+    transform: none
   }
 
   .board-tabs button {

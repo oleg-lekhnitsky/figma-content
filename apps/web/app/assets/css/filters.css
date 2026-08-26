@@ -67,8 +67,8 @@
   --filter-overlay-chevron-inset: .3125rem;
   --filter-overlay-close-inset: clamp(1.125rem, 2.5vw, 2.5rem);
   --filter-hairline: .0625rem;
-  --filter-sheet-height-mobile: 90dvh;
-  --filter-view-sheet-max-height-mobile: 60dvh;
+  --filter-sheet-height-mobile: calc(90dvh - env(safe-area-inset-top));
+  --filter-view-sheet-max-height-mobile: calc(60dvh - env(safe-area-inset-top));
   --filter-sheet-row-height-mobile: 3.75rem;
   --filter-sheet-group-gap-mobile: 1.375rem;
   --filter-sheet-inline-padding-mobile: calc(var(--space) * 2.0);
