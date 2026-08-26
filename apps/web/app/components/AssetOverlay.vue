@@ -15,7 +15,7 @@ const assetTitleInput = ref<HTMLTextAreaElement>()
 const moreOpen = ref(false)
 const deleteDialogOpen = ref(false)
 const deleting = ref(false)
-const { data, error, refresh } = await useLazyFetch<{ data: { asset: AssetDetail } }>(() => `/api/assets/${props.assetId}`)
+const { data, error, status: assetStatus, refresh } = await useLazyFetch<{ data: { asset: AssetDetail } }>(() => `/api/assets/${props.assetId}`)
 const { data: previewData, execute: loadFullPreview } = await useLazyFetch<{ data: { id: string; url: string } }>(() => `/api/assets/${props.assetId}/preview`, { immediate: false })
 const { data: session } = await useLazyFetch<SessionResponse>('/api/auth/session')
 const { data: boardData, status: boardStatus, refresh: refreshBoards } = await useLazyFetch<{ data: { collections: Board[] } }>('/api/shares')
@@ -26,20 +26,7 @@ const fetchedAsset = computed(() => data.value?.data.asset)
 const retainedAsset = shallowRef<AssetDetail>()
 watch(fetchedAsset, next => { if (next) retainedAsset.value = next }, { immediate: true })
 const asset = computed(() => fetchedAsset.value ?? retainedAsset.value)
-const showInitialSkeleton = ref(!asset.value)
-const skeletonRevealing = ref(false)
-let skeletonTimer: ReturnType<typeof setTimeout> | undefined
-watch(asset, async next => {
-  if (!next || !showInitialSkeleton.value) return
-  await nextTick()
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    skeletonRevealing.value = true
-    skeletonTimer = setTimeout(() => {
-      showInitialSkeleton.value = false
-      skeletonRevealing.value = false
-    }, 140)
-  }))
-}, { immediate: true })
+const showInitialSkeleton = computed(() => !asset.value && assetStatus.value !== 'error')
 const thumbnailPreviewUrl = computed(() => props.previewUrl || props.previewUrls[props.assetId] || '')
 const displayedPreviewUrl = ref(thumbnailPreviewUrl.value)
 const pendingFullPreviewUrl = ref('')
@@ -186,7 +173,6 @@ onMounted(() => {
 onBeforeUnmount(() => {
   clearTimeout(closeTimer)
   clearTimeout(swipeTimer)
-  clearTimeout(skeletonTimer)
   clearTimeout(openingViewTransitionTimer)
   mobileQuery?.removeEventListener('change', updateMobile)
   unlockPageScroll()
@@ -333,7 +319,7 @@ const dialogGestureStyle = computed<Record<string, string>>(() => ({
 const assetVisualStyle = computed(() => {
   if (isMobile.value) return gestureStyle.value
   const thumbnail = thumbnailPreviewUrl.value
-  const background = !thumbnail || asset.value?.mime_type.startsWith('video/') ? {} : {
+  const background = !thumbnail || resolvedMimeType.value?.startsWith('video/') ? {} : {
     backgroundImage: `url(${JSON.stringify(thumbnail)})`,
     backgroundPosition: 'center',
     backgroundRepeat: 'no-repeat',
@@ -600,33 +586,20 @@ watch(() => props.assetId, id => {
     <dialog ref="dialog" class="asset-dialog" :class="{ 'is-closing': isClosing, 'is-gesture-active': gestureActive }"
       :style="dialogGestureStyle" aria-label="Asset details"
       @cancel.prevent="cancelOverlay" @keydown="handleAssetNavigationKey">
-      <main v-if="showInitialSkeleton" class="overlay-content overlay-loading"
-        :class="{ 'is-revealing': skeletonRevealing }" role="status" aria-label="Loading asset details">
-        <section class="asset-visual"
-          :class="{ 'skeleton-visual': !resolvedPreviewUrl, 'allows-opening-view-transition': allowsOpeningViewTransition }"
-          aria-hidden="true">
-          <AssetMedia v-if="resolvedPreviewUrl" class="current-preview" :src="resolvedPreviewUrl" alt="" />
-        </section>
-        <aside class="skeleton-panel" aria-hidden="true">
-          <span class="skeleton-line skeleton-title" />
-          <div class="skeleton-actions"><span /><span /></div>
-          <span class="skeleton-line skeleton-field" />
-          <div class="skeleton-rows"><span v-for="index in 6" :key="index" /></div>
-          <span class="skeleton-line skeleton-section" />
-          <span class="skeleton-line skeleton-meta" />
-        </aside>
-      </main>
       <div v-if="error && !asset && !showInitialSkeleton" class="overlay-state" role="alert"><strong>Unable to load this
           asset.</strong><button @click="refresh()">Try again</button></div>
-      <main v-if="asset" ref="overlayContent" class="overlay-content">
+      <main v-if="asset || showInitialSkeleton" ref="overlayContent" class="overlay-content">
         <section ref="assetVisual" class="asset-visual"
-          :class="{ 'skeleton-visual': !resolvedPreviewUrl, 'is-dragging': isMobile && gestureActive, 'is-zoomed': zoomActive, 'allows-opening-view-transition': allowsOpeningViewTransition && !showInitialSkeleton }"
+          :class="{ 'skeleton-visual': !resolvedPreviewUrl, 'is-dragging': isMobile && gestureActive, 'is-zoomed': zoomActive, 'allows-opening-view-transition': allowsOpeningViewTransition }"
           :style="assetVisualStyle" aria-describedby="mobile-gesture-hint" @pointerdown="startGesture"
           @pointermove="moveGesture" @pointerup="finishGesture" @pointercancel="cancelGesture"
           @click="handlePreviewClick"
           @transitionend="finishSwipeTransition"><span id="mobile-gesture-hint" class="sr-only">Swipe left or right to
             browse assets. Pull down to close. Pinch or double-tap to zoom an image.</span><button class="pull-handle" type="button"
             aria-label="Close asset details" @pointerdown.stop @click="close" />
+          <AssetMedia v-if="isMobile && thumbnailPreviewUrl && !resolvedMimeType?.startsWith('video/')"
+            class="preview-fallback" :src="thumbnailPreviewUrl" :style="currentPreviewStyle" alt="" loading="eager"
+            fetchpriority="high" draggable="false" aria-hidden="true" />
           <template v-if="isMobile">
             <AssetMedia v-for="slide in mobileSlides" :key="slide.id"
               :class="[`${slide.position}-preview`, { 'swipe-preview': slide.position !== 'current' }]"
@@ -634,8 +607,8 @@ watch(() => props.assetId, id => {
               :alt="slide.alt" loading="eager" fetchpriority="high" draggable="false" />
           </template>
           <AssetMedia v-else-if="resolvedPreviewUrl" class="current-preview" :src="resolvedPreviewUrl"
-            :mime-type="resolvedMimeType" :alt="`Preview of ${asset.title}`" loading="eager" fetchpriority="high" draggable="false" />
-          <button class="details-hint" type="button" aria-label="Show asset details"
+            :mime-type="resolvedMimeType" :alt="`Preview of ${asset?.title ?? 'asset'}`" loading="eager" fetchpriority="high" draggable="false" />
+          <button v-if="asset" class="details-hint" type="button" aria-label="Show asset details"
             @pointerdown.stop @click="revealDetails"><svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="m6 9 6 6 6-6" />
             </svg><span>Details</span></button><button v-if="previousAssetId && !editing"
@@ -648,7 +621,15 @@ watch(() => props.assetId, id => {
               <path d="m9 5 7 7-7 7" />
             </svg></button>
         </section>
-        <aside>
+        <aside v-if="showInitialSkeleton" class="skeleton-panel" aria-hidden="true">
+          <span class="skeleton-line skeleton-title" />
+          <div class="skeleton-actions"><span /><span /></div>
+          <span class="skeleton-line skeleton-field" />
+          <div class="skeleton-rows"><span v-for="index in 6" :key="index" /></div>
+          <span class="skeleton-line skeleton-section" />
+          <span class="skeleton-line skeleton-meta" />
+        </aside>
+        <aside v-else-if="asset">
           <form v-if="editing" class="edit-form" @submit.prevent="saveDetails">
             <label>Title<input v-model="title" name="title" required maxlength="200"></label>
             <label>Description<textarea v-model="description" name="description" rows="4" maxlength="5000" /></label>
@@ -949,22 +930,6 @@ watch(() => props.assetId, id => {
   display: grid;
   align-content: start;
   gap: var(--space);
-}
-
-@media(min-width:761px) {
-  .overlay-loading {
-    position: absolute;
-    z-index: 1;
-    inset: 0;
-    background: transparent;
-    opacity: 1;
-    transition: opacity 140ms ease-out;
-    pointer-events: none;
-  }
-
-  .overlay-loading.is-revealing {
-    opacity: 0;
-  }
 }
 
 .skeleton-line {
@@ -1563,13 +1528,6 @@ li span {
     touch-action: pan-y pinch-zoom
   }
 
-  .overlay-loading {
-    position: absolute;
-    z-index: 2;
-    inset: 0;
-    pointer-events: none
-  }
-
   .asset-visual {
     width: 100%;
     height: 100dvh;
@@ -1598,8 +1556,14 @@ li span {
   }
 
   .asset-visual .current-preview {
+    z-index: 1;
     transform: translate3d(0, 0, 0);
     pointer-events: auto
+  }
+
+  .asset-visual .preview-fallback {
+    z-index: 0;
+    pointer-events: none
   }
 
   .asset-visual.allows-opening-view-transition .current-preview {
