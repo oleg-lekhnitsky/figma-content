@@ -1073,7 +1073,6 @@ button.panel-dropdown-trigger:focus-visible {
   .selection-panel.selection-panel--filter-overlay {
     bottom: calc(0px - env(safe-area-inset-bottom)) !important;
     height: auto;
-    height: 100vh;
     display: flex;
     flex-direction: column;
     align-items: end;
