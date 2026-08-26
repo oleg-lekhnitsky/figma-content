@@ -15,13 +15,13 @@ const assetTitleInput = ref<HTMLTextAreaElement>()
 const moreOpen = ref(false)
 const deleteDialogOpen = ref(false)
 const deleting = ref(false)
-const { data, error, status: assetStatus, refresh } = await useLazyFetch<{ data: { asset: AssetDetail } }>(() => `/api/assets/${props.assetId}`)
-const { data: previewData, execute: loadFullPreview } = await useLazyFetch<{ data: { id: string; url: string } }>(() => `/api/assets/${props.assetId}/preview`, { immediate: false })
-const { data: session } = await useLazyFetch<SessionResponse>('/api/auth/session')
-const { data: boardData, status: boardStatus, refresh: refreshBoards } = await useLazyFetch<{ data: { collections: Board[] } }>('/api/shares')
+const { data, error, status: assetStatus, refresh } = useLazyFetch<{ data: { asset: AssetDetail } }>(() => `/api/assets/${props.assetId}`)
+const { data: previewData, execute: loadFullPreview } = useLazyFetch<{ data: { id: string; url: string } }>(() => `/api/assets/${props.assetId}/preview`, { immediate: false })
+const { data: session } = useLazyFetch<SessionResponse>('/api/auth/session')
+const { data: boardData, status: boardStatus, refresh: refreshBoards } = useLazyFetch<{ data: { collections: Board[] } }>('/api/shares')
 const boardCreator = ref<{ openCreate: () => Promise<void> }>()
-const { data: projectData } = await useLazyFetch<{ data: { projects: Option[] } }>('/api/projects')
-const { data: campaignData } = await useLazyFetch<{ data: { campaigns: Option[] } }>('/api/campaigns')
+const { data: projectData } = useLazyFetch<{ data: { projects: Option[] } }>('/api/projects')
+const { data: campaignData } = useLazyFetch<{ data: { campaigns: Option[] } }>('/api/campaigns')
 const fetchedAsset = computed(() => data.value?.data.asset)
 const retainedAsset = shallowRef<AssetDetail>()
 watch(fetchedAsset, next => { if (next) retainedAsset.value = next }, { immediate: true })
@@ -30,12 +30,22 @@ const showInitialSkeleton = computed(() => !asset.value && assetStatus.value !==
 const thumbnailPreviewUrl = computed(() => props.previewUrl || props.previewUrls[props.assetId] || '')
 const displayedPreviewUrl = ref(thumbnailPreviewUrl.value)
 const pendingFullPreviewUrl = ref('')
+const fullPreviewHandoff = ref(false)
 const isMobile = ref(false)
 const allowsOpeningViewTransition = ref(true)
 watch(() => [props.assetId, thumbnailPreviewUrl.value], () => {
   displayedPreviewUrl.value = thumbnailPreviewUrl.value
   pendingFullPreviewUrl.value = ''
+  fullPreviewHandoff.value = false
 }, { immediate: true, flush: 'sync' })
+const displayFullPreview = (url: string) => {
+  fullPreviewHandoff.value = Boolean(isMobile.value && thumbnailPreviewUrl.value && url !== thumbnailPreviewUrl.value)
+  displayedPreviewUrl.value = url
+}
+const finishFullPreviewHandoff = () => {
+  if (!fullPreviewHandoff.value) return
+  requestAnimationFrame(() => requestAnimationFrame(() => { fullPreviewHandoff.value = false }))
+}
 watch(() => previewData.value?.data, async (preview) => {
   if (!preview || preview.id !== props.assetId || !import.meta.client) return
   const requestedAssetId = props.assetId
@@ -55,7 +65,7 @@ watch(() => previewData.value?.data, async (preview) => {
     pendingFullPreviewUrl.value = preview.url
     return
   }
-  displayedPreviewUrl.value = preview.url
+  displayFullPreview(preview.url)
 }, { immediate: true })
 const resolvedPreviewUrl = computed(() => displayedPreviewUrl.value || thumbnailPreviewUrl.value)
 const resolvedMimeType = computed(() => props.mimeTypes[props.assetId] || (asset.value?.id === props.assetId ? asset.value.mime_type : null))
@@ -161,14 +171,15 @@ onMounted(() => {
   mobileQuery.addEventListener('change', updateMobile)
   lockPageScroll()
   dialog.value?.showModal()
+  dialog.value?.focus({ preventScroll: true })
   void loadFullPreview()
   openingViewTransitionTimer = setTimeout(() => {
     allowsOpeningViewTransition.value = false
     if (pendingFullPreviewUrl.value) {
-      displayedPreviewUrl.value = pendingFullPreviewUrl.value
+      displayFullPreview(pendingFullPreviewUrl.value)
       pendingFullPreviewUrl.value = ''
     }
-  }, 400)
+  }, 240)
 })
 onBeforeUnmount(() => {
   clearTimeout(closeTimer)
@@ -583,7 +594,7 @@ watch(() => props.assetId, id => {
 
 <template>
   <Teleport to="body">
-    <dialog ref="dialog" class="asset-dialog" :class="{ 'is-closing': isClosing, 'is-gesture-active': gestureActive }"
+    <dialog ref="dialog" class="asset-dialog" tabindex="-1" :class="{ 'is-closing': isClosing, 'is-gesture-active': gestureActive }"
       :style="dialogGestureStyle" aria-label="Asset details"
       @cancel.prevent="cancelOverlay" @keydown="handleAssetNavigationKey">
       <div v-if="error && !asset && !showInitialSkeleton" class="overlay-state" role="alert"><strong>Unable to load this
@@ -597,14 +608,15 @@ watch(() => props.assetId, id => {
           @transitionend="finishSwipeTransition"><span id="mobile-gesture-hint" class="sr-only">Swipe left or right to
             browse assets. Pull down to close. Pinch or double-tap to zoom an image.</span><button class="pull-handle" type="button"
             aria-label="Close asset details" @pointerdown.stop @click="close" />
-          <AssetMedia v-if="isMobile && thumbnailPreviewUrl && !resolvedMimeType?.startsWith('video/')"
+          <AssetMedia v-if="fullPreviewHandoff && thumbnailPreviewUrl && !resolvedMimeType?.startsWith('video/')"
             class="preview-fallback" :src="thumbnailPreviewUrl" :style="currentPreviewStyle" alt="" loading="eager"
             fetchpriority="high" draggable="false" aria-hidden="true" />
           <template v-if="isMobile">
             <AssetMedia v-for="slide in mobileSlides" :key="slide.id"
               :class="[`${slide.position}-preview`, { 'swipe-preview': slide.position !== 'current' }]"
               :src="slide.url" :style="mobileSlideStyle(slide.position)" :mime-type="slide.mimeType"
-              :alt="slide.alt" loading="eager" fetchpriority="high" draggable="false" />
+              :alt="slide.alt" loading="eager" fetchpriority="high" draggable="false"
+              @load="slide.position === 'current' && finishFullPreviewHandoff()" />
           </template>
           <AssetMedia v-else-if="resolvedPreviewUrl" class="current-preview" :src="resolvedPreviewUrl"
             :mime-type="resolvedMimeType" :alt="`Preview of ${asset?.title ?? 'asset'}`" loading="eager" fetchpriority="high" draggable="false" />
@@ -799,8 +811,12 @@ watch(() => props.assetId, id => {
   overscroll-behavior: contain;
   transform: translateY(0);
   transition-property: transform, opacity;
-  transition-duration: .26s, .2s;
+  transition-duration: .18s, .15s;
   transition-timing-function: cubic-bezier(.2, 0, 0, 1), ease-out
+}
+
+.asset-dialog:focus {
+  outline: none
 }
 
 .asset-dialog::before {
@@ -822,7 +838,7 @@ watch(() => props.assetId, id => {
   backdrop-filter: blur(var(--filter-overlay-blur));
   -webkit-backdrop-filter: blur(var(--filter-overlay-blur));
   transition-property: background-color;
-  transition-duration: .2s;
+  transition-duration: .15s;
   transition-timing-function: ease-out
 }
 
@@ -1593,6 +1609,9 @@ li span {
     display: block;
     padding: 0;
     background: transparent;
+    outline: none;
+    box-shadow: none;
+    -webkit-tap-highlight-color: transparent;
     translate: -50% 0
   }
 
@@ -1667,7 +1686,7 @@ li span {
 
 :global(::view-transition-group(asset-preview)) {
   z-index: 10000;
-  animation-duration: .32s;
+  animation-duration: .2s;
   animation-timing-function: cubic-bezier(.2, 0, 0, 1)
 }
 
@@ -1679,7 +1698,7 @@ li span {
 
 :global(::view-transition-old(asset-preview)),
 :global(::view-transition-new(asset-preview)) {
-  animation-duration: .32s;
+  animation-duration: .2s;
   animation-timing-function: cubic-bezier(.2, 0, 0, 1);
   mix-blend-mode: normal
 }
