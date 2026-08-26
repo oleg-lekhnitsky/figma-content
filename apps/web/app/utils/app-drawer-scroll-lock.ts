@@ -39,7 +39,7 @@ const blockBackgroundTouch = (event: TouchEvent) => {
   }
   const deltaY = touch.clientY - lastTouchY
   lastTouchY = touch.clientY
-  const scrollContainer = event.target.closest<HTMLElement>('.filter-sheet-content, .video-panel-scroll, [data-drawer-scroll], .selection-panel--filter-overlay')
+  const scrollContainer = event.target.closest<HTMLElement>('.filter-sheet-content, .video-panel-scroll, [data-drawer-scroll]')
   if (scrollContainer && Math.abs(deltaY) > 0) {
     const canScrollTowardTop = deltaY > 0 && scrollContainer.scrollTop > 0
     const canScrollTowardBottom = deltaY < 0 && scrollContainer.scrollTop + scrollContainer.clientHeight < scrollContainer.scrollHeight - 1

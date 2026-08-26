@@ -100,7 +100,7 @@ watch(() => props.open, async (open) => {
   closing.value = true
   closeTimer = setTimeout(finishClose, 400)
   await nextTick()
-})
+}, { flush: 'sync' })
 
 const requestClose = () => {
   if (props.dismissible) emit('close')
