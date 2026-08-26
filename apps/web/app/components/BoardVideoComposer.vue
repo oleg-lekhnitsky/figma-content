@@ -21,8 +21,10 @@ const mobilePanel = ref<MobilePanel | null>(null)
 const mobilePanelTrigger = ref<HTMLElement | null>(null)
 const mobilePanelClose = ref<HTMLButtonElement | null>(null)
 const mobileSheetDragY = ref(0)
+const mobileSheetHeight = ref(1)
 const mobileSheetDragging = ref(false)
 const mobileSheetDismissing = ref(false)
+const mobileSheetBackdropOpacity = computed(() => Math.max(0, 1 - mobileSheetDragY.value / mobileSheetHeight.value))
 const stageMotionReady = ref(false)
 let mobileSheetPointerId: number | undefined
 let mobileSheetTouchId: number | undefined
@@ -47,6 +49,8 @@ const openMobilePanel = async (panel: MobilePanel, event: MouseEvent) => {
   mobilePanelTrigger.value = event.currentTarget instanceof HTMLElement ? event.currentTarget : null
   mobilePanel.value = panel
   await nextTick()
+  const sheet = document.getElementById(`video-mobile-${panel}`)
+  mobileSheetHeight.value = Math.max(1, sheet?.offsetHeight ?? window.innerHeight)
   mobilePanelClose.value?.focus()
 }
 const finishMobilePanelClose = async () => {
@@ -65,6 +69,7 @@ const closeMobilePanel = () => {
   clearTimeout(mobileSheetCloseTimer)
   const panel = document.getElementById(`video-mobile-${mobilePanel.value}`)
   const sheetHeight = panel?.offsetHeight ?? Math.min(window.innerHeight * .5, 512)
+  mobileSheetHeight.value = Math.max(1, sheetHeight)
   mobileSheetDragging.value = false
   mobileSheetPointerId = undefined
   resetMobileSheetTouch()
@@ -314,7 +319,7 @@ const showAllAssets = () => {
 </script>
 
 <template>
-  <div class="board-video-composer" :class="{ 'has-mobile-panel': mobilePanel, 'is-mobile-sheet-dragging': mobileSheetDragging, 'is-mobile-sheet-dismissing': mobileSheetDismissing, 'is-stage-motion-ready': stageMotionReady }" :style="{ '--video-mobile-sheet-drag-y': `${mobileSheetDragY}px` }" @touchstart.passive="startMobilePanelTouch" @touchmove="moveMobilePanelTouch" @touchend="finishMobilePanelTouch" @touchcancel="cancelMobilePanelTouch">
+  <div class="board-video-composer" :class="{ 'has-mobile-panel': mobilePanel, 'is-mobile-sheet-dragging': mobileSheetDragging, 'is-mobile-sheet-dismissing': mobileSheetDismissing, 'is-stage-motion-ready': stageMotionReady }" :style="{ '--video-mobile-sheet-drag-y': `${mobileSheetDragY}px`, '--sheet-backdrop-opacity': mobileSheetBackdropOpacity }" @touchstart.passive="startMobilePanelTouch" @touchmove="moveMobilePanelTouch" @touchend="finishMobilePanelTouch" @touchcancel="cancelMobilePanelTouch">
     <header class="video-mobile-header">
       <button class="button-secondary button-icon video-mobile-header-back" type="button" aria-label="Close video editor" @click="emit('close')"><ChevronLeft :size="24" weight="Outline" aria-hidden="true" /></button>
       <h2>Video editor</h2>
@@ -332,7 +337,7 @@ const showAllAssets = () => {
     <button v-if="mobilePanel" class="video-mobile-backdrop" type="button" aria-label="Close video settings" data-drawer-gesture-boundary @click="closeMobilePanel" />
     <VideoTemplateBrowser id="video-mobile-templates" v-model="settings.templateId" class="video-mobile-panel" :class="{ 'is-mobile-open': mobilePanel === 'templates' }" :role="mobilePanel === 'templates' ? 'dialog' : undefined" :aria-modal="mobilePanel === 'templates' || undefined" aria-label="Choose a video template" data-drawer-gesture-boundary :templates="videoTemplates" :assets="activeAssets" />
     <VideoSceneInspector id="video-mobile-scene" v-model="settings" class="video-mobile-panel" :class="{ 'is-mobile-open': mobilePanel === 'scene' }" :role="mobilePanel === 'scene' ? 'dialog' : undefined" :aria-modal="mobilePanel === 'scene' || undefined" aria-label="Video settings" data-drawer-gesture-boundary :template="template" />
-    <aside class="video-composer-right" :class="{ 'has-open-mobile-panel': mobilePanel === 'canvas' || mobilePanel === 'assets' }">
+    <aside class="video-composer-right">
       <VideoCanvasInspector id="video-mobile-canvas" v-model="settings" class="video-mobile-panel" :class="{ 'is-mobile-open': mobilePanel === 'canvas' }" :role="mobilePanel === 'canvas' ? 'dialog' : undefined" :aria-modal="mobilePanel === 'canvas' || undefined" aria-label="Canvas settings" data-drawer-gesture-boundary />
       <section id="video-mobile-assets" class="video-panel video-assets-panel video-mobile-panel" :class="{ 'is-mobile-open': mobilePanel === 'assets' }" :role="mobilePanel === 'assets' ? 'dialog' : undefined" :aria-modal="mobilePanel === 'assets' || undefined" aria-label="Video assets" data-drawer-gesture-boundary>
         <div class="video-panel-scroll">
@@ -1503,7 +1508,7 @@ const showAllAssets = () => {
 }
 
   .board-video-composer {
-    --video-mobile-sheet-height: min(48%, 32rem);
+    --video-mobile-sheet-height: min(48dvh, 32rem);
     --video-input-gap-mobile: calc(var(--space) / .75);
     --video-type-body: var(--font-size-body);
     --video-control-height: var(--range-control-height-mobile);
@@ -1518,6 +1523,32 @@ const showAllAssets = () => {
     padding: max(var(--space), env(safe-area-inset-top)) calc(var(--space)/1) calc(var(--space)/2);
     overflow: hidden;
     border-radius: var(--radius-mobile);
+  }
+
+  .board-video-composer.has-mobile-panel {
+    grid-template-rows: auto minmax(0, 1fr)
+  }
+
+  .board-video-composer.has-mobile-panel > .video-composer-center {
+    position: absolute;
+    z-index: 41;
+    inset: calc(max(var(--space), env(safe-area-inset-top)) + var(--control-height) - var(--space)*3) var(--cluster-gap) var(--video-mobile-sheet-height);
+    width: auto;
+    height: auto;
+    align-self: auto
+  }
+
+  .board-video-composer.has-mobile-panel > .video-mobile-header {
+    z-index: 41
+  }
+
+  .board-video-composer.has-mobile-panel > .video-composer-center :deep(.video-stage) {
+    place-items: start center
+  }
+
+  .board-video-composer.has-mobile-panel > :deep(.video-timeline),
+  .board-video-composer.has-mobile-panel > .video-mobile-toolbar {
+    display: none
   }
 
   .board-video-composer > *,
@@ -1643,16 +1674,23 @@ const showAllAssets = () => {
   }
 
   .video-mobile-backdrop {
-    position: absolute;
+    position: fixed;
     z-index: 40;
     inset: 0;
     display: block;
+    width: 100%;
+    height: 100%;
     padding: 0;
     border: 0;
     border-radius: 0;
-    background: transparent;
+    opacity: var(--sheet-backdrop-opacity, 1);
+    background: var(--filter-overlay-backdrop-background);
     backdrop-filter: none;
     -webkit-backdrop-filter: none
+  }
+
+  .board-video-composer:not(.is-mobile-sheet-dragging) .video-mobile-backdrop {
+    transition: opacity var(--filter-sheet-drag-duration) var(--filter-overlay-exit-easing)
   }
 
   .board-video-composer > :deep(.video-mobile-panel),
@@ -1664,8 +1702,8 @@ const showAllAssets = () => {
   .board-video-composer > :deep(.video-mobile-panel.is-mobile-open),
   .video-composer-right > :deep(.video-mobile-panel.is-mobile-open),
   .video-composer-right > .video-mobile-panel.is-mobile-open {
-    position: absolute;
-    z-index: 41;
+    position: fixed;
+    z-index: 42;
     inset: auto 0 0;
     width: 100%;
     height: var(--video-mobile-sheet-height);
@@ -1709,21 +1747,6 @@ const showAllAssets = () => {
     display: contents
   }
 
-  .video-composer-right.has-open-mobile-panel {
-    position: absolute;
-    z-index: 41;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    display: block;
-    pointer-events: none
-  }
-
-  .video-composer-right.has-open-mobile-panel > :deep(.video-mobile-panel.is-mobile-open),
-  .video-composer-right.has-open-mobile-panel > .video-mobile-panel.is-mobile-open {
-    pointer-events: auto
-  }
-
   .video-composer-right > :deep(.video-inspector.video-mobile-panel.is-mobile-open) {
     overflow: hidden;
     isolation: auto
@@ -1741,8 +1764,8 @@ const showAllAssets = () => {
   }
 
   .video-mobile-sheet-handle {
-    position: absolute;
-    z-index: 42;
+    position: fixed;
+    z-index: 43;
     left: 50%;
     bottom: calc(var(--video-mobile-sheet-height) - 44px);
     width: 44px;
