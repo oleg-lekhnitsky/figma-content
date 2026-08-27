@@ -1,8 +1,18 @@
 <script setup lang="ts">
 const splashVisible = ref(true)
+let splashRemoveTimer: ReturnType<typeof setTimeout> | undefined
 
 onMounted(() => {
-  splashVisible.value = false
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  if (reducedMotion) {
+    splashVisible.value = false
+    return
+  }
+  splashRemoveTimer = setTimeout(() => { splashVisible.value = false }, 460)
+})
+
+onBeforeUnmount(() => {
+  clearTimeout(splashRemoveTimer)
 })
 </script>
 
@@ -37,7 +47,7 @@ onMounted(() => {
 @media (display-mode: standalone) {
   .app-splash {
     display: grid;
-    animation: app-splash-exit 140ms ease-out forwards
+    animation: app-splash-exit 140ms ease-out 300ms forwards
   }
 }
 
