@@ -317,7 +317,7 @@ body:has(> .selection-panel.selection-panel--filter-overlay) > .selection-panel.
     left: 0;
     width: max-content;
     margin-inline: auto;
-    transform: none;
+    transform: translate3d(0, calc(var(--selection-panel-keyboard-offset, 0px) * -1), 0);
     translate: none;
   }
 

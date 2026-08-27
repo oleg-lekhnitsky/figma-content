@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Xmark } from 'reicon-vue'
+
 const _props = withDefaults(defineProps<{
   visible?: boolean
   label: string
@@ -22,6 +23,48 @@ const _props = withDefaults(defineProps<{
 })
 
 const emit = defineEmits<{ close: []; afterLeave: [] }>()
+const keyboardOffset = ref(0)
+let keyboardFrame = 0
+
+function activeElementUsesKeyboard() {
+  const activeElement = document.activeElement
+  return activeElement instanceof HTMLElement
+    && activeElement.matches('input:not([type="button"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea, [contenteditable="true"]')
+}
+
+function updateKeyboardOffset() {
+  keyboardFrame = 0
+  const viewport = window.visualViewport
+  if (!viewport || !activeElementUsesKeyboard()) {
+    keyboardOffset.value = 0
+    return
+  }
+
+  const visibleBottom = viewport.offsetTop + viewport.height
+  keyboardOffset.value = Math.max(0, Math.round(window.innerHeight - visibleBottom))
+}
+
+function scheduleKeyboardOffsetUpdate() {
+  if (keyboardFrame) cancelAnimationFrame(keyboardFrame)
+  keyboardFrame = requestAnimationFrame(updateKeyboardOffset)
+}
+
+onMounted(() => {
+  window.visualViewport?.addEventListener('resize', scheduleKeyboardOffsetUpdate)
+  window.visualViewport?.addEventListener('scroll', scheduleKeyboardOffsetUpdate)
+  window.addEventListener('resize', scheduleKeyboardOffsetUpdate)
+  document.addEventListener('focusin', scheduleKeyboardOffsetUpdate)
+  document.addEventListener('focusout', scheduleKeyboardOffsetUpdate)
+})
+
+onBeforeUnmount(() => {
+  if (keyboardFrame) cancelAnimationFrame(keyboardFrame)
+  window.visualViewport?.removeEventListener('resize', scheduleKeyboardOffsetUpdate)
+  window.visualViewport?.removeEventListener('scroll', scheduleKeyboardOffsetUpdate)
+  window.removeEventListener('resize', scheduleKeyboardOffsetUpdate)
+  document.removeEventListener('focusin', scheduleKeyboardOffsetUpdate)
+  document.removeEventListener('focusout', scheduleKeyboardOffsetUpdate)
+})
 </script>
 
 <template>
@@ -32,7 +75,7 @@ const emit = defineEmits<{ close: []; afterLeave: [] }>()
     <Transition name="selection-panel" @after-leave="$emit('afterLeave')">
       <div
         v-if="visible && !overlay" class="selection-panel" :class="{ 'selection-panel--wide': wide, 'selection-panel--bare': bare, 'selection-panel--raised': raised, 'selection-panel--scroll-hidden': scrollHidden }" role="region"
-        :aria-label="label">
+        :aria-label="label" :style="{ '--selection-panel-keyboard-offset': `${keyboardOffset}px` }">
         <slot />
         <button
           v-if="closeLabel" class="selection-panel-close" type="button" :disabled="closeDisabled"
@@ -60,8 +103,9 @@ const emit = defineEmits<{ close: []; afterLeave: [] }>()
   box-shadow: 0 18px 64px rgb(0 0 0/.18);
   backdrop-filter: blur(80px) saturate(140%);
   -webkit-backdrop-filter: blur(40px) saturate(140%);
-  transform: translateX(-50%);
+  transform: translate3d(-50%, calc(var(--selection-panel-keyboard-offset, 0px) * -1), 0);
   transition: translate .24s cubic-bezier(.2, 0, 0, 1);
+  will-change: transform;
 }
 
 .selection-panel:not(.selection-panel--filter-overlay) {
