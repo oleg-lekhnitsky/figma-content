@@ -66,7 +66,7 @@ onBeforeUnmount(() => {
   right: 0;
   left: 0;
   height: 100vh;
-  height: 100svh;
+  height: calc(100svh + env(safe-area-inset-top, 0px) + env(safe-area-inset-bottom, 0px));
   display: grid;
   place-items: center
 }
