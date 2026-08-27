@@ -437,8 +437,7 @@ const displayedAssets = computed(() => {
 // otherwise replace this array and make WebGL dispose and rebuild every texture.
 const videoAssets = ref<AssetCard[]>([])
 const leavingAssets = shallowRef<AssetCard[] | null>(null)
-const masonryAssets = computed(() => leavingAssets.value ?? displayedAssets.value)
-type BoardMotionPhase = 'idle' | 'leaving' | 'entering'
+type BoardMotionPhase = 'idle' | 'preparing' | 'moving'
 const boardMotionPhase = ref<BoardMotionPhase>('idle')
 const boardMotionDirection = ref<'forward' | 'backward'>('forward')
 const boardResults = ref<HTMLElement | null>(null)
@@ -497,7 +496,7 @@ const boardSequence = computed(() => ['', ...boards.value.map(board => board.id)
 const selectBoard = async (boardId: string) => {
   if (boardId === selectedBoardId.value) return
   const transition = ++boardTransition
-  const outgoingAssets = masonryAssets.value.map(asset => ({ ...asset }))
+  const outgoingAssets = displayedAssets.value.map(asset => ({ ...asset }))
   const sequence = boardSequence.value
   const currentIndex = Math.max(0, sequence.indexOf(selectedBoardId.value))
   const nextIndex = Math.max(0, sequence.indexOf(boardId))
@@ -506,9 +505,9 @@ const selectBoard = async (boardId: string) => {
   // destination itself is optimistic: local/cache assets render immediately
   // while useAsyncData reconciles its response in the background.
   leavingAssets.value = outgoingAssets
+  boardMotionPhase.value = 'preparing'
   localBoardId.value = boardId
   void warmBoardImages(displayedAssets.value)
-  boardMotionPhase.value = 'leaving'
   syncBoardRoute(boardId)
   viewExpanded.value = false
   videoExpanded.value = false
@@ -518,14 +517,16 @@ const selectBoard = async (boardId: string) => {
   compactFiltersVisible.value = true
   searchExpanded.value = false
 
-  const exitDuration = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 110
-  await new Promise(resolve => setTimeout(resolve, exitDuration))
-  if (transition !== boardTransition) return
-  boardMotionPhase.value = 'entering'
-  leavingAssets.value = null
   await nextTick()
   if (transition !== boardTransition) return
   void boardResults.value?.offsetWidth
+  await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+  if (transition !== boardTransition) return
+  boardMotionPhase.value = 'moving'
+  const motionDuration = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 180
+  await new Promise(resolve => setTimeout(resolve, motionDuration))
+  if (transition !== boardTransition) return
+  leavingAssets.value = null
   boardMotionPhase.value = 'idle'
   document.querySelector<HTMLElement>('.board-tabs button[aria-pressed="true"]')?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
   resetMobileBoardScroll()
@@ -1205,55 +1206,64 @@ onBeforeUnmount(() => {
         </div>
         <div
           ref="boardResults" class="board-results"
-          :class="[`board-results--${boardMotionPhase}`, `board-results--${boardMotionDirection}`]">
-          <span v-if="selectedBoardId && selectedBoardStatus === 'pending' && displayedAssets.length" class="sr-only"
-            role="status">Loading the rest of {{ selectedBoard?.title ?? 'this board' }}</span>
-          <AssetMasonrySkeleton
-            v-if="!leavingAssets && selectedBoardIsResolving"
-            :label="`Loading ${selectedBoard?.title ?? 'board'}`" :view-settings="libraryView"
-            :ratios="selectedBoardSkeletonRatios" :count="selectedBoardSkeletonCount" />
-          <div
-            v-else-if="!leavingAssets && selectedBoardId && selectedBoardError && displayedAssets.length === 0"
-            class="state error" role="alert"><strong>Unable to load this board.</strong><span>Try another board or
-              return to all assets.</span>
+          :class="[`board-results--${boardMotionPhase}`, `board-results--${boardMotionDirection}`, { 'has-outgoing': Boolean(leavingAssets) }]">
+          <div class="board-results-track">
+            <div v-if="leavingAssets" class="board-results-layer board-results-outgoing" aria-hidden="true">
+              <AssetMasonry
+                :assets="leavingAssets" :play-videos="false" instant-cards :stable-columns="false"
+                :view-settings="libraryView" />
+            </div>
+            <div class="board-results-layer board-results-incoming">
+              <span v-if="selectedBoardId && selectedBoardStatus === 'pending' && displayedAssets.length" class="sr-only"
+                role="status">Loading the rest of {{ selectedBoard?.title ?? 'this board' }}</span>
+              <AssetMasonrySkeleton
+                v-if="selectedBoardIsResolving"
+                :label="`Loading ${selectedBoard?.title ?? 'board'}`" :view-settings="libraryView"
+                :ratios="selectedBoardSkeletonRatios" :count="selectedBoardSkeletonCount" />
+              <div
+                v-else-if="selectedBoardId && selectedBoardError && displayedAssets.length === 0"
+                class="state error" role="alert"><strong>Unable to load this board.</strong><span>Try another board or
+                  return to all assets.</span>
+              </div>
+              <AssetMasonrySkeleton
+                v-else-if="!selectedBoardId && loadStatus === 'pending' && assets.length === 0"
+                :view-settings="libraryView" />
+              <div v-else-if="!selectedBoardId && error" class="state error" role="alert">
+                <strong>Unable to load assets.</strong><span>Check your connection and try again.</span><button type="button"
+                  @click="refresh()">Try again</button>
+              </div>
+              <div v-else-if="displayedAssets.length === 0" class="state">
+                <template v-if="selectedStaticBoard">
+                  <strong>This board is empty</strong>
+                  <span>Browse your library, open an asset, and add it to this board.</span>
+                  <button type="button" @click="selectBoard('')">Browse assets</button>
+                </template>
+                <template v-else-if="selectedDynamicBoard">
+                  <strong>No assets match this board’s filters</strong>
+                  <span>Change the filters to include more approved assets.</span>
+                  <button type="button" @click="openFilters">Change filters</button>
+                </template>
+                <template v-else>
+                  <strong>{{ hasFilters ? 'No matching assets' : 'No assets yet' }}</strong>
+                  <span>{{ hasFilters ? 'Change your search or clear the filters.' : 'Upload frames from the Figma plugin to build this library.' }}</span>
+                  <button v-if="hasFilters" type="button" @click="clearFilters">Clear filters</button>
+                </template>
+              </div>
+              <AssetMasonry
+                v-else :assets="displayedAssets" :play-videos="!videoExpanded" instant-open instant-cards
+                :stable-columns="false"
+                :animate-changes="boardMotionPhase === 'idle'" :can-approve="canApprove && !arrangeExpanded"
+                :editable-titles="canRenameAssets && !arrangeExpanded" :view-settings="libraryView"
+                :interactive="!arrangeExpanded" :reorderable="arrangeExpanded" :selectable="arrangeExpanded"
+                :selected-ids="arrangeSelectedIds" @reorder="reorderSelectedBoardAssets"
+                @toggle-selection="toggleArrangeSelection" @toggle-approval="toggleAssetApproval" @rename="renameAsset"
+                @open="openAsset" />
+              <span class="sr-only" role="status" aria-live="polite">{{ assetRenameFeedback }}</span>
+              <div v-if="canLoadMore" ref="loadMoreSentinel" class="load-more-sentinel" aria-hidden="true" />
+              <span v-if="!selectedBoardId && loadStatus === 'pending' && assets.length" class="sr-only"
+                role="status">Loading more assets</span>
+            </div>
           </div>
-          <AssetMasonrySkeleton
-            v-else-if="!leavingAssets && !selectedBoardId && loadStatus === 'pending' && assets.length === 0"
-            :view-settings="libraryView" />
-          <div v-else-if="!leavingAssets && !selectedBoardId && error" class="state error" role="alert">
-            <strong>Unable to load assets.</strong><span>Check your connection and try again.</span><button type="button"
-              @click="refresh()">Try again</button>
-          </div>
-          <div v-else-if="masonryAssets.length === 0" class="state">
-            <template v-if="selectedStaticBoard">
-              <strong>This board is empty</strong>
-              <span>Browse your library, open an asset, and add it to this board.</span>
-              <button type="button" @click="selectBoard('')">Browse assets</button>
-            </template>
-            <template v-else-if="selectedDynamicBoard">
-              <strong>No assets match this board’s filters</strong>
-              <span>Change the filters to include more approved assets.</span>
-              <button type="button" @click="openFilters">Change filters</button>
-            </template>
-            <template v-else>
-              <strong>{{ hasFilters ? 'No matching assets' : 'No assets yet' }}</strong>
-              <span>{{ hasFilters ? 'Change your search or clear the filters.' : 'Upload frames from the Figma plugin to build this library.' }}</span>
-              <button v-if="hasFilters" type="button" @click="clearFilters">Clear filters</button>
-            </template>
-          </div>
-          <AssetMasonry
-            v-else :assets="masonryAssets" :play-videos="!videoExpanded" instant-open instant-cards
-            :stable-columns="false"
-            :animate-changes="boardMotionPhase === 'idle'" :can-approve="canApprove && !arrangeExpanded"
-            :editable-titles="canRenameAssets && !arrangeExpanded" :view-settings="libraryView"
-            :interactive="!arrangeExpanded" :reorderable="arrangeExpanded" :selectable="arrangeExpanded"
-            :selected-ids="arrangeSelectedIds" @reorder="reorderSelectedBoardAssets"
-            @toggle-selection="toggleArrangeSelection" @toggle-approval="toggleAssetApproval" @rename="renameAsset"
-            @open="openAsset" />
-          <span class="sr-only" role="status" aria-live="polite">{{ assetRenameFeedback }}</span>
-          <div v-if="canLoadMore" ref="loadMoreSentinel" class="load-more-sentinel" aria-hidden="true" />
-          <span v-if="!selectedBoardId && loadStatus === 'pending' && assets.length" class="sr-only"
-            role="status">Loading more assets</span>
         </div>
       </div>
     </main>
@@ -1690,38 +1700,55 @@ button {
 
 .board-results {
   position: relative;
-  opacity: 1;
+  overflow-x: hidden;
+  overflow-x: clip
+}
+
+.board-results-track {
+  width: 100%;
   transform: translate3d(0, 0, 0);
-  transition-property: opacity, transform;
-  transition-duration: 90ms, 160ms;
-  transition-timing-function: linear, cubic-bezier(.2, 0, 0, 1)
+  transition-property: transform;
+  transition-duration: 180ms;
+  transition-timing-function: cubic-bezier(.32, .72, 0, 1)
 }
 
-.board-results--leaving {
-  pointer-events: none;
-  opacity: 0
+.board-results.has-outgoing {
+  pointer-events: none
 }
 
-.board-results--leaving.board-results--forward {
-  transform: translate3d(calc(var(--space) * -2), 0, 0)
+.board-results.has-outgoing .board-results-track {
+  display: flex;
+  width: 200%;
+  will-change: transform
 }
 
-.board-results--leaving.board-results--backward {
-  transform: translate3d(calc(var(--space) * 2), 0, 0)
-}
-
-.board-results--entering {
-  pointer-events: none;
-  opacity: 1;
+.board-results:not(.has-outgoing) .board-results-track,
+.board-results--preparing .board-results-track {
   transition: none
 }
 
-.board-results--entering.board-results--forward {
-  transform: translate3d(calc(var(--space) * 2), 0, 0)
+.board-results.has-outgoing .board-results-layer {
+  flex: 0 0 50%;
+  width: 50%;
+  min-width: 0
 }
 
-.board-results--entering.board-results--backward {
-  transform: translate3d(calc(var(--space) * -2), 0, 0)
+.board-results--backward .board-results-incoming {
+  order: 1
+}
+
+.board-results--backward .board-results-outgoing {
+  order: 2
+}
+
+.board-results--preparing.board-results--backward .board-results-track,
+.board-results--moving.board-results--forward .board-results-track {
+  transform: translate3d(-50%, 0, 0)
+}
+
+.board-results--preparing.board-results--forward .board-results-track,
+.board-results--moving.board-results--backward .board-results-track {
+  transform: translate3d(0, 0, 0)
 }
 
 .selected-board-heading {
@@ -2543,10 +2570,9 @@ button {
     transition: none
   }
 
-  .board-results,
-  .board-results--leaving,
-  .board-results--entering {
-    opacity: 1;
+  .board-results-track,
+  .board-results--preparing .board-results-track,
+  .board-results--moving .board-results-track {
     transform: none;
     transition: none
   }

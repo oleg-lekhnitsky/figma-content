@@ -19,12 +19,52 @@ const ratios = computed(() => Array.from(
   (_, index) => props.ratios[index] ?? fallbackRatios[index % fallbackRatios.length]
 ))
 const viewStyle = computed(() => props.viewSettings ? boardViewStyle(props.viewSettings) : undefined)
+const skeletonGrid = ref<HTMLElement | null>(null)
+let resizeObserver: ResizeObserver | undefined
+let measureFrame = 0
+
+const measureCards = () => {
+  cancelAnimationFrame(measureFrame)
+  measureFrame = requestAnimationFrame(() => {
+    const root = skeletonGrid.value
+    if (!root) return
+    const styles = getComputedStyle(root)
+    const rowHeight = Number.parseFloat(styles.gridAutoRows) || 1
+    const rowGap = Number.parseFloat(styles.rowGap) || 0
+    for (const card of root.querySelectorAll<HTMLElement>('.asset-skeleton-card')) {
+      const exactRows = (card.getBoundingClientRect().height + rowGap) / (rowHeight + rowGap)
+      card.style.setProperty('--skeleton-card-rows', String(Math.max(1, Math.ceil(exactRows))))
+    }
+    root.classList.add('is-masonry')
+  })
+}
+
+const observeCards = () => {
+  resizeObserver?.disconnect()
+  const root = skeletonGrid.value
+  if (!root) return
+  resizeObserver = new ResizeObserver(measureCards)
+  resizeObserver.observe(root)
+  for (const card of root.querySelectorAll('.asset-skeleton-card')) resizeObserver.observe(card)
+  measureCards()
+}
+
+watch([ratios, () => props.viewSettings], async () => {
+  await nextTick()
+  observeCards()
+}, { deep: true })
+
+onMounted(observeCards)
+onBeforeUnmount(() => {
+  cancelAnimationFrame(measureFrame)
+  resizeObserver?.disconnect()
+})
 </script>
 
 <template>
   <div class="asset-skeleton-state" role="status">
     <span class="sr-only">{{ label }}</span>
-    <div class="asset-skeleton-grid" :class="{ 'custom-view': props.viewSettings, 'hide-text': props.viewSettings && !props.viewSettings.showText }" :style="viewStyle" aria-hidden="true">
+    <div ref="skeletonGrid" class="asset-skeleton-grid" :class="{ 'custom-view': props.viewSettings, 'hide-text': props.viewSettings && !props.viewSettings.showText }" :style="viewStyle" aria-hidden="true">
       <article v-for="(ratio, index) in ratios" :key="index" class="asset-skeleton-card">
         <span class="asset-skeleton-preview" :style="{ aspectRatio: ratio }" />
         <span class="asset-skeleton-line" />
@@ -35,8 +75,10 @@ const viewStyle = computed(() => props.viewSettings ? boardViewStyle(props.viewS
 </template>
 
 <style>
-.asset-skeleton-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));align-items:start;gap:calc(var(--space)*2) var(--space)}
-.asset-skeleton-card{min-width:0;display:grid;gap:8px}
+.asset-skeleton-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));grid-auto-flow:dense;grid-auto-rows:1px;align-items:start;column-gap:var(--space);row-gap:0;visibility:hidden}
+.asset-skeleton-grid.is-masonry{visibility:visible}
+.asset-skeleton-card{min-width:0;display:grid;gap:8px;padding-bottom:calc(var(--space)*2)}
+.asset-skeleton-grid.is-masonry .asset-skeleton-card{grid-row-end:span var(--skeleton-card-rows)}
 .asset-skeleton-preview,.asset-skeleton-line{display:block;border-radius:var(--board-radius,var(--radius));background:var(--color-surface)}
 .asset-skeleton-line{width:72%;height:1em;border-radius:999px}
 .asset-skeleton-line.is-short{width:42%;opacity:.65}
@@ -49,5 +91,5 @@ const viewStyle = computed(() => props.viewSettings ? boardViewStyle(props.viewS
 @media(max-width:1680px){.asset-skeleton-grid{grid-template-columns:repeat(5,minmax(0,1fr))}.asset-skeleton-grid.custom-view{grid-template-columns:repeat(clamp(1,calc(5 + var(--board-column-offset,0)),7),minmax(0,1fr))}}
 @media(max-width:1280px){.asset-skeleton-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.asset-skeleton-grid.custom-view{grid-template-columns:repeat(clamp(1,calc(4 + var(--board-column-offset,0)),6),minmax(0,1fr))}}
 @media(max-width:900px){.asset-skeleton-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.asset-skeleton-grid.custom-view{grid-template-columns:repeat(clamp(1,calc(3 + var(--board-column-offset,0)),5),minmax(0,1fr))}}
-@media(max-width:520px){.asset-skeleton-grid{--board-default-gap:var(--masonry-mobile-column-gap);width:calc(100% + var(--masonry-mobile-inline-bleed)*2);margin-inline:calc(var(--masonry-mobile-inline-bleed)*-1);grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--masonry-mobile-row-gap) var(--masonry-mobile-column-gap)}.asset-skeleton-grid.custom-view{grid-template-columns:repeat(clamp(1,calc(2 + var(--board-column-offset,0)),4),minmax(0,1fr));row-gap:0}.asset-skeleton-preview{border-radius:var(--board-radius,var(--radius-mobile))}}
+@media(max-width:520px){.asset-skeleton-grid{--board-default-gap:var(--masonry-mobile-column-gap);width:calc(100% + var(--masonry-mobile-inline-bleed)*2);margin-inline:calc(var(--masonry-mobile-inline-bleed)*-1);grid-template-columns:repeat(2,minmax(0,1fr));column-gap:var(--masonry-mobile-column-gap);row-gap:var(--masonry-mobile-row-gap)}.asset-skeleton-grid.custom-view{grid-template-columns:repeat(clamp(1,calc(2 + var(--board-column-offset,0)),4),minmax(0,1fr));row-gap:0}.asset-skeleton-card{padding-bottom:0}.asset-skeleton-preview{border-radius:var(--board-radius,var(--radius-mobile))}}
 </style>
