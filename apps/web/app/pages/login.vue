@@ -358,6 +358,17 @@ form {
   }
 }
 
+/* WebKit subtracts safe-area height from dynamic viewport units in some
+   installed viewport-fit=cover apps. The layout viewport unit remains tied
+   to the full translucent canvas, so use it as the standalone centering box. */
+@supports (-webkit-touch-callout: none) {
+  @media (display-mode: standalone) {
+    .auth-shell {
+      min-height: 100vh;
+    }
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .auth-field input,
   .auth-submit.auth-submit,
