@@ -1763,13 +1763,12 @@ button {
 
 .board-results {
   position: relative;
-  overflow-x: hidden;
-  overflow-x: clip
+  overflow-x: hidden
 }
 
 .board-results-track {
   width: 100%;
-  transform: translate3d(0, 0, 0);
+  transform: translateX(0);
   transition-property: transform;
   transition-duration: 180ms;
   transition-timing-function: cubic-bezier(.32, .72, 0, 1)
@@ -1781,8 +1780,7 @@ button {
 
 .board-results.has-outgoing .board-results-track {
   display: flex;
-  width: 200%;
-  will-change: transform
+  width: 200%
 }
 
 .board-results:not(.has-outgoing) .board-results-track,
@@ -1806,12 +1804,12 @@ button {
 
 .board-results--preparing.board-results--backward .board-results-track,
 .board-results--moving.board-results--forward .board-results-track {
-  transform: translate3d(-50%, 0, 0)
+  transform: translateX(-50%)
 }
 
 .board-results--preparing.board-results--forward .board-results-track,
 .board-results--moving.board-results--backward .board-results-track {
-  transform: translate3d(0, 0, 0)
+  transform: translateX(0)
 }
 
 .selected-board-heading {
