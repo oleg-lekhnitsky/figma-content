@@ -457,15 +457,18 @@ watch(initialContentSettled, (settled) => {
 // otherwise replace this array and make WebGL dispose and rebuild every texture.
 const videoAssets = ref<AssetCard[]>([])
 const leavingAssets = shallowRef<AssetCard[] | null>(null)
-type BoardMotionPhase = 'idle' | 'preparing' | 'moving'
+type BoardMotionPhase = 'idle' | 'dragging' | 'settling'
 const boardMotionPhase = ref<BoardMotionPhase>('idle')
 const boardMotionDirection = ref<'forward' | 'backward'>('forward')
-const heldSkeletonBoardId = ref('')
-const showSelectedBoardSkeleton = computed(() => selectedBoardIsResolving.value || (
-  boardMotionPhase.value !== 'idle'
-  && heldSkeletonBoardId.value === selectedBoardId.value
-))
 const boardResults = ref<HTMLElement | null>(null)
+const boardDragX = ref(0)
+const boardSwipeGap = ref(0)
+const boardSettleDuration = ref(180)
+const boardGestureTargetId = ref<string | null>(null)
+const boardGestureAssets = shallowRef<AssetCard[]>([])
+const boardGestureUsesSkeleton = ref(false)
+const boardGestureSkeletonRatios = ref<string[]>([])
+const boardGestureSkeletonCount = ref(8)
 const boardImageWarmups = new Map<string, Promise<void>>()
 const warmBoardImage = (url: string) => {
   const existing = boardImageWarmups.get(url)
@@ -502,46 +505,8 @@ watch(() => [selectedBoardData.value?.boardId, selectedBoardData.value?.assets] 
   if (!cachedAssets) return
   void warmBoardImages(cachedAssets).then(() => { boardVisualReady.add(boardId) })
 }, { immediate: true })
-let boardTransition = 0
 let boardRouteRevision = 0
 let boardRouteSync = Promise.resolve()
-let incomingBoardReady = true
-let resolveIncomingBoardReady: (() => void) | undefined
-const markIncomingBoardReady = () => {
-  incomingBoardReady = true
-  resolveIncomingBoardReady?.()
-  resolveIncomingBoardReady = undefined
-}
-const waitForIncomingBoardReady = () => {
-  if (incomingBoardReady) return Promise.resolve()
-  return new Promise<void>((resolve) => {
-    const finish = () => {
-      clearTimeout(timeout)
-      resolve()
-    }
-    resolveIncomingBoardReady = finish
-    const timeout = setTimeout(finish, 120)
-  })
-}
-const waitForBoardMotion = () => {
-  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  const incoming = boardResults.value?.querySelector<HTMLElement>('.board-results-incoming')
-  if (reducedMotion || !incoming) return Promise.resolve()
-  return new Promise<void>((resolve) => {
-    const handleTransitionEnd = (event: TransitionEvent) => {
-      if (event.target === incoming && event.propertyName === 'transform') finish()
-    }
-    const finish = () => {
-      clearTimeout(timeout)
-      incoming.removeEventListener('transitionend', handleTransitionEnd)
-      incoming.removeEventListener('transitioncancel', finish)
-      resolve()
-    }
-    incoming.addEventListener('transitionend', handleTransitionEnd)
-    incoming.addEventListener('transitioncancel', finish, { once: true })
-    const timeout = setTimeout(finish, 0)
-  })
-}
 const syncBoardRoute = (boardId: string) => {
   const revision = ++boardRouteRevision
   boardRouteSync = boardRouteSync.catch(() => undefined).then(async () => {
@@ -557,20 +522,7 @@ const resetMobileBoardScroll = () => {
 const boardSequence = computed(() => ['', ...boards.value.map(board => board.id)])
 const selectBoard = async (boardId: string) => {
   if (boardId === selectedBoardId.value) return
-  const transition = ++boardTransition
-  const outgoingAssets = displayedAssets.value.map(asset => ({ ...asset }))
-  const sequence = boardSequence.value
-  const currentIndex = Math.max(0, sequence.indexOf(selectedBoardId.value))
-  const nextIndex = Math.max(0, sequence.indexOf(boardId))
-  boardMotionDirection.value = nextIndex >= currentIndex ? 'forward' : 'backward'
-  // Keep the outgoing grid mounted only for the short directional exit. The
-  // destination itself is optimistic: local/cache assets render immediately
-  // while useAsyncData reconciles its response in the background.
-  incomingBoardReady = false
-  leavingAssets.value = outgoingAssets
-  boardMotionPhase.value = 'preparing'
   localBoardId.value = boardId
-  heldSkeletonBoardId.value = selectedBoardIsResolving.value ? boardId : ''
   void warmBoardImages(displayedAssets.value)
   syncBoardRoute(boardId)
   viewExpanded.value = false
@@ -582,20 +534,6 @@ const selectBoard = async (boardId: string) => {
   searchExpanded.value = false
 
   await nextTick()
-  if (transition !== boardTransition) return
-  await waitForIncomingBoardReady()
-  if (transition !== boardTransition) return
-  await nextTick()
-  void boardResults.value?.offsetWidth
-  await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
-  if (transition !== boardTransition) return
-  const motionFinished = waitForBoardMotion()
-  boardMotionPhase.value = 'moving'
-  await motionFinished
-  if (transition !== boardTransition) return
-  leavingAssets.value = null
-  boardMotionPhase.value = 'idle'
-  heldSkeletonBoardId.value = ''
   document.querySelector<HTMLElement>('.board-tabs button[aria-pressed="true"]')?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
   resetMobileBoardScroll()
 }
@@ -662,22 +600,171 @@ const removeArrangeSelection = async () => {
 }
 let boardSwipeStartX = 0
 let boardSwipeStartY = 0
-const startBoardSwipe = (event: TouchEvent) => {
-  const touch = event.touches[0]
-  if (!touch) return
-  boardSwipeStartX = touch.clientX
-  boardSwipeStartY = touch.clientY
+let boardSwipeStartTime = 0
+let boardSwipeLastX = 0
+let boardSwipeLastTime = 0
+let boardSwipeVelocityX = 0
+let boardSwipeAxis: 'x' | 'y' | '' = ''
+let boardSwipePointerId: number | undefined
+let suppressBoardSwipeClick = false
+let suppressBoardSwipeClickTimer: ReturnType<typeof setTimeout> | undefined
+const boardGestureIsActive = computed(() => boardMotionPhase.value === 'dragging' || boardMotionPhase.value === 'settling')
+const boardSnapshot = (boardId: string) => {
+  if (!boardId) return { assets: [...assets.value], skeleton: false, ratios: [] as string[], count: 8 }
+  const board = boards.value.find(item => item.id === boardId)
+  const cached = boardAssetCache.get(boardId)
+  if (cached) return { assets: [...cached], skeleton: false, ratios: [] as string[], count: 8 }
+  if (!board) return { assets: [] as AssetCard[], skeleton: true, ratios: [] as string[], count: 8 }
+  const availableById = new Map(assets.value.map(asset => [asset.id, asset]))
+  const previewById = new Map(board.previewAssets.map(asset => [asset.id, asset]))
+  const known = board.assetIds.map(id => availableById.get(id) ?? previewById.get(id)).filter((asset): asset is AssetCard => Boolean(asset))
+  const complete = board.mode !== 'dynamic' && known.length === board.assetIds.length
+  const ratioSource = known.length ? known : board.previewAssets
+  return {
+    assets: complete ? known : [],
+    skeleton: !complete,
+    ratios: ratioSource.slice(0, 24).map(asset => `${asset.width} / ${asset.height}`),
+    count: Math.max(8, Math.min(board.assetIds.length || ratioSource.length, 24))
+  }
 }
-const finishBoardSwipe = (event: TouchEvent) => {
-  const touch = event.changedTouches[0]
-  if (!touch || boardMotionPhase.value !== 'idle' || arrangeExpanded.value) return
-  const deltaX = touch.clientX - boardSwipeStartX
-  const deltaY = touch.clientY - boardSwipeStartY
-  if (Math.abs(deltaX) < 56 || Math.abs(deltaX) <= Math.abs(deltaY) * 1.25) return
-  const currentIndex = Math.max(0, boardSequence.value.indexOf(selectedBoardId.value))
-  const nextIndex = currentIndex + (deltaX < 0 ? 1 : -1)
-  const boardId = boardSequence.value[nextIndex]
-  if (boardId !== undefined) void selectBoard(boardId)
+const resetBoardGesture = () => {
+  boardSwipeAxis = ''
+  boardSwipeVelocityX = 0
+  boardSwipePointerId = undefined
+  boardDragX.value = 0
+  boardGestureTargetId.value = null
+  boardGestureAssets.value = []
+  boardGestureUsesSkeleton.value = false
+  boardGestureSkeletonRatios.value = []
+  boardGestureSkeletonCount.value = 8
+  leavingAssets.value = null
+  boardMotionPhase.value = 'idle'
+}
+const beginBoardGesture = (targetId: string, direction: 'forward' | 'backward') => {
+  const snapshot = boardSnapshot(targetId)
+  boardMotionDirection.value = direction
+  boardGestureTargetId.value = targetId
+  boardGestureAssets.value = snapshot.assets
+  boardGestureUsesSkeleton.value = snapshot.skeleton
+  boardGestureSkeletonRatios.value = snapshot.ratios
+  boardGestureSkeletonCount.value = snapshot.count
+  leavingAssets.value = displayedAssets.value.map(asset => ({ ...asset }))
+  boardMotionPhase.value = 'dragging'
+}
+const startBoardSwipe = (event: PointerEvent) => {
+  if (!event.isPrimary || event.pointerType === 'mouse' || boardMotionPhase.value !== 'idle' || arrangeExpanded.value) return
+  if ((event.target as HTMLElement | null)?.closest('button,input,textarea,select,[contenteditable="true"]')) return
+  clearTimeout(suppressBoardSwipeClickTimer)
+  suppressBoardSwipeClick = false
+  boardSwipePointerId = event.pointerId
+  boardSwipeStartX = event.clientX
+  boardSwipeStartY = event.clientY
+  boardSwipeLastX = event.clientX
+  boardSwipeStartTime = event.timeStamp
+  boardSwipeLastTime = event.timeStamp
+  boardSwipeVelocityX = 0
+  boardSwipeAxis = ''
+  const page = boardResults.value?.closest('main')
+  boardSwipeGap.value = page ? Number.parseFloat(getComputedStyle(page).paddingLeft) || 0 : 0
+}
+const moveBoardSwipe = (event: PointerEvent) => {
+  if (event.pointerId !== boardSwipePointerId || boardMotionPhase.value === 'settling' || arrangeExpanded.value) return
+  const deltaX = event.clientX - boardSwipeStartX
+  const deltaY = event.clientY - boardSwipeStartY
+  if (!boardSwipeAxis && Math.hypot(deltaX, deltaY) > 8) {
+    boardSwipeAxis = Math.abs(deltaX) > Math.abs(deltaY) * 1.15 ? 'x' : 'y'
+    if (boardSwipeAxis === 'x') {
+      try { (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId) } catch { /* Safari may already own the gesture. */ }
+    }
+  }
+  if (boardSwipeAxis !== 'x') return
+  event.preventDefault()
+  suppressBoardSwipeClick = true
+  if (!boardGestureIsActive.value) {
+    const currentIndex = Math.max(0, boardSequence.value.indexOf(selectedBoardId.value))
+    const direction = deltaX < 0 ? 'forward' : 'backward'
+    const targetId = boardSequence.value[currentIndex + (direction === 'forward' ? 1 : -1)]
+    if (targetId === undefined) return
+    beginBoardGesture(targetId, direction)
+  }
+  const width = boardResults.value?.clientWidth ?? window.innerWidth
+  const travel = width + boardSwipeGap.value
+  boardDragX.value = boardMotionDirection.value === 'forward'
+    ? Math.max(-travel, Math.min(0, deltaX))
+    : Math.min(travel, Math.max(0, deltaX))
+  const elapsed = Math.max(1, event.timeStamp - boardSwipeLastTime)
+  boardSwipeVelocityX = (event.clientX - boardSwipeLastX) / elapsed
+  boardSwipeLastX = event.clientX
+  boardSwipeLastTime = event.timeStamp
+}
+const waitForBoardGestureSettle = () => {
+  const incoming = boardResults.value?.querySelector<HTMLElement>('.board-results-incoming')
+  if (!incoming || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return Promise.resolve()
+  return new Promise<void>((resolve) => {
+    const finish = () => {
+      clearTimeout(timeout)
+      incoming.removeEventListener('transitionend', handleTransitionEnd)
+      incoming.removeEventListener('transitioncancel', finish)
+      resolve()
+    }
+    const handleTransitionEnd = (event: TransitionEvent) => {
+      if (event.target === incoming && event.propertyName === 'transform') finish()
+    }
+    incoming.addEventListener('transitionend', handleTransitionEnd)
+    incoming.addEventListener('transitioncancel', finish, { once: true })
+    const timeout = setTimeout(finish, boardSettleDuration.value + 100)
+  })
+}
+const finishBoardSwipe = async (event: PointerEvent, cancelled = false) => {
+  if (event.pointerId !== boardSwipePointerId) return
+  try {
+    const region = event.currentTarget as HTMLElement
+    if (region.hasPointerCapture(event.pointerId)) region.releasePointerCapture(event.pointerId)
+  } catch { /* Pointer cancellation can release capture before this handler. */ }
+  boardSwipePointerId = undefined
+  if (suppressBoardSwipeClick) {
+    clearTimeout(suppressBoardSwipeClickTimer)
+    suppressBoardSwipeClickTimer = setTimeout(() => { suppressBoardSwipeClick = false }, 500)
+  }
+  if (boardMotionPhase.value !== 'dragging' || boardGestureTargetId.value === null) return
+  const width = boardResults.value?.clientWidth ?? window.innerWidth
+  const travel = width + boardSwipeGap.value
+  const totalElapsed = Math.max(1, event.timeStamp - boardSwipeStartTime)
+  const endX = cancelled ? boardSwipeLastX : event.clientX
+  const totalVelocity = (endX - boardSwipeStartX) / totalElapsed
+  const velocity = Math.abs(boardSwipeVelocityX) > Math.abs(totalVelocity) ? boardSwipeVelocityX : totalVelocity
+  const directionVelocity = boardMotionDirection.value === 'forward' ? -velocity : velocity
+  const committed = !cancelled && (Math.abs(boardDragX.value) >= width * .2 || directionVelocity > .45)
+  const targetId = boardGestureTargetId.value
+  const destinationX = committed ? (boardMotionDirection.value === 'forward' ? -travel : travel) : 0
+  const remainingRatio = Math.min(1, Math.abs(destinationX - boardDragX.value) / Math.max(1, travel))
+  const velocityReduction = Math.min(80, Math.abs(velocity) * 54)
+  boardSettleDuration.value = Math.round(Math.max(160, Math.min(360, 180 + remainingRatio * 180 - velocityReduction)))
+  const motionFinished = waitForBoardGestureSettle()
+  boardMotionPhase.value = 'settling'
+  boardDragX.value = destinationX
+  await motionFinished
+  if (!committed) return resetBoardGesture()
+  localBoardId.value = targetId
+  syncBoardRoute(targetId)
+  viewExpanded.value = false
+  videoExpanded.value = false
+  boardSettingsExpanded.value = false
+  arrangeExpanded.value = false
+  filtersExpanded.value = false
+  compactFiltersVisible.value = true
+  searchExpanded.value = false
+  await nextTick()
+  resetBoardGesture()
+  document.querySelector<HTMLElement>('.board-tabs button[aria-pressed="true"]')?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+  resetMobileBoardScroll()
+}
+const suppressClickAfterBoardSwipe = (event: MouseEvent) => {
+  if (!suppressBoardSwipeClick) return
+  event.preventDefault()
+  event.stopPropagation()
+  suppressBoardSwipeClick = false
+  clearTimeout(suppressBoardSwipeClickTimer)
 }
 const selectedProjectNames = computed(() => projects.value.filter(project => projectIds.value.includes(project.id)).map(project => project.name))
 const selectedTagNames = computed(() => tags.value.filter(tag => tagIds.value.includes(tag.id)).map(tag => tag.name))
@@ -1040,6 +1127,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   clearTimeout(liveRefreshTimer)
   clearTimeout(dynamicBoardSaveTimer)
+  clearTimeout(suppressBoardSwipeClickTimer)
   flushArrangeSave()
   assetEvents?.close()
   loadMoreObserver?.disconnect()
@@ -1229,7 +1317,10 @@ onBeforeUnmount(() => {
         </SelectionPanel>
       </template>
 
-      <div class="board-swipe-region" @touchstart.passive="startBoardSwipe" @touchend.passive="finishBoardSwipe">
+      <div
+        class="board-swipe-region" @pointerdown="startBoardSwipe" @pointermove="moveBoardSwipe"
+        @pointerup="finishBoardSwipe" @pointercancel="finishBoardSwipe($event, true)"
+        @click.capture="suppressClickAfterBoardSwipe">
         <div v-if="selectedBoard" class="selected-board-heading">
           <h1 class="selected-board-title"><textarea v-if="canRenameSelectedBoard" ref="boardTitleInput"
               v-model="boardTitleDraft" class="selected-board-title-input" rows="1" maxlength="120"
@@ -1275,7 +1366,8 @@ onBeforeUnmount(() => {
         </div>
         <div
           ref="boardResults" class="board-results"
-          :class="[`board-results--${boardMotionPhase}`, `board-results--${boardMotionDirection}`, { 'has-outgoing': Boolean(leavingAssets) }]">
+          :class="[`board-results--${boardMotionPhase}`, `board-results--${boardMotionDirection}`, { 'has-outgoing': Boolean(leavingAssets) }]"
+          :style="{ '--board-drag-x': `${boardDragX}px`, '--board-swipe-gap': `${boardSwipeGap}px`, '--board-settle-duration': `${boardSettleDuration}ms` }">
           <div class="board-results-track">
             <div v-if="leavingAssets" class="board-results-layer board-results-outgoing" aria-hidden="true">
               <AssetMasonry
@@ -1283,13 +1375,23 @@ onBeforeUnmount(() => {
                 :view-settings="libraryView" />
             </div>
             <div class="board-results-layer board-results-incoming">
+              <template v-if="boardGestureIsActive">
+                <AssetMasonrySkeleton
+                  v-if="boardGestureUsesSkeleton" label="Loading board"
+                  :view-settings="libraryView" :ratios="boardGestureSkeletonRatios"
+                  :count="boardGestureSkeletonCount" />
+                <div v-else-if="boardGestureAssets.length === 0" class="state"><strong>This board is empty</strong></div>
+                <AssetMasonry
+                  v-else :assets="boardGestureAssets" :play-videos="false" instant-cards
+                  :stable-columns="false" :view-settings="libraryView" />
+              </template>
+              <template v-else>
               <span v-if="selectedBoardId && selectedBoardStatus === 'pending' && displayedAssets.length" class="sr-only"
                 role="status">Loading the rest of {{ selectedBoard?.title ?? 'this board' }}</span>
               <AssetMasonrySkeleton
-                v-if="showSelectedBoardSkeleton"
+                v-if="selectedBoardIsResolving"
                 :label="`Loading ${selectedBoard?.title ?? 'board'}`" :view-settings="libraryView"
-                :ratios="selectedBoardSkeletonRatios" :count="selectedBoardSkeletonCount"
-                @ready="markIncomingBoardReady" />
+                :ratios="selectedBoardSkeletonRatios" :count="selectedBoardSkeletonCount" />
               <div
                 v-else-if="selectedBoardId && selectedBoardError && displayedAssets.length === 0"
                 class="state error" role="alert"><strong>Unable to load this board.</strong><span>Try another board or
@@ -1297,7 +1399,7 @@ onBeforeUnmount(() => {
               </div>
               <AssetMasonrySkeleton
                 v-else-if="!selectedBoardId && (loadStatus === 'idle' || loadStatus === 'pending') && assets.length === 0"
-                :view-settings="libraryView" @ready="markIncomingBoardReady" />
+                :view-settings="libraryView" />
               <div v-else-if="!selectedBoardId && error" class="state error" role="alert">
                 <strong>Unable to load assets.</strong><span>Check your connection and try again.</span><button type="button"
                   @click="refresh()">Try again</button>
@@ -1327,11 +1429,12 @@ onBeforeUnmount(() => {
                 :interactive="!arrangeExpanded" :reorderable="arrangeExpanded" :selectable="arrangeExpanded"
                 :selected-ids="arrangeSelectedIds" @reorder="reorderSelectedBoardAssets"
                 @toggle-selection="toggleArrangeSelection" @toggle-approval="toggleAssetApproval" @rename="renameAsset"
-                @open="openAsset" @ready="markIncomingBoardReady" />
+                @open="openAsset" />
               <span class="sr-only" role="status" aria-live="polite">{{ assetRenameFeedback }}</span>
               <div v-if="canLoadMore" ref="loadMoreSentinel" class="load-more-sentinel" aria-hidden="true" />
               <span v-if="!selectedBoardId && loadStatus === 'pending' && assets.length" class="sr-only"
                 role="status">Loading more assets</span>
+              </template>
             </div>
           </div>
         </div>
@@ -1359,6 +1462,7 @@ onBeforeUnmount(() => {
   --space: clamp(12px, 1vw, 24px);
   --muted: .45;
   min-height: 100vh;
+  overflow-x: clip;
   color: #000;
   background: var(--color-bg);
   font-size: 16px;
@@ -1769,8 +1873,7 @@ button {
 }
 
 .board-results {
-  position: relative;
-  overflow-x: hidden
+  position: relative
 }
 
 .board-results-track {
@@ -1780,21 +1883,31 @@ button {
 
 .board-results-layer {
   width: 100%;
-  min-width: 0
+  min-width: 0;
+  box-sizing: border-box
 }
 
 .board-results.has-outgoing {
+  isolation: isolate
+}
+
+.board-results.has-outgoing:not(.board-results--dragging) {
   pointer-events: none
+}
+
+.board-results.has-outgoing .board-results-layer {
+  background: var(--color-bg)
+}
+
+.board-results.has-outgoing .board-results-incoming {
+  position: relative;
+  z-index: 1
 }
 
 .board-results.has-outgoing .board-results-layer {
   transition-property: transform;
   transition-duration: 0ms;
-  transition-timing-function: ease-out
-}
-
-.board-results--preparing .board-results-layer {
-  transition: none
+  transition-timing-function: cubic-bezier(.2, .8, .2, 1)
 }
 
 .board-results.has-outgoing .board-results-outgoing {
@@ -1803,29 +1916,26 @@ button {
   left: 0
 }
 
-.board-results--preparing.board-results--forward .board-results-outgoing,
-.board-results--preparing.board-results--backward .board-results-outgoing {
-  transform: translate3d(0, 0, 0)
+
+.board-results--dragging .board-results-layer {
+  transition: none
 }
 
-.board-results--preparing.board-results--forward .board-results-incoming {
-  transform: translate3d(100%, 0, 0)
+.board-results--settling .board-results-layer {
+  transition-duration: var(--board-settle-duration);
+  transition-timing-function: cubic-bezier(.2, .8, .2, 1)
 }
 
-.board-results--preparing.board-results--backward .board-results-incoming {
-  transform: translate3d(-100%, 0, 0)
+.board-results:is(.board-results--dragging, .board-results--settling) .board-results-outgoing {
+  transform: translate3d(var(--board-drag-x), 0, 0)
 }
 
-.board-results--moving.board-results--forward .board-results-outgoing {
-  transform: translate3d(-100%, 0, 0)
+.board-results--forward:is(.board-results--dragging, .board-results--settling) .board-results-incoming {
+  transform: translate3d(calc(100% + var(--board-swipe-gap) + var(--board-drag-x)), 0, 0)
 }
 
-.board-results--moving.board-results--backward .board-results-outgoing {
-  transform: translate3d(100%, 0, 0)
-}
-
-.board-results--moving .board-results-incoming {
-  transform: translate3d(0, 0, 0)
+.board-results--backward:is(.board-results--dragging, .board-results--settling) .board-results-incoming {
+  transform: translate3d(calc(-100% - var(--board-swipe-gap) + var(--board-drag-x)), 0, 0)
 }
 
 .selected-board-heading {
@@ -2657,9 +2767,7 @@ button {
     transition: none
   }
 
-  .board-results-layer,
-  .board-results--preparing .board-results-layer,
-  .board-results--moving .board-results-layer {
+  .board-results-layer {
     transform: none;
     transition: none
   }
