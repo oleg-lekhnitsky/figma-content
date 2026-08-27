@@ -520,20 +520,20 @@ const waitForIncomingBoardReady = () => {
 }
 const waitForBoardMotion = () => {
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  const track = boardResults.value?.querySelector<HTMLElement>('.board-results-track')
-  if (reducedMotion || !track) return Promise.resolve()
+  const incoming = boardResults.value?.querySelector<HTMLElement>('.board-results-incoming')
+  if (reducedMotion || !incoming) return Promise.resolve()
   return new Promise<void>((resolve) => {
     const handleTransitionEnd = (event: TransitionEvent) => {
-      if (event.target === track && event.propertyName === 'transform') finish()
+      if (event.target === incoming && event.propertyName === 'transform') finish()
     }
     const finish = () => {
       clearTimeout(timeout)
-      track.removeEventListener('transitionend', handleTransitionEnd)
-      track.removeEventListener('transitioncancel', finish)
+      incoming.removeEventListener('transitionend', handleTransitionEnd)
+      incoming.removeEventListener('transitioncancel', finish)
       resolve()
     }
-    track.addEventListener('transitionend', handleTransitionEnd)
-    track.addEventListener('transitioncancel', finish, { once: true })
+    incoming.addEventListener('transitionend', handleTransitionEnd)
+    incoming.addEventListener('transitioncancel', finish, { once: true })
     const timeout = setTimeout(finish, 300)
   })
 }
@@ -1767,49 +1767,58 @@ button {
 }
 
 .board-results-track {
+  position: relative;
   width: 100%;
-  transform: translateX(0);
-  transition-property: transform;
-  transition-duration: 180ms;
-  transition-timing-function: cubic-bezier(.32, .72, 0, 1)
+}
+
+.board-results-layer {
+  width: 100%;
+  min-width: 0
 }
 
 .board-results.has-outgoing {
   pointer-events: none
 }
 
-.board-results.has-outgoing .board-results-track {
-  display: flex;
-  width: 200%
+.board-results.has-outgoing .board-results-layer {
+  transition-property: transform;
+  transition-duration: 220ms;
+  transition-timing-function: cubic-bezier(.2, 0, 0, 1)
 }
 
-.board-results:not(.has-outgoing) .board-results-track,
-.board-results--preparing .board-results-track {
+.board-results--preparing .board-results-layer {
   transition: none
 }
 
-.board-results.has-outgoing .board-results-layer {
-  flex: 0 0 50%;
-  width: 50%;
-  min-width: 0
+.board-results.has-outgoing .board-results-outgoing {
+  position: absolute;
+  top: 0;
+  left: 0
 }
 
-.board-results--backward .board-results-incoming {
-  order: 1
+.board-results--preparing.board-results--forward .board-results-outgoing,
+.board-results--preparing.board-results--backward .board-results-outgoing {
+  transform: translate3d(0, 0, 0)
 }
 
-.board-results--backward .board-results-outgoing {
-  order: 2
+.board-results--preparing.board-results--forward .board-results-incoming {
+  transform: translate3d(100%, 0, 0)
 }
 
-.board-results--preparing.board-results--backward .board-results-track,
-.board-results--moving.board-results--forward .board-results-track {
-  transform: translateX(-50%)
+.board-results--preparing.board-results--backward .board-results-incoming {
+  transform: translate3d(-100%, 0, 0)
 }
 
-.board-results--preparing.board-results--forward .board-results-track,
-.board-results--moving.board-results--backward .board-results-track {
-  transform: translateX(0)
+.board-results--moving.board-results--forward .board-results-outgoing {
+  transform: translate3d(-100%, 0, 0)
+}
+
+.board-results--moving.board-results--backward .board-results-outgoing {
+  transform: translate3d(100%, 0, 0)
+}
+
+.board-results--moving .board-results-incoming {
+  transform: translate3d(0, 0, 0)
 }
 
 .selected-board-heading {
