@@ -43,8 +43,7 @@ onBeforeUnmount(() => {
 .app-splash-art {
   width: min(87vw, 70rem);
   height: auto;
-  display: block;
-  transform: translateY(-4dvh)
+  display: block
 }
 
 .app-splash--leaving {
