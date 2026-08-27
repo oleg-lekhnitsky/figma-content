@@ -126,11 +126,12 @@ const { data, status: loadStatus, error, refresh } = await useLazyFetch<AssetLis
   query,
   watch: [query],
   cache: false,
+  server: false,
   immediate: !selectedBoardId.value
 })
-const { data: projectData, refresh: refreshProjects } = await useLazyFetch<{ data: { projects: Project[] } }>('/api/projects', { cache: false })
-const { data: tagData, refresh: refreshTags } = await useLazyFetch<{ data: { tags: Tag[] } }>('/api/tags', { cache: false })
-const { data: boardData, refresh: refreshBoards } = await useLazyFetch<BoardList>('/api/shares', { cache: false })
+const { data: projectData, refresh: refreshProjects } = await useLazyFetch<{ data: { projects: Project[] } }>('/api/projects', { cache: false, server: false })
+const { data: tagData, refresh: refreshTags } = await useLazyFetch<{ data: { tags: Tag[] } }>('/api/tags', { cache: false, server: false })
+const { data: boardData, refresh: refreshBoards } = await useLazyFetch<BoardList>('/api/shares', { cache: false, server: false })
 const boardCreator = ref<{ openCreate: () => Promise<void>; openCreateFromCurrentView: () => Promise<void> }>()
 const handleBoardCreated = async (boardId: string) => {
   await refreshBoards()
@@ -338,7 +339,7 @@ const { data: selectedBoardData, status: selectedBoardStatus, error: selectedBoa
   if (board?.mode !== 'dynamic' && localAssets.length === board?.assetIds.length) return { boardId, assets: localAssets }
   const response = await $fetch<BoardContent>(`/api/shares/${boardId}/content`)
   return { boardId, assets: response.data.assets }
-}, { watch: [selectedBoardId] })
+}, { watch: [selectedBoardId], server: false, lazy: true })
 watch(() => [selectedBoardData.value?.boardId, selectedBoardData.value?.assets] as const, ([boardId, boardAssets]) => {
   if (!boardId || !boardAssets) return
   const previousById = new Map((boardAssetCache.get(boardId) ?? []).map(asset => [asset.id, asset]))
@@ -800,7 +801,7 @@ const resultMessage = computed(() => {
   if (selectedBoardId.value) return selectedBoardStatus.value === 'success' ? `${displayedAssets.value.length} ${displayedAssets.value.length === 1 ? 'asset' : 'assets'} in ${selectedBoard.value?.title ?? 'board'}` : ''
   return loadStatus.value === 'success' ? `${total.value} ${total.value === 1 ? 'asset' : 'assets'}` : ''
 })
-const { data: session } = await useFetch<SessionResponse>('/api/auth/session')
+const { data: session } = useNuxtData<SessionResponse>('auth-session')
 const isAdmin = computed(() => session.value?.data?.user?.role === 'admin')
 const canManageProjects = computed(() => ['editor', 'admin'].includes(session.value?.data?.user?.role ?? ''))
 const canApprove = computed(() => ['editor', 'admin'].includes(session.value?.data?.user?.role ?? ''))
@@ -1226,7 +1227,7 @@ onBeforeUnmount(() => {
                   return to all assets.</span>
               </div>
               <AssetMasonrySkeleton
-                v-else-if="!selectedBoardId && loadStatus === 'pending' && assets.length === 0"
+                v-else-if="!selectedBoardId && (loadStatus === 'idle' || loadStatus === 'pending') && assets.length === 0"
                 :view-settings="libraryView" />
               <div v-else-if="!selectedBoardId && error" class="state error" role="alert">
                 <strong>Unable to load assets.</strong><span>Check your connection and try again.</span><button type="button"

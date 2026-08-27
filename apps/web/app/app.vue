@@ -1,27 +1,15 @@
 <script setup lang="ts">
 const splashVisible = ref(true)
-const splashLeaving = ref(false)
-let splashTimer: ReturnType<typeof setTimeout> | undefined
-let splashRemoveTimer: ReturnType<typeof setTimeout> | undefined
 
 onMounted(() => {
-  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  splashTimer = setTimeout(() => {
-    splashLeaving.value = true
-    splashRemoveTimer = setTimeout(() => { splashVisible.value = false }, reducedMotion ? 0 : 140)
-  }, reducedMotion ? 0 : 80)
-})
-
-onBeforeUnmount(() => {
-  clearTimeout(splashTimer)
-  clearTimeout(splashRemoveTimer)
+  splashVisible.value = false
 })
 </script>
 
 <template>
   <NuxtRouteAnnouncer />
   <PullToRefresh />
-  <div v-if="splashVisible" class="app-splash" :class="{ 'app-splash--leaving': splashLeaving }" role="status" aria-label="designdep.work">
+  <div v-if="splashVisible" class="app-splash" role="status" aria-label="designdep.work">
     <img class="app-splash-art" src="/pwa-mark.svg?v=6" width="1122" height="268" alt="" aria-hidden="true" decoding="sync" fetchpriority="high">
   </div>
   <NuxtPage />
@@ -37,7 +25,7 @@ onBeforeUnmount(() => {
   color: var(--color-fg);
   background: var(--color-bg);
   opacity: 1;
-  transition: opacity 140ms ease-out
+  pointer-events: none
 }
 
 .app-splash-art {
@@ -46,19 +34,23 @@ onBeforeUnmount(() => {
   display: block
 }
 
-.app-splash--leaving {
-  opacity: 0
-}
-
 @media (display-mode: standalone) {
   .app-splash {
-    display: grid
+    display: grid;
+    animation: app-splash-exit 140ms ease-out forwards
+  }
+}
+
+@keyframes app-splash-exit {
+  to {
+    visibility: hidden;
+    opacity: 0
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .app-splash {
-    transition: none
+    animation-duration: .01ms
   }
 }
 </style>
