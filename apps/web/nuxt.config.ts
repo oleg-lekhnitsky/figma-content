@@ -17,6 +17,15 @@ export default defineNuxtConfig({
         { name: 'apple-mobile-web-app-status-bar-style', content: 'black-translucent' },
         { name: 'apple-mobile-web-app-title', content: 'Content Library' }
       ],
+      style: [{
+        key: 'pwa-splash-critical',
+        innerHTML: `@media (display-mode: standalone) {
+          html, body { background: #fafafa; }
+          .app-splash { position: fixed; z-index: 2147483647; inset: 0; display: block; overflow: hidden; background: #fafafa; }
+          .app-splash-center { position: absolute; top: 0; right: 0; left: 0; height: calc(100svh + env(safe-area-inset-top, 0px) + env(safe-area-inset-bottom, 0px)); display: grid; place-items: center; }
+          .app-splash-art { width: min(87vw, 70rem); height: auto; display: block; }
+        }`
+      }],
       link: [
         { rel: 'manifest', href: '/manifest.webmanifest' },
         { rel: 'apple-touch-icon', sizes: '180x180', href: '/apple-touch-icon.png?v=3' },
