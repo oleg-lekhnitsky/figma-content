@@ -727,13 +727,6 @@ const deleteBoard = async () => {
   color: var(--color-danger);
 }
 
-.filter-panel-toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  white-space: nowrap;
-}
-
 .clear-filters-button {
   width: max-content;
   min-width: 0;
@@ -741,39 +734,6 @@ const deleteBoard = async () => {
   color: var(--color-fg);
   background: var(--color-surface);
   white-space: nowrap;
-}
-
-.filter-panel-toggle:not(.is-expanded) {
-  min-height: 44px;
-  padding: 0 20px;
-  box-shadow: 0 12px 36px rgb(0 0 0 / .2);
-}
-
-.filter-panel-toggle.filter-panel-toggle.is-expanded {
-  width: 36px;
-  padding: 0;
-  justify-content: center;
-  box-shadow: none;
-}
-
-.filter-panel-toggle svg {
-  width: 17px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-}
-
-.filter-count {
-  min-width: 20px;
-  height: 20px;
-  display: grid;
-  place-items: center;
-  padding: 0 5px;
-  border-radius: 999px;
-  color: var(--color-fg);
-  background: var(--color-bg);
-  font-size: 11px;
 }
 
 .filter-controls-enter-active,

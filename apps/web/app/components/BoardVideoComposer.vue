@@ -1509,7 +1509,7 @@ const showAllAssets = () => {
 
   .board-video-composer {
     --video-mobile-sheet-height: min(48dvh, 32rem);
-    --video-input-gap-mobile: calc(var(--space) / .75);
+    --video-input-gap-mobile: calc(var(--space) / .5);
     --video-type-body: var(--font-size-body);
     --video-control-height: var(--range-control-height-mobile);
     position: relative;

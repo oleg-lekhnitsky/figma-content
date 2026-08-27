@@ -4,7 +4,7 @@ export default defineNuxtConfig({
   modules: ['@nuxt/image', '@nuxt/eslint'],
   css: [
     '~/assets/css/global.css',
-    // Optional filter layout experiment: remove this entry to unplug it.
+    // Shared drawer controls used by Filters, View, and settings panels.
     '~/assets/css/filters.css'
   ],
   app: {

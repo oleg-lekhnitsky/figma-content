@@ -1,4 +1,4 @@
-/* Shared filter controls and bottom-sheet presentation. */
+/* Shared filter, view, settings, and drawer control presentation. */
 
 :root {
   --filter-control-height: 2.25rem;
@@ -52,7 +52,7 @@
   --filter-option-font-size: var(--font-size-control);
   --filter-action-gap: .5rem;
   --filter-action-height: 2.75rem;
-  --filter-action-padding: 1.125rem;
+  --filter-action-padding: 1.125rem ;
   --filter-action-font-size: var(--font-size-control);
   --filter-action-transition-duration: 260ms;
   --filter-action-transition-distance: .5rem;
@@ -170,6 +170,46 @@ button.filter-dropdown-trigger { display: flex; align-items: center; white-space
   pointer-events: none;
 }
 
+.filter-panel-toggle {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  white-space: nowrap;
+}
+
+.filter-panel-toggle:not(.is-expanded) {
+  min-height: var(--control-height);
+  padding-inline: var(--button-padding-inline);
+  box-shadow: none;
+}
+
+.filter-panel-toggle.filter-panel-toggle.is-expanded {
+  width: 36px;
+  padding: 0;
+  justify-content: center;
+  box-shadow: none;
+}
+
+.filter-panel-toggle svg {
+  width: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+
+.filter-count {
+  min-width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  padding: 0 5px;
+  border-radius: var(--filter-pill-radius);
+  color: var(--color-fg);
+  background: var(--color-bg);
+  font-size: 11px;
+}
+
 @media (max-width: 520px) {
   .asset-filter-controls { min-height: var(--filter-control-height-mobile); }
   .asset-filter-controls > .filter-sheet-content > label,
@@ -183,6 +223,19 @@ button.filter-dropdown-trigger { display: flex; align-items: center; white-space
   .filter-dropdown .filter-dropdown-chevron { right: var(--filter-option-padding); }
   .asset-filter-controls > .filter-sheet-content > .search-field { flex: 1 1 auto; }
   .asset-filter-controls > .filter-sheet-content > .search-field > input { width: 100%; max-width: none; font-size: var(--font-size-body); }
+
+  .filter-panel-toggle:is(:hover, :active, :focus) { opacity: 1; }
+
+  .filter-panel-toggle.filter-panel-toggle.is-expanded {
+    width: var(--control-height);
+    height: var(--control-height);
+    min-height: var(--control-height);
+  }
+
+  .filter-panel-toggle svg {
+    width: 20px;
+    height: 20px;
+  }
 }
 
 /* OEM journal-inspired full-screen filter takeover. */
@@ -590,7 +643,7 @@ body:has(> .selection-panel.selection-panel--filter-overlay) > .selection-panel.
 .selection-panel--filter-overlay .video-toggle {
   box-sizing: border-box;
   width: auto;
-  min-height: var(--filter-option-height);
+  
   flex: 0 0 auto;
   height: min-content;
   padding: var(--filter-option-padding);
@@ -846,6 +899,7 @@ button.panel-dropdown-trigger:focus-visible {
     display: grid;
     align-content: start;
     gap: var(--filter-overlay-group-gap);
+    gap: calc(var(--space) / .5);
     padding: var(--filter-sheet-content-padding-mobile);
     scroll-padding-bottom: var(--filter-sheet-content-bottom-mobile);
   }
@@ -1028,11 +1082,11 @@ button.panel-dropdown-trigger:focus-visible {
 .selection-panel--filter-overlay .filter-actions > button {
   width: 100%;
   min-width: 0;
-  height: var(--filter-action-height);
+  height: calc(var(--filter-action-height)/2);
   min-height: var(--filter-action-height);
   flex: 1 1 0;
   margin: 0;
-  padding-inline: var(--filter-action-padding);
+  padding-inline: calc(var(--filter-action-padding)/1) var(--filter-action-padding) ;
   color: var(--filter-overlay-primary-color);
   background: var(--filter-overlay-primary-background);
   font-size: var(--filter-action-font-size);
@@ -1124,15 +1178,12 @@ button.panel-dropdown-trigger:focus-visible {
   }
 
   .selection-panel--filter-overlay .asset-filter-controls .filter-option-list--segmented {
-    height: var(--range-control-height-mobile);
-    min-height: var(--range-control-height-mobile);
-    max-height: var(--range-control-height-mobile);
+    block-size: var(--range-control-height-mobile);
   }
 
   .selection-panel--filter-overlay .asset-filter-controls .filter-option-list--segmented > button {
-    height: calc(var(--range-control-height-mobile) - 8px);
-    min-height: calc(var(--range-control-height-mobile) - 8px);
-    max-height: calc(var(--range-control-height-mobile) - 8px);
+    block-size: calc(var(--range-control-height-mobile) - 8px);
+    min-block-size: 0;
     padding-block: 0;
     font-size: var(--font-size-body);
   }
@@ -1140,6 +1191,7 @@ button.panel-dropdown-trigger:focus-visible {
   .selection-panel--filter-overlay .asset-filter-controls .filter-option-list:not(.filter-option-list--segmented) > button {
     min-width: var(--range-control-height-mobile);
     padding-inline: var(--filter-action-padding);
+    
   }
 
   .selection-panel--filter-overlay .submitter-avatar {
@@ -1161,18 +1213,8 @@ button.panel-dropdown-trigger:focus-visible {
   .selection-panel--filter-overlay .filter-sheet-content {
     box-sizing: border-box;
     width: 100%;
-    min-height: 0;
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    align-items: stretch;
-    gap: var(--filter-overlay-group-gap);
     padding: var(--filter-sheet-content-padding-mobile);
     scroll-padding-bottom: var(--filter-sheet-content-bottom-mobile);
-    overflow-x: hidden;
-    overflow-y: auto;
-    overscroll-behavior-y: contain;
-    scrollbar-width: none;
     touch-action: pan-y;
     -webkit-overflow-scrolling: touch;
   }
@@ -1182,15 +1224,10 @@ button.panel-dropdown-trigger:focus-visible {
     scroll-padding-bottom: var(--filter-overlay-group-gap);
   }
 
-  .selection-panel--filter-overlay .filter-sheet-content::-webkit-scrollbar { display: none; }
-
-  .selection-panel--filter-overlay .filter-sheet-content > * {
-    flex-shrink: 0;
-  }
-
   .selection-panel--filter-overlay .filter-option-list > button,
   .selection-panel--filter-overlay .filter-actions > button {
     flex-shrink: 0;
+    
   }
 
   .selection-panel--filter-overlay .filter-sheet-handle {

@@ -50,7 +50,7 @@
   --select-chevron-size: .75rem;
   --select-chevron-inset: var(--supporting-text-inset);
   --filter-option-height: 2.125rem;
-  --filter-option-padding: .75rem;
+  --filter-option-padding: 1.75rem;
   --font-size-h3: 1.25rem;
   --font-size-body: 1rem;
   --font-size-body-compact: .875rem;

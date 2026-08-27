@@ -2393,46 +2393,6 @@ button {
   backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation))
 }
 
-.filter-panel-toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  white-space: nowrap
-}
-
-.filter-panel-toggle:not(.is-expanded) {
-  min-height: 44px;
-  padding: 0 20px;
-  box-shadow: none
-}
-
-.filter-panel-toggle.filter-panel-toggle.is-expanded {
-  width: 36px;
-  padding: 0;
-  justify-content: center;
-  box-shadow: none
-}
-
-.filter-panel-toggle svg {
-  width: 17px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round
-}
-
-.filter-count {
-  min-width: 20px;
-  height: 20px;
-  display: grid;
-  place-items: center;
-  padding: 0 5px;
-  border-radius: 999px;
-  color: var(--color-fg);
-  background: var(--color-bg);
-  font-size: 11px
-}
-
 .filter-controls-enter-active,
 .filter-controls-leave-active {
   transition-property: opacity, transform;
@@ -2471,8 +2431,8 @@ button {
 
 .submitter-avatar,
 .submitter-more {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   min-width: 36px;
   min-height: 36px;
   display: grid;
@@ -2633,20 +2593,8 @@ button {
     min-height: 44px
   }
 
-  .filter-panel-toggle:is(:hover, :active, :focus),
   .mobile-filter-search:is(:hover, :active, :focus) {
     opacity: 1
-  }
-
-  .filter-panel-toggle.filter-panel-toggle.is-expanded {
-    width: 44px;
-    height: 44px;
-    min-height: 44px
-  }
-
-  .filter-panel-toggle svg {
-    width: 20px;
-    height: 20px
   }
 
   .asset-filter-controls~.mobile-control-blur:has(.mobile-filter-search) {
