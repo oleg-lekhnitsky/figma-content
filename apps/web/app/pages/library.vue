@@ -456,7 +456,6 @@ watch(initialContentSettled, (settled) => {
 // Keep the composer's input stable while it is open. Background asset refreshes
 // otherwise replace this array and make WebGL dispose and rebuild every texture.
 const videoAssets = ref<AssetCard[]>([])
-const leavingAssets = shallowRef<AssetCard[] | null>(null)
 type BoardMotionPhase = 'idle' | 'dragging' | 'settling'
 const boardMotionPhase = ref<BoardMotionPhase>('idle')
 const boardMotionDirection = ref<'forward' | 'backward'>('forward')
@@ -637,7 +636,6 @@ const resetBoardGesture = () => {
   boardGestureUsesSkeleton.value = false
   boardGestureSkeletonRatios.value = []
   boardGestureSkeletonCount.value = 8
-  leavingAssets.value = null
   boardMotionPhase.value = 'idle'
 }
 const beginBoardGesture = (targetId: string, direction: 'forward' | 'backward') => {
@@ -648,7 +646,6 @@ const beginBoardGesture = (targetId: string, direction: 'forward' | 'backward') 
   boardGestureUsesSkeleton.value = snapshot.skeleton
   boardGestureSkeletonRatios.value = snapshot.ratios
   boardGestureSkeletonCount.value = snapshot.count
-  leavingAssets.value = displayedAssets.value.map(asset => ({ ...asset }))
   boardMotionPhase.value = 'dragging'
 }
 const startBoardSwipe = (event: PointerEvent) => {
@@ -715,6 +712,31 @@ const waitForBoardGestureSettle = () => {
     const timeout = setTimeout(finish, boardSettleDuration.value + 100)
   })
 }
+const waitForCurrentBoardPaint = async () => {
+  await nextTick()
+  await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+  const current = boardResults.value?.querySelector<HTMLElement>('.board-results-outgoing')
+  if (!current) return
+  const mediaReady = [...current.querySelectorAll<HTMLImageElement | HTMLVideoElement>('img,video')].slice(0, 16).map((media) => {
+    if (media instanceof HTMLImageElement) {
+      if (media.complete && media.naturalWidth > 0) return media.decode?.().catch(() => undefined) ?? Promise.resolve()
+      return new Promise<void>(resolve => {
+        media.addEventListener('load', () => resolve(), { once: true })
+        media.addEventListener('error', () => resolve(), { once: true })
+      })
+    }
+    if (media.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) return Promise.resolve()
+    return new Promise<void>(resolve => {
+      media.addEventListener('loadeddata', () => resolve(), { once: true })
+      media.addEventListener('error', () => resolve(), { once: true })
+    })
+  })
+  await Promise.race([
+    Promise.allSettled(mediaReady),
+    new Promise<void>(resolve => setTimeout(resolve, 180))
+  ])
+  await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+}
 const finishBoardSwipe = async (event: PointerEvent, cancelled = false) => {
   if (event.pointerId !== boardSwipePointerId) return
   try {
@@ -754,7 +776,7 @@ const finishBoardSwipe = async (event: PointerEvent, cancelled = false) => {
   filtersExpanded.value = false
   compactFiltersVisible.value = true
   searchExpanded.value = false
-  await nextTick()
+  await waitForCurrentBoardPaint()
   resetBoardGesture()
   document.querySelector<HTMLElement>('.board-tabs button[aria-pressed="true"]')?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
   resetMobileBoardScroll()
@@ -1366,26 +1388,10 @@ onBeforeUnmount(() => {
         </div>
         <div
           ref="boardResults" class="board-results"
-          :class="[`board-results--${boardMotionPhase}`, `board-results--${boardMotionDirection}`, { 'has-outgoing': Boolean(leavingAssets) }]"
+          :class="[`board-results--${boardMotionPhase}`, `board-results--${boardMotionDirection}`, { 'has-outgoing': boardGestureIsActive }]"
           :style="{ '--board-drag-x': `${boardDragX}px`, '--board-swipe-gap': `${boardSwipeGap}px`, '--board-settle-duration': `${boardSettleDuration}ms` }">
           <div class="board-results-track">
-            <div v-if="leavingAssets" class="board-results-layer board-results-outgoing" aria-hidden="true">
-              <AssetMasonry
-                :assets="leavingAssets" :play-videos="false" instant-cards :stable-columns="false"
-                :view-settings="libraryView" />
-            </div>
-            <div class="board-results-layer board-results-incoming">
-              <template v-if="boardGestureIsActive">
-                <AssetMasonrySkeleton
-                  v-if="boardGestureUsesSkeleton" label="Loading board"
-                  :view-settings="libraryView" :ratios="boardGestureSkeletonRatios"
-                  :count="boardGestureSkeletonCount" />
-                <div v-else-if="boardGestureAssets.length === 0" class="state"><strong>This board is empty</strong></div>
-                <AssetMasonry
-                  v-else :assets="boardGestureAssets" :play-videos="false" instant-cards
-                  :stable-columns="false" :view-settings="libraryView" />
-              </template>
-              <template v-else>
+            <div class="board-results-layer board-results-outgoing">
               <span v-if="selectedBoardId && selectedBoardStatus === 'pending' && displayedAssets.length" class="sr-only"
                 role="status">Loading the rest of {{ selectedBoard?.title ?? 'this board' }}</span>
               <AssetMasonrySkeleton
@@ -1422,7 +1428,7 @@ onBeforeUnmount(() => {
                 </template>
               </div>
               <AssetMasonry
-                v-else :assets="displayedAssets" :play-videos="!videoExpanded" instant-open instant-cards
+                v-else :assets="displayedAssets" :play-videos="!videoExpanded && boardMotionPhase === 'idle'" instant-open instant-cards
                 :stable-columns="false"
                 :animate-changes="boardMotionPhase === 'idle'" :can-approve="canApprove && !arrangeExpanded"
                 :editable-titles="canRenameAssets && !arrangeExpanded" :view-settings="libraryView"
@@ -1434,7 +1440,16 @@ onBeforeUnmount(() => {
               <div v-if="canLoadMore" ref="loadMoreSentinel" class="load-more-sentinel" aria-hidden="true" />
               <span v-if="!selectedBoardId && loadStatus === 'pending' && assets.length" class="sr-only"
                 role="status">Loading more assets</span>
-              </template>
+            </div>
+            <div v-if="boardGestureIsActive" class="board-results-layer board-results-incoming" aria-hidden="true">
+              <AssetMasonrySkeleton
+                v-if="boardGestureUsesSkeleton" label="Loading board"
+                :view-settings="libraryView" :ratios="boardGestureSkeletonRatios"
+                :count="boardGestureSkeletonCount" />
+              <div v-else-if="boardGestureAssets.length === 0" class="state"><strong>This board is empty</strong></div>
+              <AssetMasonry
+                v-else :assets="boardGestureAssets" :play-videos="false" instant-cards
+                :stable-columns="false" :view-settings="libraryView" />
             </div>
           </div>
         </div>
@@ -1899,7 +1914,7 @@ button {
   background: var(--color-bg)
 }
 
-.board-results.has-outgoing .board-results-incoming {
+.board-results.has-outgoing .board-results-outgoing {
   position: relative;
   z-index: 1
 }
@@ -1910,12 +1925,22 @@ button {
   transition-timing-function: cubic-bezier(.2, .8, .2, 1)
 }
 
-.board-results.has-outgoing .board-results-outgoing {
+.board-results.has-outgoing .board-results-incoming {
   position: absolute;
   top: 0;
-  left: 0
+  left: 0;
+  z-index: 2
 }
 
+.board-results.has-outgoing .board-results-layer {
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  will-change: transform
+}
+
+.board-results.has-outgoing .board-results-layer :deep(.preview) {
+  clip-path: none
+}
 
 .board-results--dragging .board-results-layer {
   transition: none
