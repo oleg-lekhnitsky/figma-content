@@ -50,9 +50,15 @@ onBeforeUnmount(() => {
 .app-splash {
   position: fixed;
   z-index: 10000;
-  inset: 0;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 100vh;
+  height: 100svh;
   display: none;
   place-items: center;
+  overflow: hidden;
+  contain: layout paint;
   color: var(--color-fg);
   background: var(--color-bg);
   opacity: 1;
