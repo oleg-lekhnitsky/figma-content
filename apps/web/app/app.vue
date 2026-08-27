@@ -41,7 +41,9 @@ onBeforeUnmount(() => {
   <NuxtRouteAnnouncer />
   <PullToRefresh />
   <div v-if="splashVisible" class="app-splash" :class="{ 'app-splash--leaving': splashLeaving }" role="status" aria-label="designdep.work">
-    <img class="app-splash-art" src="/pwa-mark.svg?v=6" width="1122" height="268" alt="" aria-hidden="true" decoding="sync" fetchpriority="high">
+    <div class="app-splash-center">
+      <img class="app-splash-art" src="/pwa-mark.svg?v=6" width="1122" height="268" alt="" aria-hidden="true" decoding="sync" fetchpriority="high">
+    </div>
   </div>
   <NuxtPage />
 </template>
@@ -58,15 +60,22 @@ onBeforeUnmount(() => {
   background: var(--color-bg, #fafafa)
 }
 
-.app-splash-art {
+.app-splash-center {
   position: absolute;
-  top: 50svh;
-  left: 50%;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 100vh;
+  height: 100svh;
+  display: grid;
+  place-items: center
+}
+
+.app-splash-art {
   width: min(87vw, 70rem);
   height: auto;
   display: block;
   opacity: 1;
-  transform: translate(-50%, -50%);
   transition: opacity 140ms ease-out
 }
 
