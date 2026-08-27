@@ -2339,6 +2339,16 @@ button {
     --header-height: calc(44px + max(var(--space), env(safe-area-inset-top)) + var(--space))
   }
 
+  .board-results {
+    width: calc(100% + var(--masonry-mobile-inline-bleed)*2);
+    margin-inline: calc(var(--masonry-mobile-inline-bleed)*-1)
+  }
+
+  .board-results :deep(:is(.asset-masonry, .asset-skeleton-grid)) {
+    width: 100%;
+    margin-inline: 0
+  }
+
   .index-toolbar {
     grid-template-columns: 44px minmax(0, 1fr) 44px;
     gap: calc(var(--space)/2);
