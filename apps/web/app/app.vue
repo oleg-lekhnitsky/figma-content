@@ -1,17 +1,38 @@
 <script setup lang="ts">
 const splashVisible = ref(true)
+const splashLeaving = ref(false)
+const route = useRoute()
+let splashReadyTimer: ReturnType<typeof setTimeout> | undefined
+let splashFallbackTimer: ReturnType<typeof setTimeout> | undefined
 let splashRemoveTimer: ReturnType<typeof setTimeout> | undefined
+let splashMountedAt = 0
+let reducedMotion = false
+
+const leaveSplash = () => {
+  if (splashLeaving.value) return
+  splashLeaving.value = true
+  clearTimeout(splashFallbackTimer)
+  splashRemoveTimer = setTimeout(() => { splashVisible.value = false }, reducedMotion ? 0 : 140)
+}
+
+const revealContent = () => {
+  clearTimeout(splashReadyTimer)
+  const minimumVisibleTime = reducedMotion ? 0 : Math.max(0, 300 - (performance.now() - splashMountedAt))
+  splashReadyTimer = setTimeout(leaveSplash, minimumVisibleTime)
+}
 
 onMounted(() => {
-  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  if (reducedMotion) {
-    splashVisible.value = false
-    return
-  }
-  splashRemoveTimer = setTimeout(() => { splashVisible.value = false }, 460)
+  reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  splashMountedAt = performance.now()
+  window.addEventListener('app-content-ready', revealContent, { once: true })
+  splashFallbackTimer = setTimeout(leaveSplash, 8000)
+  if (route.path !== '/library') revealContent()
 })
 
 onBeforeUnmount(() => {
+  window.removeEventListener('app-content-ready', revealContent)
+  clearTimeout(splashReadyTimer)
+  clearTimeout(splashFallbackTimer)
   clearTimeout(splashRemoveTimer)
 })
 </script>
@@ -19,7 +40,7 @@ onBeforeUnmount(() => {
 <template>
   <NuxtRouteAnnouncer />
   <PullToRefresh />
-  <div v-if="splashVisible" class="app-splash" role="status" aria-label="designdep.work">
+  <div v-if="splashVisible" class="app-splash" :class="{ 'app-splash--leaving': splashLeaving }" role="status" aria-label="designdep.work">
     <img class="app-splash-art" src="/pwa-mark.svg?v=6" width="1122" height="268" alt="" aria-hidden="true" decoding="sync" fetchpriority="high">
   </div>
   <NuxtPage />
@@ -35,7 +56,8 @@ onBeforeUnmount(() => {
   color: var(--color-fg);
   background: var(--color-bg);
   opacity: 1;
-  pointer-events: none
+  pointer-events: none;
+  transition: opacity 140ms ease-out
 }
 
 .app-splash-art {
@@ -46,21 +68,17 @@ onBeforeUnmount(() => {
 
 @media (display-mode: standalone) {
   .app-splash {
-    display: grid;
-    animation: app-splash-exit 140ms ease-out 300ms forwards
+    display: grid
   }
 }
 
-@keyframes app-splash-exit {
-  to {
-    visibility: hidden;
-    opacity: 0
-  }
+.app-splash--leaving {
+  opacity: 0
 }
 
 @media (prefers-reduced-motion: reduce) {
   .app-splash {
-    animation-duration: .01ms
+    transition: none
   }
 }
 </style>

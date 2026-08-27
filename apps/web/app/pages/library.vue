@@ -434,6 +434,25 @@ const displayedAssets = computed(() => {
     ? source.filter(asset => `${asset.title} ${asset.description ?? ''}`.toLocaleLowerCase().includes(term))
     : source
 })
+let appContentReadyFrame = 0
+let appContentReadySignaled = false
+const initialContentSettled = computed(() => selectedBoardId.value
+  ? !selectedBoardIsResolving.value && (selectedBoardStatus.value === 'success' || selectedBoardStatus.value === 'error')
+  : loadStatus.value === 'success' || loadStatus.value === 'error')
+const signalAppContentReady = async () => {
+  if (!import.meta.client || appContentReadySignaled) return
+  appContentReadySignaled = true
+  await nextTick()
+  appContentReadyFrame = requestAnimationFrame(() => {
+    appContentReadyFrame = requestAnimationFrame(() => {
+      window.dispatchEvent(new Event('app-content-ready'))
+      appContentReadyFrame = 0
+    })
+  })
+}
+watch(initialContentSettled, (settled) => {
+  if (settled) void signalAppContentReady()
+}, { immediate: true })
 // Keep the composer's input stable while it is open. Background asset refreshes
 // otherwise replace this array and make WebGL dispose and rebuild every texture.
 const videoAssets = ref<AssetCard[]>([])
@@ -976,6 +995,7 @@ onBeforeUnmount(() => {
   flushArrangeSave()
   assetEvents?.close()
   loadMoreObserver?.disconnect()
+  cancelAnimationFrame(appContentReadyFrame)
   cancelAnimationFrame(scrollFrame)
   window.removeEventListener('resize', resizeSelectedBoardTitle)
   window.removeEventListener('scroll', updateToolbar)
