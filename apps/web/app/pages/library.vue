@@ -462,7 +462,8 @@ const boardMotionDirection = ref<'forward' | 'backward'>('forward')
 const boardResults = ref<HTMLElement | null>(null)
 const boardDragX = ref(0)
 const boardSwipeGap = ref(0)
-const boardSettleDuration = ref(180)
+const BOARD_SETTLE_DURATION_MS = 50
+const boardSettleDuration = ref(BOARD_SETTLE_DURATION_MS)
 const boardGestureTargetId = ref<string | null>(null)
 const boardGestureAssets = shallowRef<AssetCard[]>([])
 const boardGestureUsesSkeleton = ref(false)
@@ -759,9 +760,7 @@ const finishBoardSwipe = async (event: PointerEvent, cancelled = false) => {
   const committed = !cancelled && (Math.abs(boardDragX.value) >= width * .2 || directionVelocity > .45)
   const targetId = boardGestureTargetId.value
   const destinationX = committed ? (boardMotionDirection.value === 'forward' ? -travel : travel) : 0
-  const remainingRatio = Math.min(1, Math.abs(destinationX - boardDragX.value) / Math.max(1, travel))
-  const velocityReduction = Math.min(80, Math.abs(velocity) * 54)
-  boardSettleDuration.value = Math.round(Math.max(160, Math.min(360, 180 + remainingRatio * 180 - velocityReduction)))
+  boardSettleDuration.value = BOARD_SETTLE_DURATION_MS
   const motionFinished = waitForBoardGestureSettle()
   boardMotionPhase.value = 'settling'
   boardDragX.value = destinationX
@@ -1949,7 +1948,7 @@ button {
 }
 
 .board-results--settling .board-results-layer {
-  transition-duration: var(--board-settle-duration);
+  transition-duration: calc(var(--board-settle-duration)*1);
   transition-timing-function: cubic-bezier(.2, .8, .2, 1)
 }
 

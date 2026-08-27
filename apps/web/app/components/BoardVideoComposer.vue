@@ -1526,15 +1526,18 @@ const showAllAssets = () => {
   }
 
   .board-video-composer.has-mobile-panel {
-    grid-template-rows: auto minmax(0, 1fr)
+    grid-template-rows: auto minmax(0, 1fr);
+    row-gap: var(--space);
+    padding-bottom: calc(var(--video-mobile-sheet-height) + var(--space))
   }
 
   .board-video-composer.has-mobile-panel > .video-composer-center {
-    position: absolute;
+    position: relative;
     z-index: 41;
-    inset: calc(max(var(--space), env(safe-area-inset-top)) + var(--control-height) - var(--space)*3) var(--cluster-gap) var(--video-mobile-sheet-height);
-    width: auto;
-    height: auto;
+    grid-column: 1;
+    grid-row: 2;
+    width: 100%;
+    height: 100%;
     align-self: auto
   }
 
