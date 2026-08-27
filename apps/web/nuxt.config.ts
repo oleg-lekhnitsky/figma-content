@@ -22,6 +22,8 @@ export default defineNuxtConfig({
         { rel: 'apple-touch-icon', sizes: '180x180', href: '/apple-touch-icon.png?v=3' },
         { rel: 'preload', href: '/fonts/ABCDiatypeCyrillicTrial-Medium.otf', as: 'font', type: 'font/otf', crossorigin: 'anonymous' },
         { rel: 'preload', href: '/fonts/ABCDiatypeCyrillicTrial-Bold.otf', as: 'font', type: 'font/otf', crossorigin: 'anonymous' },
+        { rel: 'apple-touch-startup-image', href: '/apple-splash-1320x2868.png?v=5', media: '(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3)' },
+        { rel: 'apple-touch-startup-image', href: '/apple-splash-1206x2622.png?v=5', media: '(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3)' },
         { rel: 'apple-touch-startup-image', href: '/apple-splash-1290x2796.png?v=5', media: '(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)' },
         { rel: 'apple-touch-startup-image', href: '/apple-splash-1179x2556.png?v=5', media: '(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)' },
         { rel: 'apple-touch-startup-image', href: '/apple-splash-1284x2778.png?v=5', media: '(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3)' },
