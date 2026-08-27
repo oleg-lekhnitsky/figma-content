@@ -6,7 +6,9 @@ import BrandWordmark from '~/components/BrandWordmark.vue'
 definePageMeta({ middleware: 'auth' })
 const route = useRoute()
 const router = useRouter()
-const selectedBoardId = computed(() => typeof route.query.board === 'string' ? route.query.board : '')
+const routedBoardId = computed(() => typeof route.query.board === 'string' ? route.query.board : '')
+const localBoardId = ref<string | null>(null)
+const selectedBoardId = computed(() => localBoardId.value ?? routedBoardId.value)
 
 interface AssetCard {
   id: string; title: string; description?: string | null; previewUrl: string; preview2xUrl?: string | null; originalUrl?: string | null; mime_type?: string | null; width: number; height: number; status?: string; figma_url?: string
@@ -311,6 +313,20 @@ const setLibraryView = (next: BoardViewSettings) => {
   libraryView.value = { ...next }
   if (import.meta.client) localStorage.setItem(libraryViewStorageKey, JSON.stringify(next))
 }
+const mediaResourceKey = (value: string | null | undefined) => {
+  if (!value) return ''
+  try {
+    const url = new URL(value, 'http://local')
+    return `${url.origin === 'http://local' ? '' : url.origin}${url.pathname}`
+  } catch {
+    return value.split(/[?#]/, 1)[0] ?? value
+  }
+}
+const preserveMountedPreview = (previous: string | null | undefined, incoming: string | null | undefined) => (
+  previous && incoming && mediaResourceKey(previous) === mediaResourceKey(incoming) ? previous : incoming
+)
+const boardAssetCache = shallowReactive(new Map<string, AssetCard[]>())
+const boardVisualReady = shallowReactive(new Set<string>())
 const { data: selectedBoardData, status: selectedBoardStatus, error: selectedBoardError, refresh: refreshSelectedBoard } = await useAsyncData('library-selected-board', async () => {
   const boardId = selectedBoardId.value
   if (!boardId) return { boardId: '', assets: [] as AssetCard[] }
@@ -323,6 +339,19 @@ const { data: selectedBoardData, status: selectedBoardStatus, error: selectedBoa
   const response = await $fetch<BoardContent>(`/api/shares/${boardId}/content`)
   return { boardId, assets: response.data.assets }
 }, { watch: [selectedBoardId] })
+watch(() => [selectedBoardData.value?.boardId, selectedBoardData.value?.assets] as const, ([boardId, boardAssets]) => {
+  if (!boardId || !boardAssets) return
+  const previousById = new Map((boardAssetCache.get(boardId) ?? []).map(asset => [asset.id, asset]))
+  boardAssetCache.set(boardId, boardAssets.map((asset) => {
+    const previous = previousById.get(asset.id)
+    return previous ? {
+      ...asset,
+      previewUrl: preserveMountedPreview(previous.previewUrl, asset.previewUrl) ?? asset.previewUrl,
+      preview2xUrl: preserveMountedPreview(previous.preview2xUrl, asset.preview2xUrl),
+      originalUrl: preserveMountedPreview(previous.originalUrl, asset.originalUrl)
+    } : asset
+  }))
+}, { immediate: true })
 let forceAssetMediaReload = false
 let assetMediaRefreshKey = ''
 const refreshLibraryData = async () => {
@@ -355,9 +384,12 @@ watch(selectedBoard, async board => {
 const locallyKnownBoardAssets = computed(() => {
   const board = selectedBoard.value
   if (!board) return []
+  const cachedAssets = boardAssetCache.get(board.id)
+  if (board.mode === 'dynamic' && cachedAssets) return cachedAssets
   const availableById = new Map(assets.value.map(asset => [asset.id, asset]))
+  const cachedById = new Map((cachedAssets ?? []).map(asset => [asset.id, asset]))
   const previewById = new Map(board.previewAssets.map(asset => [asset.id, asset]))
-  return board.assetIds.map(id => availableById.get(id) ?? previewById.get(id)).filter((asset): asset is AssetCard => Boolean(asset))
+  return board.assetIds.map(id => availableById.get(id) ?? cachedById.get(id) ?? previewById.get(id)).filter((asset): asset is AssetCard => Boolean(asset))
 })
 const boardAssets = computed(() => {
   if (selectedBoardData.value?.boardId !== selectedBoardId.value) return locallyKnownBoardAssets.value
@@ -372,6 +404,28 @@ const boardAssets = computed(() => {
     } : asset
   })
 })
+const selectedBoardHasRenderableSnapshot = computed(() => {
+  if (!selectedBoardId.value) return true
+  if (boardAssetCache.has(selectedBoardId.value)) return boardVisualReady.has(selectedBoardId.value)
+  const board = selectedBoard.value
+  return Boolean(board && board.mode !== 'dynamic' && locallyKnownBoardAssets.value.length === board.assetIds.length)
+})
+const selectedBoardIsResolving = computed(() => Boolean(
+  selectedBoardId.value
+  && !selectedBoardHasRenderableSnapshot.value
+  && !selectedBoardError.value
+  && (selectedBoardStatus.value === 'pending' || selectedBoardData.value?.boardId !== selectedBoardId.value)
+))
+const selectedBoardSkeletonRatios = computed(() => {
+  const source = locallyKnownBoardAssets.value.length
+    ? locallyKnownBoardAssets.value
+    : selectedBoard.value?.previewAssets ?? []
+  return source.slice(0, 24).map(asset => `${asset.width} / ${asset.height}`)
+})
+const selectedBoardSkeletonCount = computed(() => Math.max(
+  8,
+  Math.min(selectedBoard.value?.assetIds.length ?? selectedBoardSkeletonRatios.value.length, 24)
+))
 const displayedAssets = computed(() => {
   const source = selectedBoardId.value ? boardAssets.value : assets.value
   const term = search.value.trim().toLocaleLowerCase()
@@ -382,24 +436,80 @@ const displayedAssets = computed(() => {
 // Keep the composer's input stable while it is open. Background asset refreshes
 // otherwise replace this array and make WebGL dispose and rebuild every texture.
 const videoAssets = ref<AssetCard[]>([])
-const cardsHidden = ref(false)
 const leavingAssets = shallowRef<AssetCard[] | null>(null)
 const masonryAssets = computed(() => leavingAssets.value ?? displayedAssets.value)
+type BoardMotionPhase = 'idle' | 'leaving' | 'entering'
+const boardMotionPhase = ref<BoardMotionPhase>('idle')
+const boardMotionDirection = ref<'forward' | 'backward'>('forward')
+const boardResults = ref<HTMLElement | null>(null)
+const boardImageWarmups = new Map<string, Promise<void>>()
+const warmBoardImage = (url: string) => {
+  const existing = boardImageWarmups.get(url)
+  if (existing) return existing
+  const warmup = new Promise<void>((resolve) => {
+    const image = new Image()
+    let settled = false
+    const settle = async () => {
+      if (settled) return
+      settled = true
+      try { await image.decode() } catch { /* A load error must not block a board switch. */ }
+      resolve()
+    }
+    image.addEventListener('load', () => { void settle() }, { once: true })
+    image.addEventListener('error', () => { void settle() }, { once: true })
+    image.decoding = 'async'
+    image.loading = 'eager'
+    image.src = url
+    if (image.complete) void settle()
+  })
+  boardImageWarmups.set(url, warmup)
+  return warmup
+}
+const warmBoardImages = (boardAssets: AssetCard[]) => {
+  if (!import.meta.client) return Promise.resolve()
+  const urls = boardAssets.slice(0, 24)
+    .filter(asset => asset.previewUrl && !asset.mime_type?.startsWith('video/'))
+    .map(asset => asset.previewUrl)
+  return Promise.all(urls.map(warmBoardImage)).then(() => undefined)
+}
+watch(() => [selectedBoardData.value?.boardId, selectedBoardData.value?.assets] as const, ([boardId]) => {
+  if (!boardId || boardVisualReady.has(boardId)) return
+  const cachedAssets = boardAssetCache.get(boardId)
+  if (!cachedAssets) return
+  void warmBoardImages(cachedAssets).then(() => { boardVisualReady.add(boardId) })
+}, { immediate: true })
 let boardTransition = 0
+let boardRouteRevision = 0
+let boardRouteSync = Promise.resolve()
+const syncBoardRoute = (boardId: string) => {
+  const revision = ++boardRouteRevision
+  boardRouteSync = boardRouteSync.catch(() => undefined).then(async () => {
+    if (revision !== boardRouteRevision) return
+    await replaceLibraryQuery({ board: boardId || undefined, asset: undefined })
+    if (revision === boardRouteRevision && routedBoardId.value === boardId) localBoardId.value = null
+  })
+}
 const resetMobileBoardScroll = () => {
   if (!window.matchMedia('(max-width: 520px)').matches) return
   window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
 }
+const boardSequence = computed(() => ['', ...boards.value.map(board => board.id)])
 const selectBoard = async (boardId: string) => {
   if (boardId === selectedBoardId.value) return
   const transition = ++boardTransition
-  leavingAssets.value = displayedAssets.value.map(asset => ({ ...asset }))
-  cardsHidden.value = true
-  await nextTick()
-  await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
-  if (transition !== boardTransition) return
-  await new Promise(resolve => setTimeout(resolve, 240))
-  if (transition !== boardTransition) return
+  const outgoingAssets = masonryAssets.value.map(asset => ({ ...asset }))
+  const sequence = boardSequence.value
+  const currentIndex = Math.max(0, sequence.indexOf(selectedBoardId.value))
+  const nextIndex = Math.max(0, sequence.indexOf(boardId))
+  boardMotionDirection.value = nextIndex >= currentIndex ? 'forward' : 'backward'
+  // Keep the outgoing grid mounted only for the short directional exit. The
+  // destination itself is optimistic: local/cache assets render immediately
+  // while useAsyncData reconciles its response in the background.
+  leavingAssets.value = outgoingAssets
+  localBoardId.value = boardId
+  void warmBoardImages(displayedAssets.value)
+  boardMotionPhase.value = 'leaving'
+  syncBoardRoute(boardId)
   viewExpanded.value = false
   videoExpanded.value = false
   boardSettingsExpanded.value = false
@@ -407,14 +517,18 @@ const selectBoard = async (boardId: string) => {
   filtersExpanded.value = false
   compactFiltersVisible.value = true
   searchExpanded.value = false
-  await replaceLibraryQuery({ board: boardId || undefined, asset: undefined })
+
+  const exitDuration = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 110
+  await new Promise(resolve => setTimeout(resolve, exitDuration))
+  if (transition !== boardTransition) return
+  boardMotionPhase.value = 'entering'
   leavingAssets.value = null
   await nextTick()
+  if (transition !== boardTransition) return
+  void boardResults.value?.offsetWidth
+  boardMotionPhase.value = 'idle'
   document.querySelector<HTMLElement>('.board-tabs button[aria-pressed="true"]')?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
   resetMobileBoardScroll()
-  requestAnimationFrame(() => {
-    if (transition === boardTransition) cardsHidden.value = false
-  })
 }
 
 let arrangeSaveTimer: ReturnType<typeof setTimeout> | undefined
@@ -479,7 +593,6 @@ const removeArrangeSelection = async () => {
 }
 let boardSwipeStartX = 0
 let boardSwipeStartY = 0
-const boardSequence = computed(() => ['', ...boards.value.map(board => board.id)])
 const startBoardSwipe = (event: TouchEvent) => {
   const touch = event.touches[0]
   if (!touch) return
@@ -488,7 +601,7 @@ const startBoardSwipe = (event: TouchEvent) => {
 }
 const finishBoardSwipe = (event: TouchEvent) => {
   const touch = event.changedTouches[0]
-  if (!touch || cardsHidden.value || arrangeExpanded.value) return
+  if (!touch || boardMotionPhase.value !== 'idle' || arrangeExpanded.value) return
   const deltaX = touch.clientX - boardSwipeStartX
   const deltaY = touch.clientY - boardSwipeStartY
   if (Math.abs(deltaX) < 56 || Math.abs(deltaX) <= Math.abs(deltaY) * 1.25) return
@@ -624,18 +737,6 @@ const loadingNextPage = ref(false)
 let loadMoreObserver: IntersectionObserver | undefined
 let liveRefreshTimer: ReturnType<typeof setTimeout> | undefined
 let assetEvents: EventSource | undefined
-const mediaResourceKey = (value: string | null | undefined) => {
-  if (!value) return ''
-  try {
-    const url = new URL(value, 'http://local')
-    return `${url.origin === 'http://local' ? '' : url.origin}${url.pathname}`
-  } catch {
-    return value.split(/[?#]/, 1)[0] ?? value
-  }
-}
-const preserveMountedPreview = (previous: string | null | undefined, incoming: string | null | undefined) => (
-  previous && incoming && mediaResourceKey(previous) === mediaResourceKey(incoming) ? previous : incoming
-)
 const refreshedMediaUrl = (value: string | null | undefined) => {
   if (!value || !assetMediaRefreshKey) return value
   try {
@@ -878,6 +979,8 @@ onBeforeUnmount(() => {
   window.removeEventListener('scroll', updateToolbar)
   window.removeEventListener('focus', refreshWhenVisible)
   document.removeEventListener('visibilitychange', refreshWhenVisible)
+  boardImageWarmups.clear()
+  boardVisualReady.clear()
 })
 </script>
 
@@ -1057,7 +1160,7 @@ onBeforeUnmount(() => {
       </template>
 
       <div class="board-swipe-region" @touchstart.passive="startBoardSwipe" @touchend.passive="finishBoardSwipe">
-        <div v-if="selectedBoard" class="selected-board-heading" :class="{ 'title-hidden': cardsHidden }">
+        <div v-if="selectedBoard" class="selected-board-heading">
           <h1 class="selected-board-title"><textarea v-if="canRenameSelectedBoard" ref="boardTitleInput"
               v-model="boardTitleDraft" class="selected-board-title-input" rows="1" maxlength="120"
               aria-label="Board name" :disabled="boardRenameBusy" :aria-invalid="boardRenameFeedback.error || undefined"
@@ -1100,52 +1203,58 @@ onBeforeUnmount(() => {
             </div>
           </div>
         </div>
-        <span v-if="selectedBoardId && selectedBoardStatus === 'pending' && displayedAssets.length" class="sr-only"
-          role="status">Loading the rest of {{ selectedBoard?.title ?? 'this board' }}</span>
-        <AssetMasonrySkeleton
-          v-if="!leavingAssets && selectedBoardId && selectedBoardStatus === 'pending' && displayedAssets.length === 0"
-          :label="`Loading ${selectedBoard?.title ?? 'board'}`" :view-settings="libraryView" />
-        <div v-else-if="!leavingAssets && selectedBoardId && selectedBoardError && displayedAssets.length === 0" class="state error"
-          role="alert"><strong>Unable to load this board.</strong><span>Try another board or return to all
-            assets.</span>
+        <div
+          ref="boardResults" class="board-results"
+          :class="[`board-results--${boardMotionPhase}`, `board-results--${boardMotionDirection}`]">
+          <span v-if="selectedBoardId && selectedBoardStatus === 'pending' && displayedAssets.length" class="sr-only"
+            role="status">Loading the rest of {{ selectedBoard?.title ?? 'this board' }}</span>
+          <AssetMasonrySkeleton
+            v-if="!leavingAssets && selectedBoardIsResolving"
+            :label="`Loading ${selectedBoard?.title ?? 'board'}`" :view-settings="libraryView"
+            :ratios="selectedBoardSkeletonRatios" :count="selectedBoardSkeletonCount" />
+          <div
+            v-else-if="!leavingAssets && selectedBoardId && selectedBoardError && displayedAssets.length === 0"
+            class="state error" role="alert"><strong>Unable to load this board.</strong><span>Try another board or
+              return to all assets.</span>
+          </div>
+          <AssetMasonrySkeleton
+            v-else-if="!leavingAssets && !selectedBoardId && loadStatus === 'pending' && assets.length === 0"
+            :view-settings="libraryView" />
+          <div v-else-if="!leavingAssets && !selectedBoardId && error" class="state error" role="alert">
+            <strong>Unable to load assets.</strong><span>Check your connection and try again.</span><button type="button"
+              @click="refresh()">Try again</button>
+          </div>
+          <div v-else-if="masonryAssets.length === 0" class="state">
+            <template v-if="selectedStaticBoard">
+              <strong>This board is empty</strong>
+              <span>Browse your library, open an asset, and add it to this board.</span>
+              <button type="button" @click="selectBoard('')">Browse assets</button>
+            </template>
+            <template v-else-if="selectedDynamicBoard">
+              <strong>No assets match this board’s filters</strong>
+              <span>Change the filters to include more approved assets.</span>
+              <button type="button" @click="openFilters">Change filters</button>
+            </template>
+            <template v-else>
+              <strong>{{ hasFilters ? 'No matching assets' : 'No assets yet' }}</strong>
+              <span>{{ hasFilters ? 'Change your search or clear the filters.' : 'Upload frames from the Figma plugin to build this library.' }}</span>
+              <button v-if="hasFilters" type="button" @click="clearFilters">Clear filters</button>
+            </template>
+          </div>
+          <AssetMasonry
+            v-else :assets="masonryAssets" :play-videos="!videoExpanded" instant-open instant-cards
+            :stable-columns="false"
+            :animate-changes="boardMotionPhase === 'idle'" :can-approve="canApprove && !arrangeExpanded"
+            :editable-titles="canRenameAssets && !arrangeExpanded" :view-settings="libraryView"
+            :interactive="!arrangeExpanded" :reorderable="arrangeExpanded" :selectable="arrangeExpanded"
+            :selected-ids="arrangeSelectedIds" @reorder="reorderSelectedBoardAssets"
+            @toggle-selection="toggleArrangeSelection" @toggle-approval="toggleAssetApproval" @rename="renameAsset"
+            @open="openAsset" />
+          <span class="sr-only" role="status" aria-live="polite">{{ assetRenameFeedback }}</span>
+          <div v-if="canLoadMore" ref="loadMoreSentinel" class="load-more-sentinel" aria-hidden="true" />
+          <span v-if="!selectedBoardId && loadStatus === 'pending' && assets.length" class="sr-only"
+            role="status">Loading more assets</span>
         </div>
-        <AssetMasonrySkeleton v-else-if="!leavingAssets && !selectedBoardId && loadStatus === 'pending' && assets.length === 0"
-          :view-settings="libraryView" />
-        <div v-else-if="!leavingAssets && !selectedBoardId && error" class="state error" role="alert"><strong>Unable to load
-            assets.</strong><span>Check your connection and try again.</span><button type="button"
-            @click="refresh()">Try
-            again</button></div>
-        <div v-else-if="masonryAssets.length === 0" class="state" :class="{ 'state-hidden': cardsHidden }">
-          <template v-if="selectedStaticBoard">
-            <strong>This board is empty</strong>
-            <span>Browse your library, open an asset, and add it to this board.</span>
-            <button type="button" @click="selectBoard('')">Browse assets</button>
-          </template>
-          <template v-else-if="selectedDynamicBoard">
-            <strong>No assets match this board’s filters</strong>
-            <span>Change the filters to include more approved assets.</span>
-            <button type="button" @click="openFilters">Change filters</button>
-          </template>
-          <template v-else>
-            <strong>{{ hasFilters ? 'No matching assets' : 'No assets yet' }}</strong>
-            <span>{{ hasFilters ? 'Change your search or clear the filters.' : 'Upload frames from the Figma plugin to build this library.' }}</span>
-            <button v-if="hasFilters" type="button" @click="clearFilters">Clear filters</button>
-          </template>
-        </div>
-        <AssetMasonry v-else :key="selectedBoardId || 'all'" :assets="masonryAssets" :hidden="cardsHidden"
-          :play-videos="!videoExpanded"
-          instant-open
-          :stable-columns="false" :animate-changes="!cardsHidden" :can-approve="canApprove && !arrangeExpanded"
-          :editable-titles="canRenameAssets && !arrangeExpanded" :view-settings="libraryView"
-          :interactive="!arrangeExpanded" :reorderable="arrangeExpanded" :selectable="arrangeExpanded"
-          :selected-ids="arrangeSelectedIds" @reorder="reorderSelectedBoardAssets"
-          @toggle-selection="toggleArrangeSelection" @toggle-approval="toggleAssetApproval" @rename="renameAsset"
-          @open="openAsset" />
-        <span class="sr-only" role="status" aria-live="polite">{{ assetRenameFeedback }}</span>
-        <div v-if="canLoadMore" ref="loadMoreSentinel" class="load-more-sentinel" aria-hidden="true" />
-        <span v-if="!selectedBoardId && loadStatus === 'pending' && assets.length" class="sr-only" role="status">Loading
-          more
-          assets</span>
       </div>
     </main>
     <AppDialog
@@ -1339,12 +1448,6 @@ main {
   transition-property: opacity, transform;
   transition-duration: 180ms, 220ms;
   transition-timing-function: ease-out, cubic-bezier(.2, 0, 0, 1)
-}
-
-.state.state-hidden {
-  pointer-events: none;
-  opacity: 0;
-  transform: translateY(16px)
 }
 
 .state strong {
@@ -1583,6 +1686,42 @@ button {
 .board-swipe-region {
   min-height: 45vh;
   touch-action: pan-y
+}
+
+.board-results {
+  position: relative;
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+  transition-property: opacity, transform;
+  transition-duration: 90ms, 160ms;
+  transition-timing-function: linear, cubic-bezier(.2, 0, 0, 1)
+}
+
+.board-results--leaving {
+  pointer-events: none;
+  opacity: 0
+}
+
+.board-results--leaving.board-results--forward {
+  transform: translate3d(calc(var(--space) * -2), 0, 0)
+}
+
+.board-results--leaving.board-results--backward {
+  transform: translate3d(calc(var(--space) * 2), 0, 0)
+}
+
+.board-results--entering {
+  pointer-events: none;
+  opacity: 1;
+  transition: none
+}
+
+.board-results--entering.board-results--forward {
+  transform: translate3d(calc(var(--space) * 2), 0, 0)
+}
+
+.board-results--entering.board-results--backward {
+  transform: translate3d(calc(var(--space) * -2), 0, 0)
 }
 
 .selected-board-heading {
@@ -2329,15 +2468,6 @@ button {
   background: var(--color-surface)
 }
 
-.preview img {
-  opacity: 0;
-  transition: opacity .22s ease-out
-}
-
-.preview img.is-loaded {
-  opacity: 1
-}
-
 .asset-card {
   opacity: 1
 }
@@ -2410,6 +2540,14 @@ button {
   .selected-board-title-word,
   .selected-board-meta,
   .selected-board-action-button {
+    transition: none
+  }
+
+  .board-results,
+  .board-results--leaving,
+  .board-results--entering {
+    opacity: 1;
+    transform: none;
     transition: none
   }
 

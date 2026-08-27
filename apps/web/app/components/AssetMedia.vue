@@ -18,9 +18,13 @@ defineEmits<{ load: [] }>()
 const video = ref<HTMLVideoElement>()
 const sourceIndex = ref(0)
 const sourceCandidates = computed(() => [...new Set([props.src, ...props.fallbackSrcs].filter(Boolean))])
+const sourceCandidatesKey = computed(() => sourceCandidates.value.join('\n'))
 const currentSrc = computed(() => sourceCandidates.value[sourceIndex.value] ?? props.src)
 const currentSrcset = computed(() => sourceIndex.value === 0 ? props.srcset : undefined)
-watch(sourceCandidates, () => { sourceIndex.value = 0 })
+// Parent renders commonly allocate a fresh fallback array. Resetting from that
+// new identity made a successfully loaded fallback jump back to a failing
+// primary source and flash before falling back again.
+watch(sourceCandidatesKey, () => { sourceIndex.value = 0 })
 const useFallback = () => {
   if (sourceIndex.value >= sourceCandidates.value.length - 1) return
   sourceIndex.value += 1

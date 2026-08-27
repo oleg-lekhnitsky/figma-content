@@ -28,6 +28,7 @@ const props = withDefaults(defineProps<{
   editableTitles?: boolean
   playVideos?: boolean
   instantOpen?: boolean
+  instantCards?: boolean
   viewSettings?: BoardViewSettings
 }>(), {
   interactive: false,
@@ -44,7 +45,8 @@ const props = withDefaults(defineProps<{
   canApprove: false,
   editableTitles: false,
   playVideos: true,
-  instantOpen: false
+  instantOpen: false,
+  instantCards: false
 })
 const emit = defineEmits<{
   toggleSelection: [asset: T]
@@ -66,6 +68,8 @@ const mediaFallbacks = (asset: T) => {
     : [asset.originalUrl]
   return [...new Set(fallbacks.filter((fallback): fallback is string => Boolean(fallback) && fallback !== source))]
 }
+const mediaLoading = (index: number): 'eager' | 'lazy' => index < (props.instantCards ? 24 : 7) ? 'eager' : 'lazy'
+const mediaFetchPriority = (index: number): 'high' | 'auto' => index < (props.instantCards ? 12 : 7) ? 'high' : 'auto'
 
 const route = useRoute()
 const loadedImages = reactive(new Set<string>())
@@ -413,25 +417,25 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section ref="masonry" class="asset-masonry" :class="{ 'cards-hidden': !layoutReady, 'cards-leaving': hidden, 'column-layout': layout === 'column', 'stable-columns': stableColumns, 'custom-view': effectiveViewSettings, 'hide-text': effectiveViewSettings && !effectiveViewSettings.showText, 'is-arranging': reorderable }" :style="viewStyle" :aria-label="label">
+  <section ref="masonry" class="asset-masonry" :class="{ 'cards-hidden': !layoutReady, 'cards-leaving': hidden, 'instant-cards': instantCards, 'column-layout': layout === 'column', 'stable-columns': stableColumns, 'custom-view': effectiveViewSettings, 'hide-text': effectiveViewSettings && !effectiveViewSettings.showText, 'is-arranging': reorderable }" :style="viewStyle" :aria-label="label">
     <article
       v-for="(asset, index) in renderedAssets" :key="asset.id" class="asset-card"
       :class="{ 'is-priority': index < 7, 'is-selected': isSelected(asset.id), 'is-dragging': draggedId === asset.id, 'is-pointer-dragging': pointerDragging && draggedId === asset.id, 'is-drop-target': dropIndex === index && draggedId !== asset.id, 'has-quick-actions': quickActionsAssetId === asset.id }"
       :data-asset-id="asset.id"
-      :style="{ '--media-stagger': `${Math.min(index * 35, 280)}ms` }"
+      :style="{ '--media-stagger': instantCards ? '0ms' : `${Math.min(index * 35, 280)}ms` }"
       @pointerdown="startMouseDrag($event, index)" @pointermove="movePointerDrag" @pointerup="finishPointerDrag"
       @pointercancel="cancelPointerDrag" @lostpointercapture="handlePointerCaptureLost"
       @selectstart="preventNativeCardSelection" @dragstart="preventNativeCardSelection">
       <div
-        class="preview" :class="{ 'is-loading': !loadedImages.has(asset.id), 'has-context-actions': interactive && !reorderable && Boolean(asset.figma_url || canApprove) }"
+        class="preview" :class="{ 'is-loading': !instantCards && !loadedImages.has(asset.id), 'has-context-actions': interactive && !reorderable && Boolean(asset.figma_url || canApprove) }"
         :style="{ aspectRatio: `${asset.width} / ${asset.height}` }"
         @pointerdown="startQuickActionsHold($event, asset)" @pointermove="moveQuickActionsHold"
         @pointerup="finishQuickActionsHold" @pointercancel="cancelQuickActionsHold"
         @contextmenu="openQuickActionsContextMenu($event, asset)">
         <NuxtLink v-if="interactive" class="preview-link" :to="assetLink(asset.id)" :aria-label="`View ${asset.title}`" @click="openAsset($event, asset.id)">
-          <AssetMedia :class="{ 'is-loaded': loadedImages.has(asset.id) }" :data-asset-id="asset.id" :src="mediaSource(asset)" :fallback-srcs="mediaFallbacks(asset)" :sizes="previewSizes" :mime-type="asset.mime_type" :width="asset.width" :height="asset.height" :alt="`Preview of ${asset.title}`" :loading="index < 7 ? 'eager' : 'lazy'" :fetchpriority="index < 7 ? 'high' : 'auto'" :autoplay="playVideos" @load="markImageLoaded(asset.id)" />
+          <AssetMedia :class="{ 'is-loaded': instantCards || loadedImages.has(asset.id) }" :data-asset-id="asset.id" :src="mediaSource(asset)" :fallback-srcs="mediaFallbacks(asset)" :sizes="previewSizes" :mime-type="asset.mime_type" :width="asset.width" :height="asset.height" :alt="`Preview of ${asset.title}`" :loading="mediaLoading(index)" :fetchpriority="mediaFetchPriority(index)" :autoplay="playVideos" @load="markImageLoaded(asset.id)" />
         </NuxtLink>
-        <AssetMedia v-else :class="{ 'is-loaded': loadedImages.has(asset.id) }" :data-asset-id="asset.id" :src="mediaSource(asset)" :fallback-srcs="mediaFallbacks(asset)" :sizes="previewSizes" :mime-type="asset.mime_type" :width="asset.width" :height="asset.height" :alt="asset.title" :loading="index < 7 ? 'eager' : 'lazy'" :fetchpriority="index < 7 ? 'high' : 'auto'" :autoplay="playVideos" @load="markImageLoaded(asset.id)" />
+        <AssetMedia v-else :class="{ 'is-loaded': instantCards || loadedImages.has(asset.id) }" :data-asset-id="asset.id" :src="mediaSource(asset)" :fallback-srcs="mediaFallbacks(asset)" :sizes="previewSizes" :mime-type="asset.mime_type" :width="asset.width" :height="asset.height" :alt="asset.title" :loading="mediaLoading(index)" :fetchpriority="mediaFetchPriority(index)" :autoplay="playVideos" @load="markImageLoaded(asset.id)" />
         <div v-if="interactive && (asset.figma_url || canApprove)" class="card-quick-actions" role="menu" :aria-label="`Actions for ${asset.title}`"><a v-if="asset.figma_url" class="figma-button" role="menuitem" :href="asset.figma_url" target="_blank" rel="noopener noreferrer" aria-label="Open in Figma" title="Open in Figma" @pointerdown.stop><Figma :size="16" aria-hidden="true" /></a><button v-if="canApprove" class="card-approval-toggle" type="button" role="menuitemcheckbox" :aria-checked="asset.status === 'approved'" :aria-label="asset.status === 'approved' ? `Remove approval from ${asset.title}` : `Approve ${asset.title}`" :title="asset.status === 'approved' ? 'Remove approval' : 'Approve'" @pointerdown.stop @click.stop="emit('toggleApproval', asset)"><Heart :size="16" :weight="asset.status === 'approved' ? 'Filled' : 'Outline'" aria-hidden="true" /></button></div>
         <div class="preview-actions"><slot name="previewActions" :asset="asset" /></div>
         <button v-if="selectable" class="selection-control" type="button" :class="{ active: isSelected(asset.id) }" :aria-label="`${isSelected(asset.id) ? 'Deselect' : 'Select'} ${asset.title}`" :aria-pressed="isSelected(asset.id)" @click="emit('toggleSelection', asset)" />
@@ -462,6 +466,7 @@ onBeforeUnmount(() => {
 .asset-masonry.column-layout{--column-viewport-margin:clamp(24px,6vh,64px);width:min(760px,100%);margin-inline:auto;grid-template-columns:minmax(0,1fr);row-gap:0}.asset-masonry.column-layout .asset-card{padding-bottom:var(--section-gap)}.asset-masonry.column-layout .preview{height:auto;max-height:calc(100vh - var(--column-viewport-margin)*2);max-height:calc(100dvh - var(--column-viewport-margin)*2);overflow:visible;clip-path:none;background:transparent}.asset-masonry.column-layout .preview:not(.is-loading){aspect-ratio:auto!important}.asset-masonry.column-layout .preview :is(img,video){width:auto;height:auto;max-width:100%;max-height:calc(100vh - var(--column-viewport-margin)*2);max-height:calc(100dvh - var(--column-viewport-margin)*2);margin-inline:auto;border-radius:var(--radius);object-fit:contain}.asset-masonry.column-layout .card-body{flex-direction:column;align-items:center;justify-content:center;text-align:center}
 .asset-masonry.column-layout .preview :deep(.asset-media-picture img){width:auto;height:auto;max-width:100%;max-height:calc(100vh - var(--column-viewport-margin)*2);max-height:calc(100dvh - var(--column-viewport-margin)*2);margin-inline:auto;border-radius:var(--radius);object-fit:contain}
 .asset-card{position:relative;min-width:0;padding-bottom:calc(var(--space)*2);color:inherit;background:transparent;opacity:0;transform:translateY(16px);transition-property:opacity,transform;transition-duration:.18s,.22s;transition-delay:var(--media-stagger,0ms);transition-timing-function:ease-out,cubic-bezier(.2,0,0,1)}.asset-masonry:not(.cards-hidden) .asset-card{opacity:1;transform:translateY(0)}.asset-masonry.is-masonry .asset-card{grid-row-end:span var(--card-rows)}
+.asset-masonry.instant-cards .asset-card{opacity:1;transform:none;transition:none}
 .asset-masonry.is-arranging .asset-card{cursor:grab}.asset-masonry.is-arranging .asset-card:active{cursor:grabbing}.asset-card.is-dragging{opacity:.35}.asset-card.is-pointer-dragging{pointer-events:none}.asset-card.is-drop-target .preview{box-shadow:0 0 0 3px var(--color-accent)}
 .asset-masonry.is-arranging .preview :is(img,video){-webkit-user-drag:none;-webkit-user-select:none;user-select:none}
 .asset-masonry.is-arranging .asset-card .preview{animation:arrange-wiggle 170ms ease-in-out infinite alternate;transform-origin:50% 45%}.asset-masonry.is-arranging .asset-card:nth-child(2n) .preview{animation-duration:190ms;animation-delay:-85ms;animation-direction:alternate-reverse}.asset-masonry.is-arranging .asset-card:nth-child(3n) .preview{animation-duration:155ms;animation-delay:-130ms}.asset-masonry.is-arranging .asset-card.is-dragging .preview{animation:none;rotate:0deg}@keyframes arrange-wiggle{from{rotate:-.7deg}to{rotate:.7deg}}

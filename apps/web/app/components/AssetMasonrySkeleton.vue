@@ -2,9 +2,22 @@
 import type { BoardViewSettings } from '@content-library/shared'
 import { boardViewStyle } from '../utils/board-view-style'
 
-const props = withDefaults(defineProps<{ label?: string; viewSettings?: BoardViewSettings }>(), { label: 'Loading assets' })
+const props = withDefaults(defineProps<{
+  label?: string
+  viewSettings?: BoardViewSettings
+  ratios?: string[]
+  count?: number
+}>(), {
+  label: 'Loading assets',
+  ratios: () => [],
+  count: 8
+})
 
-const ratios = ['4 / 5', '1 / 1', '3 / 4', '4 / 5', '1 / 1', '3 / 4', '4 / 5', '1 / 1']
+const fallbackRatios = ['4 / 5', '1 / 1', '3 / 4']
+const ratios = computed(() => Array.from(
+  { length: Math.max(props.ratios.length, Math.min(props.count, 24)) },
+  (_, index) => props.ratios[index] ?? fallbackRatios[index % fallbackRatios.length]
+))
 const viewStyle = computed(() => props.viewSettings ? boardViewStyle(props.viewSettings) : undefined)
 </script>
 
