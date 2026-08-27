@@ -49,27 +49,25 @@ onBeforeUnmount(() => {
 <style scoped>
 .app-splash {
   position: fixed;
-  z-index: 10000;
-  top: 0;
-  right: 0;
-  left: 0;
-  height: 100vh;
-  height: 100svh;
+  z-index: 2147483647;
+  inset: 0;
   display: none;
-  place-items: center;
   overflow: hidden;
   contain: layout paint;
   color: var(--color-fg);
-  background: var(--color-bg);
-  opacity: 1;
-  pointer-events: none;
-  transition: opacity 140ms ease-out
+  background: var(--color-bg, #fafafa)
 }
 
 .app-splash-art {
+  position: absolute;
+  top: 50svh;
+  left: 50%;
   width: min(87vw, 70rem);
   height: auto;
-  display: block
+  display: block;
+  opacity: 1;
+  transform: translate(-50%, -50%);
+  transition: opacity 140ms ease-out
 }
 
 @media (display-mode: standalone) {
@@ -78,12 +76,12 @@ onBeforeUnmount(() => {
   }
 }
 
-.app-splash--leaving {
+.app-splash--leaving .app-splash-art {
   opacity: 0
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .app-splash {
+  .app-splash-art {
     transition: none
   }
 }
