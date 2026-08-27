@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { useRoute } from '#imports'
+import { $fetch } from 'ofetch'
+import { onMounted, ref } from 'vue'
+
 const route = useRoute()
 const errorMessage = ref('')
 

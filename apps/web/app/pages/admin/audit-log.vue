@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { definePageMeta, navigateTo, useFetch } from '#imports'
 import { Xmark } from 'reicon-vue'
 
 definePageMeta({ middleware: 'auth' })

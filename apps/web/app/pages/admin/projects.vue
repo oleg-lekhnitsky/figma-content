@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { definePageMeta, navigateTo, useFetch } from '#imports'
+import { $fetch } from 'ofetch'
 import { Xmark } from 'reicon-vue'
+import { computed, reactive, ref } from 'vue'
 
 definePageMeta({ middleware: 'auth' })
 interface Project { id: string; name: string; slug: string; archived_at: string | null; created_at: string; assetCount: number }
