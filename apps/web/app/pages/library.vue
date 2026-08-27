@@ -1441,15 +1441,16 @@ onBeforeUnmount(() => {
               <span v-if="!selectedBoardId && loadStatus === 'pending' && assets.length" class="sr-only"
                 role="status">Loading more assets</span>
             </div>
-            <div v-if="boardGestureIsActive" class="board-results-layer board-results-incoming" aria-hidden="true">
+            <div v-if="boardGestureIsActive" class="board-results-layer board-results-incoming" aria-hidden="true" inert>
               <AssetMasonrySkeleton
                 v-if="boardGestureUsesSkeleton" label="Loading board"
                 :view-settings="libraryView" :ratios="boardGestureSkeletonRatios"
                 :count="boardGestureSkeletonCount" />
               <div v-else-if="boardGestureAssets.length === 0" class="state"><strong>This board is empty</strong></div>
               <AssetMasonry
-                v-else :assets="boardGestureAssets" :play-videos="false" instant-cards
-                :stable-columns="false" :view-settings="libraryView" />
+                v-else :assets="boardGestureAssets" :play-videos="false" instant-open instant-cards
+                :stable-columns="false" :animate-changes="false" :can-approve="canApprove"
+                :editable-titles="canRenameAssets" :view-settings="libraryView" interactive />
             </div>
           </div>
         </div>
@@ -1934,9 +1935,10 @@ button {
 
 .board-results.has-outgoing .board-results-layer {
   -webkit-backface-visibility: hidden;
-  backface-visibility: hidden;
-  will-change: transform
+  backface-visibility: hidden
 }
+
+.board-results-incoming { pointer-events: none }
 
 .board-results.has-outgoing .board-results-layer :deep(.preview) {
   clip-path: none

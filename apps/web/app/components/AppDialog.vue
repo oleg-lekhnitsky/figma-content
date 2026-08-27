@@ -183,6 +183,8 @@ const handleNativeClose = () => {
   }
 
   .app-dialog footer { grid-template-columns: 1fr; }
+  .app-dialog-confirm { grid-row: 1; }
+  .app-dialog-cancel { grid-row: 2; }
   .app-dialog button { min-height: var(--range-control-height-mobile); font-size: var(--font-size-body); }
 }
 
