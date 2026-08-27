@@ -22,7 +22,7 @@ onBeforeUnmount(() => {
   <NuxtRouteAnnouncer />
   <PullToRefresh />
   <div v-if="splashVisible" class="app-splash" :class="{ 'app-splash--leaving': splashLeaving }" role="status" aria-label="designdep.work">
-    <img class="app-splash-art" src="/pwa-mark.svg?v=5" alt="" aria-hidden="true" decoding="sync" fetchpriority="high">
+    <img class="app-splash-art" src="/pwa-mark.svg?v=6" width="1122" height="268" alt="" aria-hidden="true" decoding="sync" fetchpriority="high">
   </div>
   <NuxtPage />
 </template>
