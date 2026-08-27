@@ -1546,7 +1546,7 @@ const showAllAssets = () => {
   }
 
   .board-video-composer.has-mobile-panel > .video-composer-center :deep(.video-stage) {
-    place-items: start center
+    place-items: center center
   }
 
   .board-video-composer.has-mobile-panel > :deep(.video-timeline),
@@ -2005,8 +2005,8 @@ const showAllAssets = () => {
 
   .board-video-composer.is-stage-motion-ready :deep(.video-canvas-wrap) {
     transition-property: width, height;
-    transition-duration: calc(var(--filter-overlay-enter-duration)/2);
-    transition-timing-function: calc(var(--filter-overlay-enter-easing)/2)
+    transition-duration: calc(var(--filter-overlay-enter-duration)/4);
+    transition-timing-function: calc(var(--filter-overlay-enter-easing)/4)
   }
 
   .video-assets-panel li {
