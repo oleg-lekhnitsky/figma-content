@@ -2,6 +2,8 @@
 import type { BoardViewSettings } from '@content-library/shared'
 import { boardViewStyle } from '../utils/board-view-style'
 
+const emit = defineEmits<{ ready: [] }>()
+
 const props = withDefaults(defineProps<{
   label?: string
   viewSettings?: BoardViewSettings
@@ -36,6 +38,7 @@ const measureCards = () => {
       card.style.setProperty('--skeleton-card-rows', String(Math.max(1, Math.ceil(exactRows))))
     }
     root.classList.add('is-masonry')
+    emit('ready')
   })
 }
 

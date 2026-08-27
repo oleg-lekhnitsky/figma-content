@@ -500,6 +500,43 @@ watch(() => [selectedBoardData.value?.boardId, selectedBoardData.value?.assets] 
 let boardTransition = 0
 let boardRouteRevision = 0
 let boardRouteSync = Promise.resolve()
+let incomingBoardReady = true
+let resolveIncomingBoardReady: (() => void) | undefined
+const markIncomingBoardReady = () => {
+  incomingBoardReady = true
+  resolveIncomingBoardReady?.()
+  resolveIncomingBoardReady = undefined
+}
+const waitForIncomingBoardReady = () => {
+  if (incomingBoardReady) return Promise.resolve()
+  return new Promise<void>((resolve) => {
+    const finish = () => {
+      clearTimeout(timeout)
+      resolve()
+    }
+    resolveIncomingBoardReady = finish
+    const timeout = setTimeout(finish, 120)
+  })
+}
+const waitForBoardMotion = () => {
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const track = boardResults.value?.querySelector<HTMLElement>('.board-results-track')
+  if (reducedMotion || !track) return Promise.resolve()
+  return new Promise<void>((resolve) => {
+    const handleTransitionEnd = (event: TransitionEvent) => {
+      if (event.target === track && event.propertyName === 'transform') finish()
+    }
+    const finish = () => {
+      clearTimeout(timeout)
+      track.removeEventListener('transitionend', handleTransitionEnd)
+      track.removeEventListener('transitioncancel', finish)
+      resolve()
+    }
+    track.addEventListener('transitionend', handleTransitionEnd)
+    track.addEventListener('transitioncancel', finish, { once: true })
+    const timeout = setTimeout(finish, 300)
+  })
+}
 const syncBoardRoute = (boardId: string) => {
   const revision = ++boardRouteRevision
   boardRouteSync = boardRouteSync.catch(() => undefined).then(async () => {
@@ -524,6 +561,7 @@ const selectBoard = async (boardId: string) => {
   // Keep the outgoing grid mounted only for the short directional exit. The
   // destination itself is optimistic: local/cache assets render immediately
   // while useAsyncData reconciles its response in the background.
+  incomingBoardReady = false
   leavingAssets.value = outgoingAssets
   boardMotionPhase.value = 'preparing'
   localBoardId.value = boardId
@@ -539,12 +577,15 @@ const selectBoard = async (boardId: string) => {
 
   await nextTick()
   if (transition !== boardTransition) return
+  await waitForIncomingBoardReady()
+  if (transition !== boardTransition) return
+  await nextTick()
   void boardResults.value?.offsetWidth
   await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
   if (transition !== boardTransition) return
+  const motionFinished = waitForBoardMotion()
   boardMotionPhase.value = 'moving'
-  const motionDuration = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 180
-  await new Promise(resolve => setTimeout(resolve, motionDuration))
+  await motionFinished
   if (transition !== boardTransition) return
   leavingAssets.value = null
   boardMotionPhase.value = 'idle'
@@ -1240,7 +1281,8 @@ onBeforeUnmount(() => {
               <AssetMasonrySkeleton
                 v-if="selectedBoardIsResolving"
                 :label="`Loading ${selectedBoard?.title ?? 'board'}`" :view-settings="libraryView"
-                :ratios="selectedBoardSkeletonRatios" :count="selectedBoardSkeletonCount" />
+                :ratios="selectedBoardSkeletonRatios" :count="selectedBoardSkeletonCount"
+                @ready="markIncomingBoardReady" />
               <div
                 v-else-if="selectedBoardId && selectedBoardError && displayedAssets.length === 0"
                 class="state error" role="alert"><strong>Unable to load this board.</strong><span>Try another board or
@@ -1248,7 +1290,7 @@ onBeforeUnmount(() => {
               </div>
               <AssetMasonrySkeleton
                 v-else-if="!selectedBoardId && (loadStatus === 'idle' || loadStatus === 'pending') && assets.length === 0"
-                :view-settings="libraryView" />
+                :view-settings="libraryView" @ready="markIncomingBoardReady" />
               <div v-else-if="!selectedBoardId && error" class="state error" role="alert">
                 <strong>Unable to load assets.</strong><span>Check your connection and try again.</span><button type="button"
                   @click="refresh()">Try again</button>
@@ -1278,7 +1320,7 @@ onBeforeUnmount(() => {
                 :interactive="!arrangeExpanded" :reorderable="arrangeExpanded" :selectable="arrangeExpanded"
                 :selected-ids="arrangeSelectedIds" @reorder="reorderSelectedBoardAssets"
                 @toggle-selection="toggleArrangeSelection" @toggle-approval="toggleAssetApproval" @rename="renameAsset"
-                @open="openAsset" />
+                @open="openAsset" @ready="markIncomingBoardReady" />
               <span class="sr-only" role="status" aria-live="polite">{{ assetRenameFeedback }}</span>
               <div v-if="canLoadMore" ref="loadMoreSentinel" class="load-more-sentinel" aria-hidden="true" />
               <span v-if="!selectedBoardId && loadStatus === 'pending' && assets.length" class="sr-only"

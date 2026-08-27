@@ -49,6 +49,7 @@ const props = withDefaults(defineProps<{
   instantCards: false
 })
 const emit = defineEmits<{
+  ready: []
   toggleSelection: [asset: T]
   reorder: [fromIndex: number, toIndex: number]
   toggleApproval: [asset: T]
@@ -274,6 +275,10 @@ const handlePointerCaptureLost = (event: PointerEvent) => {
   pointerDragging.value = false
   commitReorder()
 }
+const revealLayout = () => {
+  layoutReady.value = true
+  emit('ready')
+}
 const measureCards = () => {
   if (layoutLocked) return
   cancelAnimationFrame(measureFrame)
@@ -283,7 +288,7 @@ const measureCards = () => {
     if (!root) return
     if (props.rowFlow) {
       root.classList.remove('is-masonry')
-      revealFrame = requestAnimationFrame(() => { layoutReady.value = true })
+      revealFrame = requestAnimationFrame(revealLayout)
       return
     }
     const styles = getComputedStyle(root)
@@ -296,7 +301,7 @@ const measureCards = () => {
       if (card.style.getPropertyValue('--card-rows') !== rows) card.style.setProperty('--card-rows', rows)
     }
     root.classList.add('is-masonry')
-    revealFrame = requestAnimationFrame(() => { layoutReady.value = true })
+    revealFrame = requestAnimationFrame(revealLayout)
   })
 }
 const syncLoadedImages = () => {
