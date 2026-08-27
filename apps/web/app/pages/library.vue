@@ -131,7 +131,7 @@ const { data, status: loadStatus, error, refresh } = await useLazyFetch<AssetLis
 })
 const { data: projectData, refresh: refreshProjects } = await useLazyFetch<{ data: { projects: Project[] } }>('/api/projects', { cache: false, server: false })
 const { data: tagData, refresh: refreshTags } = await useLazyFetch<{ data: { tags: Tag[] } }>('/api/tags', { cache: false, server: false })
-const { data: boardData, refresh: refreshBoards } = await useLazyFetch<BoardList>('/api/shares', { cache: false, server: false })
+const { data: boardData, status: boardStatus, refresh: refreshBoards } = await useLazyFetch<BoardList>('/api/shares', { cache: false, server: false })
 const boardCreator = ref<{ openCreate: () => Promise<void>; openCreateFromCurrentView: () => Promise<void> }>()
 const handleBoardCreated = async (boardId: string) => {
   await refreshBoards()
@@ -903,7 +903,7 @@ const updateToolbar = () => {
     const current = Math.max(window.scrollY, 0)
     const delta = current - lastScrollY
     lastScrollY = current
-    if (current <= 48) {
+    if (current <= 2) {
       toolbarVisible.value = true
       toolbarScrollDirection = 0
       toolbarDirectionalTravel = 0
@@ -916,7 +916,7 @@ const updateToolbar = () => {
       toolbarDirectionalTravel = 0
     }
     toolbarDirectionalTravel += Math.abs(delta)
-    if (direction > 0 && toolbarDirectionalTravel >= 10) toolbarVisible.value = false
+    if (direction > 0 && toolbarDirectionalTravel >= 2) toolbarVisible.value = false
     else if (direction < 0 && toolbarDirectionalTravel >= 6) toolbarVisible.value = true
   })
 }
@@ -1049,7 +1049,7 @@ onBeforeUnmount(() => {
         </nav>
         </header>
 
-        <div v-if="boards.length" class="board-tabs-shell" :class="{ 'toolbar-hidden': !toolbarVisible }">
+        <div v-if="boards.length || boardStatus === 'idle' || boardStatus === 'pending'" class="board-tabs-shell" :class="{ 'toolbar-hidden': !toolbarVisible }">
           <nav class="board-tabs" aria-label="Browse boards">
             <button type="button" :aria-pressed="!selectedBoardId" @click="selectBoard('')">All</button>
             <button v-for="board in boards" :key="board.id" type="button"
