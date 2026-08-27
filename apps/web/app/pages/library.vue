@@ -460,6 +460,11 @@ const leavingAssets = shallowRef<AssetCard[] | null>(null)
 type BoardMotionPhase = 'idle' | 'preparing' | 'moving'
 const boardMotionPhase = ref<BoardMotionPhase>('idle')
 const boardMotionDirection = ref<'forward' | 'backward'>('forward')
+const heldSkeletonBoardId = ref('')
+const showSelectedBoardSkeleton = computed(() => selectedBoardIsResolving.value || (
+  boardMotionPhase.value !== 'idle'
+  && heldSkeletonBoardId.value === selectedBoardId.value
+))
 const boardResults = ref<HTMLElement | null>(null)
 const boardImageWarmups = new Map<string, Promise<void>>()
 const warmBoardImage = (url: string) => {
@@ -534,7 +539,7 @@ const waitForBoardMotion = () => {
     }
     incoming.addEventListener('transitionend', handleTransitionEnd)
     incoming.addEventListener('transitioncancel', finish, { once: true })
-    const timeout = setTimeout(finish, 300)
+    const timeout = setTimeout(finish, 0)
   })
 }
 const syncBoardRoute = (boardId: string) => {
@@ -565,6 +570,7 @@ const selectBoard = async (boardId: string) => {
   leavingAssets.value = outgoingAssets
   boardMotionPhase.value = 'preparing'
   localBoardId.value = boardId
+  heldSkeletonBoardId.value = selectedBoardIsResolving.value ? boardId : ''
   void warmBoardImages(displayedAssets.value)
   syncBoardRoute(boardId)
   viewExpanded.value = false
@@ -589,6 +595,7 @@ const selectBoard = async (boardId: string) => {
   if (transition !== boardTransition) return
   leavingAssets.value = null
   boardMotionPhase.value = 'idle'
+  heldSkeletonBoardId.value = ''
   document.querySelector<HTMLElement>('.board-tabs button[aria-pressed="true"]')?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
   resetMobileBoardScroll()
 }
@@ -1279,7 +1286,7 @@ onBeforeUnmount(() => {
               <span v-if="selectedBoardId && selectedBoardStatus === 'pending' && displayedAssets.length" class="sr-only"
                 role="status">Loading the rest of {{ selectedBoard?.title ?? 'this board' }}</span>
               <AssetMasonrySkeleton
-                v-if="selectedBoardIsResolving"
+                v-if="showSelectedBoardSkeleton"
                 :label="`Loading ${selectedBoard?.title ?? 'board'}`" :view-settings="libraryView"
                 :ratios="selectedBoardSkeletonRatios" :count="selectedBoardSkeletonCount"
                 @ready="markIncomingBoardReady" />
@@ -1782,8 +1789,8 @@ button {
 
 .board-results.has-outgoing .board-results-layer {
   transition-property: transform;
-  transition-duration: 220ms;
-  transition-timing-function: cubic-bezier(.2, 0, 0, 1)
+  transition-duration: 0ms;
+  transition-timing-function: ease-out
 }
 
 .board-results--preparing .board-results-layer {
@@ -2650,9 +2657,9 @@ button {
     transition: none
   }
 
-  .board-results-track,
-  .board-results--preparing .board-results-track,
-  .board-results--moving .board-results-track {
+  .board-results-layer,
+  .board-results--preparing .board-results-layer,
+  .board-results--moving .board-results-layer {
     transform: none;
     transition: none
   }
