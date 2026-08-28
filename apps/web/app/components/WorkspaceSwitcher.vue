@@ -85,6 +85,14 @@ const currentId = computed(() => data.value?.data.currentId ?? '')
 const current = computed(() => workspaces.value.find(workspace => workspace.id === currentId.value))
 const contributors = computed(() => data.value?.data.contributors.items ?? [])
 const remainingContributorCount = computed(() => Math.max(0, (data.value?.data.contributors.total ?? 0) - contributors.value.length))
+const canRenameWorkspace = computed(() => {
+  const name = workspaceName.value.trim()
+  return Boolean(current.value && name && name !== current.value.name && !renameWorkspaceBusy.value)
+})
+const canInviteMember = computed(() => {
+  const email = inviteEmail.value.trim()
+  return !managementBusy.value && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+})
 watch(current, workspace => { workspaceName.value = workspace?.name ?? '' }, { immediate: true })
 watch(() => route.query.workspaceSettings, value => {
   if (value === '1') open.value = true
@@ -344,7 +352,7 @@ const deleteWorkspace = async () => {
       <div class="asset-filter-controls asset-filter-controls--filters asset-filter-controls--expanded workspace-panel">
         <button class="filter-sheet-handle" type="button" aria-label="Close workspaces" @click="closePanel"><span aria-hidden="true" /></button>
         <div class="filter-sheet-content">
-          <section class="filter-option-group workspace-choice-group">
+          <section class="filter-option-group">
             <h2 class="filter-overlay-title">Workspaces</h2>
             <div class="workspace-option-list">
               <button
@@ -371,9 +379,11 @@ const deleteWorkspace = async () => {
                 <span class="sr-only">Workspace name</span>
                 <input v-model="workspaceName" class="panel-field" required maxlength="120" placeholder="Workspace name">
               </label>
-              <button class="panel-primary-action" :disabled="renameWorkspaceBusy || !workspaceName.trim() || workspaceName.trim() === current.name">
-                {{ renameWorkspaceBusy ? 'Saving…' : 'Save name' }}
-              </button>
+              <Transition name="workspace-inline-action">
+                <button v-if="canRenameWorkspace || renameWorkspaceBusy" class="panel-primary-action workspace-inline-action" type="submit" :disabled="renameWorkspaceBusy">
+                  {{ renameWorkspaceBusy ? 'Saving…' : 'Save' }}
+                </button>
+              </Transition>
             </form>
             <p v-if="renameWorkspaceMessage" class="workspace-management-message" role="status" aria-live="polite">{{ renameWorkspaceMessage }}</p>
           </section>
@@ -382,20 +392,26 @@ const deleteWorkspace = async () => {
             <h2 class="filter-overlay-title">Invite someone to {{ current?.name ?? 'this workspace' }}</h2>
             <div class="workspace-management-grid">
               <form v-if="inviteComposerOpen" class="workspace-setting-card" @submit.prevent="inviteMember">
-                <label>
-                  <span class="sr-only">Email</span>
-                  <input ref="inviteEmailInput" v-model="inviteEmail" class="panel-field" required type="email" autocomplete="email" placeholder="Email">
-                </label>
                 <fieldset class="workspace-role-field">
                   <legend class="sr-only">Role</legend>
-                  <div class="filter-option-list filter-option-list--segmented video-choice-row">
+                  <div class="filter-option-list filter-option-list--segmented">
                     <button v-for="roleOption in workspaceRoles" :key="roleOption" type="button" :aria-pressed="inviteRole === roleOption" @click="inviteRole = roleOption">
                       {{ roleOption.charAt(0).toUpperCase() + roleOption.slice(1) }}
                     </button>
                   </div>
                 </fieldset>
                 <p class="workspace-role-description" aria-live="polite">{{ workspaceRoleDescriptions[inviteRole] }}</p>
-                <button class="panel-primary-action" :disabled="managementBusy || !inviteEmail.trim()">Create invitation</button>
+                <div class="workspace-inline-form-row">
+                  <label>
+                    <span class="sr-only">Email</span>
+                    <input ref="inviteEmailInput" v-model="inviteEmail" class="panel-field" required type="email" autocomplete="email" placeholder="Email">
+                  </label>
+                  <Transition name="workspace-inline-action">
+                    <button v-if="canInviteMember || (managementBusy && inviteEmail.trim())" class="panel-primary-action workspace-inline-action" type="submit" :disabled="managementBusy">
+                      {{ managementBusy ? 'Inviting…' : 'Invite' }}
+                    </button>
+                  </Transition>
+                </div>
               </form>
               <button v-else class="panel-secondary-action workspace-invite-another" type="button" @click="openInviteComposer">Invite another person</button>
             </div>
@@ -590,9 +606,7 @@ const deleteWorkspace = async () => {
 }
 
 .workspace-panel { min-width: min(30rem, calc(100vw - var(--space) * 2)); }
-.workspace-option-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: calc(var(--space) / 3); }
-
-.workspace-choice-group { gap: calc(var(--filter-overlay-group-gap) / 1.5); }
+.workspace-option-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--filter-option-gap); }
 
 .workspace-option-list > button {
   width: 100%;
@@ -601,7 +615,7 @@ const deleteWorkspace = async () => {
   align-content: start;
   align-items: stretch;
   gap: 0;
-  padding: calc(var(--space) / 4);
+  padding: var(--filter-option-gap);
   border: var(--filter-hairline) solid transparent;
   border-radius: calc(var(--radius) * 1.5);
   color: var(--filter-overlay-panel-color);
@@ -667,24 +681,53 @@ const deleteWorkspace = async () => {
   stroke: currentColor;
 }
 
-.workspace-management-grid { display: grid; gap: calc(var(--space) / 2); }
-.workspace-name-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: calc(var(--space) / 2); }
-.workspace-name-form .panel-primary-action { width: auto; }
+.workspace-management-grid { display: grid; gap: var(--space); }
+.workspace-name-form,
+.workspace-inline-form-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--filter-action-gap);
+}
+.workspace-name-form > label,
+.workspace-inline-form-row > label { min-width: 0; }
+.workspace-inline-action.panel-primary-action {
+  width: auto;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.workspace-inline-action-enter-active,
+.workspace-inline-action-leave-active {
+  max-width: 10rem;
+  overflow: hidden;
+  transition:
+    max-width 240ms cubic-bezier(.2, .8, .2, 1),
+    opacity 160ms ease,
+    translate 240ms cubic-bezier(.2, .8, .2, 1);
+}
+.workspace-inline-action-enter-from,
+.workspace-inline-action-leave-to {
+  max-width: 0;
+  opacity: 0;
+  translate: -.375rem 0;
+}
 
 .workspace-setting-card {
   min-width: 0;
   display: grid;
   align-content: start;
-  gap: calc(var(--space) * .75);
+  gap: var(--space);
   padding: 0;
   color: var(--filter-overlay-panel-color);
   background: transparent;
 }
 
 .workspace-role-field { min-width: 0; margin: 0; padding: 0; border: 0; }
-.workspace-role-field .video-choice-row { margin: 0; }
 .workspace-role-description {
-  margin: calc(var(--space) * -.25) var(--filter-option-padding) 0;
+  margin: 0;
+  padding-inline: var(--filter-option-padding);
   color: var(--filter-overlay-muted-color);
   font-size: var(--font-size-caption);
   letter-spacing: var(--letter-spacing-caption);
@@ -693,12 +736,12 @@ const deleteWorkspace = async () => {
 
 .workspace-management-message { margin: 0; color: var(--filter-overlay-muted-color); font-size: var(--font-size-caption); letter-spacing: var(--letter-spacing-caption); }
 
-.workspace-invitations { display: grid; gap: calc(var(--space) / 2); }
+.workspace-invitations { display: grid; gap: var(--filter-option-gap); }
 .workspace-invitations h3 {
   margin: 0;
   color: var(--filter-overlay-panel-color);
-  font-size: var(--filter-option-font-size);
-  font-weight: 500;
+  font-size: var(--filter-caption-size);
+  font-weight: 700;
 }
 .workspace-invitation-card,
 .workspace-member-card {
@@ -706,7 +749,7 @@ const deleteWorkspace = async () => {
   display: grid;
   align-items: center;
   gap: var(--filter-action-gap);
-  padding: calc(var(--space) / 2);
+  padding: var(--filter-action-gap);
   border-radius: calc(var(--radius) * 1.5);
   background: color-mix(in srgb, var(--filter-overlay-panel-color) 7%, transparent);
 }
@@ -714,7 +757,7 @@ const deleteWorkspace = async () => {
 .workspace-invitation-copy {
   min-width: 0;
   display: grid;
-  gap: .2rem;
+  gap: var(--filter-option-gap);
   padding-inline: calc(var(--filter-option-padding) / 2);
 }
 .workspace-invitation-copy strong {
@@ -737,7 +780,7 @@ const deleteWorkspace = async () => {
 .workspace-invitation-actions {
   display: flex;
   align-items: center;
-  gap: calc(var(--filter-action-gap) / 2);
+  gap: var(--filter-action-gap);
 }
 .workspace-invitation-actions .panel-secondary-action {
   width: auto;
@@ -745,7 +788,7 @@ const deleteWorkspace = async () => {
   padding-inline: var(--filter-option-padding);
 }
 
-.workspace-member-list { display: grid; gap: calc(var(--space) / 2); }
+.workspace-member-list { display: grid; gap: var(--filter-option-gap); }
 .workspace-member-card {
   grid-template-columns: auto minmax(0, 1fr) auto;
 }
@@ -782,14 +825,14 @@ const deleteWorkspace = async () => {
 .workspace-member-copy {
   min-width: 0;
   display: grid;
-  gap: .2rem;
+  gap: var(--filter-option-gap);
   padding-inline: calc(var(--filter-option-padding) / 2);
 }
 .workspace-member-heading {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: calc(var(--space) / 3);
+  gap: var(--filter-option-gap);
   line-height: 1.2;
 }
 .workspace-member-copy strong {
@@ -829,7 +872,7 @@ const deleteWorkspace = async () => {
 .workspace-member-controls {
   display: flex;
   align-items: center;
-  gap: calc(var(--filter-action-gap) / 2);
+  gap: var(--filter-action-gap);
 }
 .workspace-member-role {
   width: 7.5rem;
@@ -862,8 +905,8 @@ const deleteWorkspace = async () => {
   display: grid;
   align-content: start;
   justify-items: center;
-  gap: .15rem;
-  padding: .5rem .375rem .375rem;
+  gap: var(--filter-option-gap);
+  padding: var(--filter-action-gap) var(--filter-option-gap);
   text-align: center;
 }
 .workspace-option-copy strong { max-width: 100%; overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
@@ -878,15 +921,16 @@ const deleteWorkspace = async () => {
 
 @media (max-width: 520px) {
   .workspace-panel { min-width: 0; }
-  .workspace-option-list > button { padding: calc(var(--space) / 4); }
-  .workspace-option-copy { padding: .5rem .25rem .375rem; }
-  .workspace-name-form { grid-template-columns: 1fr; }
-  .workspace-name-form .panel-primary-action { width: 100%; }
   .workspace-invitation-card { grid-template-columns: minmax(0, 1fr); }
   .workspace-invitation-actions { justify-content: stretch; }
   .workspace-invitation-actions .panel-secondary-action { flex: 1 1 0; }
   .workspace-member-card { grid-template-columns: auto minmax(0, 1fr); }
   .workspace-member-controls { grid-column: 1 / -1; justify-content: stretch; }
   .workspace-member-role { width: auto; flex: 1 1 auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-inline-action-enter-active,
+  .workspace-inline-action-leave-active { transition: none; }
 }
 </style>

@@ -193,7 +193,7 @@ onBeforeUnmount(() => {
     display: none
   }
 
-  .selection-panel--wide :slotted(button) {
+  .selection-panel--wide:not(.selection-panel--filter-overlay) :slotted(button) {
     flex: 0 0 auto
   }
 }

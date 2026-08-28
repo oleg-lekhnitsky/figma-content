@@ -69,7 +69,6 @@
   --filter-sheet-height-mobile: min(90%, calc(100% - env(safe-area-inset-top)));
   --filter-view-sheet-max-height-mobile: min(60%, calc(100% - env(safe-area-inset-top)));
   --filter-sheet-row-height-mobile: 3.75rem;
-  --filter-sheet-group-gap-mobile: 1.375rem;
   --filter-sheet-inline-padding-mobile: calc(var(--space) * 2.0);
   --filter-sheet-content-bottom-mobile: max(calc(var(--space) * 3), env(safe-area-inset-bottom));
   --filter-sheet-content-padding-mobile: calc(var(--space) * 3.5) var(--filter-sheet-inline-padding-mobile) var(--filter-sheet-content-bottom-mobile);
@@ -893,13 +892,11 @@ button.panel-dropdown-trigger:focus-visible {
   }
 
   .selection-panel--filter-overlay .video-mobile-panel.is-mobile-open .video-panel-scroll {
-    --filter-overlay-group-gap: var(--filter-sheet-group-gap-mobile);
     height: 100%;
     max-height: 100%;
     display: grid;
     align-content: start;
     gap: var(--filter-overlay-group-gap);
-    gap: calc(var(--space) / .5);
     padding: var(--filter-sheet-content-padding-mobile);
     scroll-padding-bottom: var(--filter-sheet-content-bottom-mobile);
   }
@@ -1153,7 +1150,6 @@ button.panel-dropdown-trigger:focus-visible {
     --filter-action-height: var(--range-control-height-mobile);
     --filter-option-font-size: var(--font-size-body);
     --filter-action-font-size: var(--font-size-body);
-    --filter-overlay-group-gap: var(--filter-sheet-group-gap-mobile);
     position: relative;
     width: 100%;
     max-width: none;
@@ -1224,7 +1220,7 @@ button.panel-dropdown-trigger:focus-visible {
     scroll-padding-bottom: var(--filter-overlay-group-gap);
   }
 
-  .selection-panel--filter-overlay .filter-option-list > button,
+  .selection-panel--filter-overlay .filter-option-list:not(.filter-option-list--segmented) > button,
   .selection-panel--filter-overlay .filter-actions > button {
     flex-shrink: 0;
     
