@@ -686,8 +686,13 @@ const deleteWorkspace = async () => {
 .workspace-inline-form-row {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
+  gap: 0;
+}
+.workspace-name-form:has(.workspace-inline-action),
+.workspace-inline-form-row:has(.workspace-inline-action) {
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--filter-action-gap);
 }
 .workspace-name-form > label,
