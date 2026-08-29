@@ -621,8 +621,8 @@ const showAllAssets = () => {
   border-radius: var(--video-panel-radius);
   color: var(--filter-overlay-panel-color);
   background: var(--filter-overlay-panel-background);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none
 }
 
 :deep(.video-panel-scroll) {
@@ -962,8 +962,8 @@ const showAllAssets = () => {
   position: relative;
   isolation: isolate;
   background: transparent;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none
 }
 
 .video-composer-right > :deep(.video-inspector:first-child)::before {
@@ -972,8 +972,8 @@ const showAllAssets = () => {
   inset: 0;
   border-radius: inherit;
   background: var(--filter-overlay-panel-background);
-  backdrop-filter: none;
   -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   content: '';
   pointer-events: none
 }
@@ -1045,8 +1045,8 @@ const showAllAssets = () => {
   padding-bottom: calc(var(--video-inspector-control-gap)*2.5);
   border-radius: calc(var(--radius) + var(--video-inspector-control-gap)*2);
   background: var(--filter-overlay-panel-background);
-  backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation));
   -webkit-backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation));
+  backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation));
   box-shadow: 0 10px 30px oklch(0 0 0/.18)
 }
 
@@ -1201,8 +1201,8 @@ const showAllAssets = () => {
   border-radius: var(--video-panel-radius);
   color: var(--filter-overlay-panel-color);
   background: var(--filter-overlay-panel-background);
-  backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation));
-  -webkit-backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation))
+  -webkit-backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation));
+  backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation))
 }
 
 :deep(.video-stage canvas) {
@@ -1265,8 +1265,8 @@ const showAllAssets = () => {
   border-radius: var(--video-panel-radius);
   color: var(--filter-overlay-panel-color);
   background: var(--filter-overlay-panel-background);
-  backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation));
-  -webkit-backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation))
+  -webkit-backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation));
+  backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation))
 }
 
 :deep(.video-timeline-play) {
@@ -1640,8 +1640,8 @@ const showAllAssets = () => {
     border-radius: calc(var(--radius)*1.5);
     color: var(--filter-overlay-panel-color);
     background: var(--filter-overlay-panel-background-mobile);
-    backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation));
-    -webkit-backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation))
+    -webkit-backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation));
+    backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation))
   }
 
   .video-mobile-toolbar button {
@@ -1688,8 +1688,8 @@ const showAllAssets = () => {
     border-radius: 0;
     opacity: var(--sheet-backdrop-opacity, 1);
     background: var(--filter-overlay-backdrop-background);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none
   }
 
   .board-video-composer:not(.is-mobile-sheet-dragging) .video-mobile-backdrop {
@@ -1717,8 +1717,8 @@ const showAllAssets = () => {
     border-radius: calc(var(--radius-mobile)*2) calc(var(--radius-mobile)*2) 0 0;
     opacity: var(--sheet-content-opacity, 1);
     background: var(--filter-overlay-panel-background-mobile);
-    backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
     -webkit-backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
+    backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
     transform: translate3d(0, var(--video-mobile-sheet-drag-y, 0), 0);
     transition: transform var(--filter-sheet-drag-duration) var(--filter-overlay-enter-easing), opacity var(--filter-sheet-drag-duration) var(--filter-overlay-enter-easing);
     animation: video-sheet-in var(--filter-overlay-enter-duration) var(--filter-overlay-enter-easing) both
@@ -1834,8 +1834,8 @@ const showAllAssets = () => {
     color: #fff;
     background: rgb(0 0 0 / .32);
     box-shadow: 0 2px 12px rgb(0 0 0 / .22), inset 0 0 0 1px rgb(255 255 255 / .12);
-    backdrop-filter: blur(16px) saturate(125%);
     -webkit-backdrop-filter: blur(16px) saturate(125%);
+    backdrop-filter: blur(16px) saturate(125%);
     translate: -50% -50%;
     transition-property: scale, background-color, opacity;
     transition-duration: 150ms;
@@ -1995,8 +1995,8 @@ const showAllAssets = () => {
     min-height: 0;
     padding: 0;
     background: transparent;
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none
   }
 
   :deep(.video-canvas-wrap) {

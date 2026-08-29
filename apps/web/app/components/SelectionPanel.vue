@@ -101,8 +101,8 @@ onBeforeUnmount(() => {
   color: var(--color-fg);
   background: var(--color-bg);
   box-shadow: 0 18px 64px rgb(0 0 0/.18);
-  backdrop-filter: blur(80px) saturate(140%);
-  -webkit-backdrop-filter: blur(40px) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--filter-overlay-blur)) saturate(140%);
+  backdrop-filter: blur(var(--filter-overlay-blur)) saturate(140%);
   transform: translate3d(-50%, calc(var(--selection-panel-keyboard-offset, 0px) * -1), 0);
   transition: translate .24s cubic-bezier(.2, 0, 0, 1);
   will-change: transform;
@@ -121,8 +121,8 @@ onBeforeUnmount(() => {
   padding: 0;
   background: transparent;
   box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none
 }
 
 .selection-panel--raised {

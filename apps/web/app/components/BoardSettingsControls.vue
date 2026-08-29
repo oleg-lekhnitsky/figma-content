@@ -345,8 +345,8 @@ onBeforeUnmount(() => {
   text-align: center;
   transform: translateX(-50%);
   pointer-events: none;
-  backdrop-filter: blur(1rem);
   -webkit-backdrop-filter: blur(1rem);
+  backdrop-filter: blur(1rem);
 }
 
 .board-settings-feedback.error { background: rgb(150 24 20 / .88); }

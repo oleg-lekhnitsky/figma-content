@@ -102,8 +102,8 @@ const handleNativeClose = () => {
 
 .app-dialog::backdrop {
   background: var(--filter-overlay-backdrop-background);
-  backdrop-filter: blur(var(--filter-overlay-blur));
   -webkit-backdrop-filter: blur(var(--filter-overlay-blur));
+  backdrop-filter: blur(var(--filter-overlay-blur));
 }
 
 .app-dialog-panel {
@@ -112,8 +112,8 @@ const handleNativeClose = () => {
   padding: var(--filter-overlay-padding);
   border-radius: inherit;
   background: var(--filter-overlay-panel-background);
-  backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
   -webkit-backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
+  backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
 }
 
 .app-dialog header {

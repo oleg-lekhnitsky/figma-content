@@ -870,8 +870,8 @@ watch(() => props.assetId, id => {
 
 .asset-dialog::backdrop {
   background: color-mix(in srgb, var(--filter-overlay-backdrop-background) var(--asset-backdrop-tint-amount, 100%), transparent);
-  backdrop-filter: blur(var(--filter-overlay-blur));
   -webkit-backdrop-filter: blur(var(--filter-overlay-blur));
+  backdrop-filter: blur(var(--filter-overlay-blur));
   transition-property: background-color;
   transition-duration: .15s;
   transition-timing-function: ease-out
@@ -889,8 +889,8 @@ watch(() => props.assetId, id => {
 
 .asset-dialog.is-closing::backdrop {
   background: transparent;
-  backdrop-filter: blur(var(--filter-overlay-blur));
-  -webkit-backdrop-filter: blur(var(--filter-overlay-blur))
+  -webkit-backdrop-filter: blur(var(--filter-overlay-blur));
+  backdrop-filter: blur(var(--filter-overlay-blur))
 }
 
 @starting-style {
@@ -902,8 +902,8 @@ watch(() => props.assetId, id => {
   .asset-dialog[open]::backdrop {
     opacity: 0;
     background: transparent;
-    backdrop-filter: blur(0);
-    -webkit-backdrop-filter: blur(0)
+    -webkit-backdrop-filter: blur(0);
+    backdrop-filter: blur(0)
   }
 }
 
@@ -1177,8 +1177,8 @@ h1 {
   background: var(--filter-overlay-panel-background);
   box-shadow: none;
   opacity: 1;
-  backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
   -webkit-backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
+  backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
   transition:
     scale 150ms ease-out,
     background-color 150ms ease-out;
@@ -1258,8 +1258,8 @@ h1 {
   padding: var(--filter-overlay-padding);
   color: var(--color-fg);
   background: var(--filter-overlay-backdrop-background);
-  backdrop-filter: blur(var(--filter-overlay-blur));
   -webkit-backdrop-filter: blur(var(--filter-overlay-blur));
+  backdrop-filter: blur(var(--filter-overlay-blur));
   overflow: hidden
 }
 
@@ -1567,8 +1567,8 @@ li span {
     --asset-overlay-divider: rgb(0 0 0 / .14);
     color: var(--asset-overlay-fg);
     background: transparent;
-    backdrop-filter: none;
     -webkit-backdrop-filter: none;
+    backdrop-filter: none;
     grid-template-rows: minmax(0, 1fr)
   }
 

@@ -414,8 +414,8 @@ type="button"
 
 .share-dialog::backdrop {
   background: var(--filter-overlay-backdrop-background);
-  backdrop-filter: blur(var(--filter-overlay-blur));
   -webkit-backdrop-filter: blur(var(--filter-overlay-blur));
+  backdrop-filter: blur(var(--filter-overlay-blur));
 }
 
 .share-panel {

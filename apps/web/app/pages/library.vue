@@ -2368,8 +2368,8 @@ button {
   color: var(--material-tinted-fg);
   background: var(--material-tinted-bg);
   font-size: 16px;
-  backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
-  -webkit-backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation))
+  -webkit-backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
+  backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation))
 }
 
 .mobile-search-form input::placeholder {
