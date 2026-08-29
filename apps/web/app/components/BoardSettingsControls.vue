@@ -158,6 +158,8 @@ onBeforeUnmount(() => {
 
 .board-settings-intro .filter-overlay-title { margin: 0; }
 
+
+
 .board-type-summary,
 .board-setting-group p {
   margin: 0;

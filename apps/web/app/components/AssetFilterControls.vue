@@ -112,19 +112,19 @@ const sortOptions = [
         <label class="filter-visible-search"><span class="sr-only">Search assets</span><input :value="search" type="search" placeholder="Type to search" @input="emit('update:search', ($event.target as HTMLInputElement).value)"></label>
       </section>
       <section v-if="showStatus" class="filter-option-group">
-        <h3>Status</h3>
+        <h2 class="filter-overlay-title">Status</h2>
         <div class="filter-option-list filter-option-list--segmented"><button type="button" :aria-pressed="status === ''" @click="emit('update:status', '')">All</button><button type="button" :aria-pressed="status === 'approved'" @click="emit('update:status', 'approved')">Approved</button><button type="button" :aria-pressed="status === 'draft'" @click="emit('update:status', 'draft')">Draft</button></div>
       </section>
       <section v-if="showAssetFilters" class="filter-option-group">
-        <h3>Projects</h3>
+        <h2 class="filter-overlay-title">Projects</h2>
         <div class="filter-option-list"><button type="button" :aria-pressed="projectIds.length === 0" @click="emit('update:projectIds', [])">All</button><button v-for="option in projects" :key="option.id" type="button" :aria-pressed="projectIds.includes(option.id)" @click="emit('update:projectIds', toggleOption(projectIds, option.id))">{{ option.name }}</button></div>
       </section>
       <section v-if="showAssetFilters" class="filter-option-group">
-        <h3>Tags</h3>
+        <h2 class="filter-overlay-title">Tags</h2>
         <div class="filter-option-list"><button type="button" :aria-pressed="tagIds.length === 0" @click="emit('update:tagIds', [])">All</button><button v-for="option in tags" :key="option.id" type="button" :aria-pressed="tagIds.includes(option.id)" @click="emit('update:tagIds', toggleOption(tagIds, option.id))">{{ option.name }}</button></div>
       </section>
       <section v-if="showAssetFilters" class="filter-option-group">
-        <h3>Date</h3>
+        <h2 class="filter-overlay-title">Date</h2>
         <div v-if="useDatePresets" class="filter-option-list"><button v-for="option in dateOptions" :key="option.value" type="button" :aria-pressed="dateRange === option.value" @click="emit('update:dateRange', option.value)">{{ option.label }}</button></div>
         <div v-if="!useDatePresets || dateRange === 'custom'" class="filter-date-range">
           <AppDatePicker :model-value="dateFrom" label="From" :max="dateTo" surface="field" @update:model-value="emit('update:dateFrom', $event)" />
@@ -132,7 +132,7 @@ const sortOptions = [
         </div>
       </section>
       <section v-if="showSort" class="filter-option-group">
-        <h3>Sort</h3>
+        <h2 class="filter-overlay-title">Sort</h2>
         <div class="filter-option-list"><button v-for="option in sortOptions" :key="option.value" type="button" :aria-pressed="sort === option.value" @click="emit('update:sort', option.value)">{{ option.label }}</button></div>
       </section>
       </template>

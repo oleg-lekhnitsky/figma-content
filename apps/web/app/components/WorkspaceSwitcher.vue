@@ -407,7 +407,7 @@ const deleteWorkspace = async () => {
               </label>
               <Transition
                 name="workspace-inline-action"
-                @before-enter="measureInlineAction"
+                @enter="measureInlineAction"
                 @before-leave="measureInlineAction"
                 @after-leave="clearInlineActionMeasure"
               >
@@ -420,7 +420,7 @@ const deleteWorkspace = async () => {
           </section>
 
           <section v-if="current?.role === 'admin'" class="filter-option-group workspace-management-section">
-            <h2 class="filter-overlay-title">Invite someone to {{ current?.name ?? 'this' }} workspace</h2>
+            <h2 class="filter-overlay-title">Invite to {{ current?.name ?? 'this' }} workspace</h2>
             <div class="workspace-management-grid">
               <form v-if="inviteComposerOpen" class="workspace-setting-card" @submit.prevent="inviteMember">
                 <fieldset class="workspace-role-field">
@@ -439,7 +439,7 @@ const deleteWorkspace = async () => {
                   </label>
                   <Transition
                     name="workspace-inline-action"
-                    @before-enter="measureInlineAction"
+                    @enter="measureInlineAction"
                     @before-leave="measureInlineAction"
                     @after-leave="clearInlineActionMeasure"
                   >
@@ -642,7 +642,12 @@ const deleteWorkspace = async () => {
 }
 
 .workspace-panel { min-width: min(30rem, calc(100vw - var(--space) * 2)); }
-.workspace-option-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--filter-option-gap); }
+.workspace-option-list {
+  --workspace-option-radius: calc(var(--radius) * 1.5);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--filter-option-gap);
+}
 
 .workspace-option-list > button {
   width: 100%;
@@ -653,7 +658,7 @@ const deleteWorkspace = async () => {
   gap: 0;
   padding: var(--filter-option-gap);
   border: var(--filter-hairline) solid transparent;
-  border-radius: calc(var(--radius) * 1.5);
+  border-radius: var(--workspace-option-radius);
   color: var(--filter-overlay-panel-color);
   background: color-mix(in srgb, var(--filter-overlay-panel-color) 7%, transparent);
   text-align: left;
@@ -686,7 +691,7 @@ const deleteWorkspace = async () => {
   grid-template-rows: repeat(2, minmax(0, 1fr));
   gap: 2px;
   overflow: hidden;
-  border-radius: calc(var(--radius) * 1.5);
+  border-radius: calc(var(--workspace-option-radius) - var(--filter-option-gap));
   background: color-mix(in srgb, currentColor 10%, transparent);
 }
 
@@ -726,8 +731,8 @@ const deleteWorkspace = async () => {
   align-items: center;
   gap: 0;
   transition:
-    grid-template-columns 240ms cubic-bezier(.2, .8, .2, 1),
-    column-gap 240ms cubic-bezier(.2, .8, .2, 1);
+    grid-template-columns var(--filter-action-transition-duration) var(--filter-overlay-enter-easing),
+    column-gap var(--filter-action-transition-duration) var(--filter-overlay-enter-easing);
 }
 .workspace-name-form:has(.workspace-inline-action),
 .workspace-inline-form-row:has(.workspace-inline-action) {
@@ -744,20 +749,20 @@ const deleteWorkspace = async () => {
 .workspace-name-form > label,
 .workspace-inline-form-row > label { min-width: 0; }
 .workspace-inline-action.panel-primary-action {
-  width: 100%;
-  min-width: 0;
-  overflow: hidden;
+  justify-self: end;
+  width: max-content;
+  min-width: max-content;
   white-space: nowrap;
 }
 
 .workspace-inline-action.panel-primary-action:is(.workspace-inline-action-enter-active, .workspace-inline-action-leave-active) {
   transition:
-    opacity 160ms ease,
-    translate 240ms cubic-bezier(.2, .8, .2, 1);
+    opacity var(--filter-action-transition-duration) var(--filter-overlay-enter-easing),
+    translate var(--filter-action-transition-duration) var(--filter-overlay-enter-easing);
 }
 .workspace-inline-action.panel-primary-action:is(.workspace-inline-action-enter-from, .workspace-inline-action-leave-to) {
   opacity: 0;
-  translate: -.375rem 0;
+  translate: var(--filter-action-transition-distance) 0;
 }
 
 .workspace-setting-card {
@@ -773,7 +778,7 @@ const deleteWorkspace = async () => {
 .workspace-role-field { min-width: 0; margin: 0; padding: 0; border: 0; }
 .workspace-role-description {
   margin: 0;
-  padding-inline: var(--filter-option-padding);
+  padding: calc(var(--filter-option-padding) / 2);
   color: var(--filter-overlay-muted-color);
   font-size: var(--font-size-caption);
   letter-spacing: var(--letter-spacing-caption);
@@ -804,7 +809,7 @@ const deleteWorkspace = async () => {
   min-width: 0;
   display: grid;
   gap: var(--filter-option-gap);
-  padding-inline: calc(var(--filter-option-padding) / 2);
+  padding: calc(var(--filter-option-padding) / 2);
 }
 .workspace-invitation-copy strong {
   min-width: 0;
@@ -870,7 +875,7 @@ const deleteWorkspace = async () => {
   min-width: 0;
   display: grid;
   gap: calc(var(--filter-option-gap)*.5);
-  padding-inline: calc(var(--filter-option-padding) / 2);
+  padding: calc(var(--filter-option-padding) / 2);
 }
 .workspace-member-heading {
   min-width: 0;
@@ -943,6 +948,7 @@ const deleteWorkspace = async () => {
   color: var(--filter-overlay-muted-color);
   font-size: var(--font-size-label);
   line-height: 1.25;
+  padding: 0 calc(var(--filter-option-padding) / 2) ;
 }
 .workspace-delete-action { justify-self: start; width: auto; }
 

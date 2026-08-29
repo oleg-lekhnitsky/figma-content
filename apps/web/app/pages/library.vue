@@ -1337,13 +1337,13 @@ onBeforeUnmount(() => {
           @close="closeFilters" @after-leave="finishExpandedPanelClose">
           <AssetFilterControls v-model:status="status" v-model:project-ids="projectIds" v-model:tag-ids="tagIds"
             v-model:date-range="dateRange" v-model:date-from="customDateFrom" v-model:date-to="customDateTo"
-            v-model:sort="sort" :projects="projects" :tags="tags" heading="All assets" show-status use-date-presets
+            v-model:sort="sort" :projects="projects" :tags="tags" show-status use-date-presets
             show-sort expanded :actions-visible="hasFilters">
             <template #actions><button class="clear-filters-button" type="button" @click="clearFilters">Clear
                 filters</button><button v-if="canShare" class="filter-create-board" type="button"
                 @click="openBoardCreator(true)">Create board</button></template>
             <section v-if="submitters.length" class="filter-option-group submitter-filter-group">
-              <h3 id="asset-filter-submitters">Submitters</h3>
+              <h2 class="filter-overlay-title" id="asset-filter-submitters">Submitters</h2>
               <div class="submitter-stack" role="group" aria-labelledby="asset-filter-submitters"><button
                   v-for="submitter in visibleSubmitters" :key="submitter.id" class="submitter-avatar" type="button"
                   :aria-label="`Filter by ${submitterName(submitter)}`" :aria-pressed="uploadedBys.includes(submitter.id)"
