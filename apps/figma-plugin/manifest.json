@@ -6,7 +6,6 @@
   "ui": "dist/index.html",
   "editorType": ["figma"],
   "documentAccess": "dynamic-page",
-  "enablePrivatePluginApi": true,
   "networkAccess": {
     "allowedDomains": ["https://figma-content-web.vercel.app"],
     "devAllowedDomains": ["http://localhost:3000"],

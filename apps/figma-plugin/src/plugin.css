@@ -21,7 +21,7 @@
   --field-gap: calc(var(--space) / 3);
   --panel-inset: calc(var(--space) * 1.25);
   --footer-reserved-space: calc(var(--control-height) + var(--panel-inset) * 2 + var(--panel-gap));
-  --video-panel-section-gap: calc(var(--space) * .75);
+  --video-panel-section-gap: calc(var(--space) * 2.25);
   --video-panel-control-gap: .5rem;
   --video-panel-label-gap: .375rem;
   --video-panel-title-size: 1.5rem;
@@ -50,7 +50,6 @@
   --select-chevron-size: .75rem;
   --select-chevron-inset: var(--supporting-text-inset);
   --filter-option-height: 2.125rem;
-  --filter-option-padding: 1.75rem;
   --font-size-h3: 1.25rem;
   --font-size-body: 1rem;
   --font-size-body-compact: .875rem;
@@ -147,6 +146,10 @@ label,
   text-transform: none;
 }
 
+.field-label {
+  padding: calc(var(--panel-inset)/2);
+}
+
 header {
   display: flex;
   align-items: center;
@@ -198,7 +201,7 @@ main > form {
 
 form > section {
   display: grid;
-  gap: var(--video-panel-section-gap);
+  gap: var(--cluster-gap);
 }
 
 .auth {
@@ -224,6 +227,12 @@ form > section {
 
 label { display: grid; gap: var(--video-panel-label-gap); }
 
+
+label > span{
+padding: calc(var(--panel-inset)/2);
+}
+
+
 button,
 input,
 select,
@@ -242,7 +251,7 @@ button {
   transition: scale 150ms ease, opacity 150ms ease, background-color 150ms ease;
 }
 
-button:hover { scale: 1.02; }
+button:hover { opacity: .90; }
 button:active { scale: .98; }
 button:disabled { opacity: .42; cursor: default; scale: 1; }
 
@@ -312,6 +321,46 @@ textarea::placeholder { color: var(--panel-muted); }
   background: var(--panel-field-bg);
 }
 
+.file-link-panel {
+  display: grid;
+  gap: var(--video-panel-label-gap);
+}
+
+.file-link-header h1,
+.file-link-shortcut {
+  display: inline-flex;
+  align-items: center;
+}
+
+.file-link-header h1 {
+  flex-wrap: wrap;
+  gap: var(--cluster-gap);
+}
+
+.file-link-shortcut {
+  gap: 3px;
+  color: var(--color-muted);
+  font-size: var(--font-size-caption);
+  letter-spacing: 0;
+}
+
+.file-link-shortcut kbd {
+  padding: .2em .4em;
+  border-radius: 4px;
+  background: rgb(0 0 0 / 7%);
+  font: inherit;
+  font-weight: 600;
+}
+
+.file-link-shortcut > span { opacity: .6; }
+
+.file-link-step {
+  display: grid;
+  align-items: center;
+}
+
+.file-link-panel p { margin: 0; }
+
 .destination-note,
 .field-note,
 .frame-fields p,
@@ -331,7 +380,10 @@ textarea::placeholder { color: var(--panel-muted); }
   text-align: center;
 }
 
-.center strong { font-size: var(--font-size-body); }
+.center strong {
+  font-size: var(--font-size-body);
+  font-weight: 400;
+}
 
 .section-title {
   display: flex;
@@ -361,7 +413,7 @@ form > .frames-section {
 .frames li {
   display: grid;
   grid-template-columns: 5.5rem minmax(0, 1fr);
-  gap: var(--video-panel-section-gap);
+  gap: var(--cluster-gap);
   padding: var(--panel-inset);
   border-radius: var(--radius-mobile);
   color: var(--material-tinted-fg);
@@ -440,7 +492,6 @@ form > .frames-section {
   display: inline-flex;
   align-items: center;
   gap: var(--field-gap);
-  padding: var(--filter-option-padding);
   color: var(--material-tinted-fg);
   background: transparent;
   line-height: 1;
@@ -521,12 +572,12 @@ form > .frames-section {
 main.is-compact {
   --space: 10px;
   --panel-gap: 10px;
-  --cluster-gap: 5px;
+  --cluster-gap: 8px;
   --field-gap: 3px;
   --panel-inset: 10px;
-  --video-panel-section-gap: 7px;
-  --video-panel-control-gap: 6px;
-  --video-panel-label-gap: 4px;
+  --video-panel-section-gap: 12px;
+  --video-panel-control-gap: 8px;
+  --video-panel-label-gap: 8px;
   --radius-mobile: 18px;
   --panel-inner-radius: max(12px, calc(var(--radius-mobile) - var(--panel-inset)));
   --control-height: 38px;
@@ -566,7 +617,7 @@ main.is-widget {
   --panel-inset: 8px;
   --video-panel-section-gap: 6px;
   --video-panel-control-gap: 5px;
-  --video-panel-label-gap: 3px;
+  --video-panel-label-gap: 8px;
   --radius-mobile: 17px;
   --widget-inner-radius: max(12px, calc(var(--radius-mobile) - 6px));
   --control-height: 34px;
@@ -637,6 +688,10 @@ footer .primary {
   border-radius: var(--panel-inner-radius);
 }
 
+.is-compact:not(.is-widget) .file-link-action {
+  border-radius: var(--panel-inner-radius);
+}
+
 .is-compact:not(.is-widget) .auth :is(button, input) {
   border-radius: var(--panel-inner-radius);
 }
@@ -664,6 +719,10 @@ footer .primary {
 }
 
 .is-widget .frame-fields :is(input, select) {
+  border-radius: var(--widget-inner-radius);
+}
+
+.is-widget .file-link-panel :is(input, .file-link-action) {
   border-radius: var(--widget-inner-radius);
 }
 

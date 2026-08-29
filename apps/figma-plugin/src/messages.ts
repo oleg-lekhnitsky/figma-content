@@ -6,6 +6,8 @@ export type ControllerMessage =
   | { type: 'stored-state'; value: unknown; sessionToken: string | null }
 export type UiMessage =
   | { type: 'refresh-selection' }
+  | { type: 'set-file-key'; fileKey: string }
+  | { type: 'clear-file-key' }
   | { type: 'export'; requestId: string; nodeId: string; settings: ExportSettings }
   | { type: 'load-state' }
   | { type: 'save-state'; value: unknown }

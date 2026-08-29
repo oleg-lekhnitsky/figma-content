@@ -2,6 +2,9 @@ import type { ControllerMessage, ExportSettings as PluginExportSettings, Selecte
 
 const run = async () => {
 
+const storedFileKeyName = 'contentLibraryFileKey'
+let rememberedFileKey = figma.root.getPluginData(storedFileKeyName) || null
+
 type ExportableNode = FrameNode | ComponentNode | InstanceNode
 
 const findVideoHash = (node: ExportableNode) => {
@@ -59,7 +62,7 @@ const describe = async (node: ExportableNode): Promise<SelectedFrame> => {
   } finally {
     clone.remove()
   }
-  const fileKey = figma.fileKey ?? null
+  const fileKey = rememberedFileKey
   return { id: node.id, name: node.name, width: Math.round(node.width), height: Math.round(node.height), pageName: pageName(node), fileKey, figmaUrl: fileKey ? `https://www.figma.com/design/${fileKey}/_?node-id=${encodeURIComponent(node.id)}` : null, assetId: null, videoHash: findVideoHash(node), preview }
 }
 const postSelection = async () => {
@@ -70,8 +73,8 @@ const postSelection = async () => {
 
 const preferences = await figma.clientStorage.getAsync('contentLibraryPreferences') as { layout?: unknown } | null
 const sessionToken = await figma.clientStorage.getAsync('contentLibrarySession')
-const startsAsWidget = preferences?.layout === 'widget' && Boolean(sessionToken)
 const selectionCount = selectedNodes().length
+const startsAsWidget = preferences?.layout === 'widget' && Boolean(sessionToken)
 const widgetHeight = selectionCount > 0 ? 110 + (selectionCount - 1) * 57 : 231
 const compactHeight = !sessionToken ? 281 : selectionCount === 0 ? 300 : 460
 figma.showUI(__html__, {
@@ -85,6 +88,17 @@ void postSelection()
 
 figma.ui.onmessage = async (message: UiMessage) => {
   if (message.type === 'refresh-selection') return postSelection()
+  if (message.type === 'set-file-key') {
+    if (!/^[A-Za-z0-9_-]{8,128}$/.test(message.fileKey)) return
+    rememberedFileKey = message.fileKey
+    try { figma.root.setPluginData(storedFileKeyName, message.fileKey) } catch { /* Keep it for this plugin session in read-only files. */ }
+    return postSelection()
+  }
+  if (message.type === 'clear-file-key') {
+    rememberedFileKey = null
+    try { figma.root.setPluginData(storedFileKeyName, '') } catch { /* Clear it for this plugin session in read-only files. */ }
+    return postSelection()
+  }
   if (message.type === 'open-external') return figma.openExternal(message.url)
   if (message.type === 'resize') {
     const width = Math.max(260, Math.min(320, message.width))

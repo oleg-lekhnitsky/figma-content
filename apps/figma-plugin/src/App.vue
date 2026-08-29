@@ -39,10 +39,14 @@ const busy = ref(false)
 const detailsOpen = ref(false)
 const announcement = ref('')
 const globalError = ref('')
+const fileLink = ref('')
+const fileLinkError = ref('')
+const fileLinkInput = ref<HTMLInputElement | null>(null)
 const previewUrls = new Map<string, string>()
 const pending = new Map<string, { resolve: (value: Uint8Array) => void; reject: (error: Error) => void }>()
 let requestSequence = 0
 const previewUrl = (frame: SelectedFrame) => previewUrls.get(frame.id) ?? ''
+const needsFileLink = computed(() => frames.value.some(frame => !frame.fileKey))
 const isWidgetLayout = computed(() => layoutMode.value === 'widget' && authState.value === 'signed-in')
 const eligible = computed(() => frames.value.filter(frame => frame.existingAction !== 'cancel'))
 const uploadSucceeded = computed(() => eligible.value.length > 0 && eligible.value.every(frame => frame.progress === 'done'))
@@ -63,6 +67,36 @@ const reviewBoardLabel = (board: ReviewBoard) => board.review_month
   ? `${board.title} · ${new Intl.DateTimeFormat(undefined, { month: 'short', year: 'numeric' }).format(new Date(`${board.review_month}T12:00:00`))}`
   : board.title
 const post = (message: UiMessage) => parent.postMessage({ pluginMessage: message }, '*')
+const rejectFileLink = (message: string) => {
+  fileLinkError.value = message
+  void nextTick(() => fileLinkInput.value?.focus())
+}
+const connectFileLink = () => {
+  fileLinkError.value = ''
+  let url: URL
+  try { url = new URL(fileLink.value.trim()) }
+  catch { rejectFileLink('Paste a valid Figma selection link.'); return }
+  const isFigmaHost = url.hostname === 'figma.com' || url.hostname.endsWith('.figma.com')
+  const pathMatch = url.pathname.match(/^\/(?:design|file)\/([A-Za-z0-9_-]{8,128})(?:\/|$)/)
+  const linkedNodeId = url.searchParams.get('node-id')?.replace(/-/g, ':')
+  if (!isFigmaHost || !pathMatch || !linkedNodeId) {
+    rejectFileLink('Copy a link to one of the selected frames in Figma, then paste it here.')
+    return
+  }
+  if (!frames.value.some(frame => frame.id === linkedNodeId)) {
+    rejectFileLink('This link does not match a selected frame. Copy the link again from your current selection.')
+    return
+  }
+  post({ type: 'set-file-key', fileKey: pathMatch[1]! })
+  fileLink.value = ''
+  announcement.value = 'Figma file linked.'
+}
+const changeFileLink = () => {
+  fileLink.value = ''
+  fileLinkError.value = ''
+  post({ type: 'clear-file-key' })
+  announcement.value = 'Figma file link cleared.'
+}
 const clearAccountAvatar = () => {
   if (accountAvatarUrl.value) URL.revokeObjectURL(accountAvatarUrl.value)
   accountAvatarUrl.value = ''
@@ -266,7 +300,7 @@ const upload = async () => {
   busy.value = true; globalError.value = ''; let completed = 0
   for (const frame of eligible.value) {
     try {
-      if (!frame.fileKey || !frame.figmaUrl) throw new Error('Unable to identify this Figma file. Reload the private plugin, then try again.')
+      if (!frame.fileKey || !frame.figmaUrl) throw new Error('Link this Figma file above, then try again.')
       const metadata = { title: frame.title, description: shared.description, tags: shared.tags.split(',').map(v => v.trim()).filter(Boolean), projectId: shared.projectId || null, campaignId: shared.campaignId || null, language: shared.language || null, contentType: shared.contentType || null, status: shared.status, figmaFileKey: frame.fileKey, figmaNodeId: frame.id, figmaNodeName: frame.name, figmaUrl: frame.figmaUrl, width: frame.width, height: frame.height }
       let response: Response
       if (settings.format === 'MP4') {
@@ -326,6 +360,9 @@ window.onmessage = (event: MessageEvent<{ pluginMessage?: ControllerMessage }>) 
   if (message.type === 'stored-state') { token.value = message.sessionToken ?? ''; void checkSession() }
 }
 watch([frames, authState, layoutMode, detailsOpen], resizePlugin, { deep: true })
+watch([needsFileLink, authState], async ([needsLink, state]) => {
+  if (needsLink && state !== 'checking') { await nextTick(); fileLinkInput.value?.focus() }
+})
 onMounted(() => { post({ type: 'load-state' }); post({ type: 'refresh-selection' }) })
 onBeforeUnmount(clearAccountAvatar)
 </script>
@@ -334,6 +371,17 @@ onBeforeUnmount(clearAccountAvatar)
   <main class="is-compact" :class="{ 'is-widget': isWidgetLayout }">
     <p class="sr-only" role="status" aria-live="polite">{{ announcement }}</p>
     <div v-if="authState === 'checking'" class="session-checking" role="status" aria-label="Checking your session"></div>
+    <template v-else-if="frames.length && needsFileLink">
+      <header class="file-link-header"><h1 id="file-link-title">Paste a Figma frame link once <span class="file-link-shortcut" aria-hidden="true"><kbd>⌘L</kbd><span>→</span><kbd>⌘V</kbd></span></h1><span id="file-link-shortcut-description" class="sr-only">Press Command L, then Command V.</span></header>
+      <section class="file-link-step" aria-labelledby="file-link-title" aria-describedby="file-link-shortcut-description">
+        <form class="file-link-panel" @submit.prevent="connectFileLink">
+          <label class="sr-only" for="figma-file-link">Figma selection link</label>
+          <input id="figma-file-link" ref="fileLinkInput" v-model="fileLink" type="url" inputmode="url" autocomplete="off" placeholder="Link to selection" :aria-invalid="Boolean(fileLinkError)" :aria-describedby="fileLinkError ? 'figma-file-link-error' : undefined" @input="fileLinkError = ''">
+          <p v-if="fileLinkError" id="figma-file-link-error" class="error" role="alert">{{ fileLinkError }}</p>
+          <button class="primary file-link-action" type="submit">Continue</button>
+        </form>
+      </section>
+    </template>
     <section v-else-if="authState === 'signed-out'" class="auth" aria-label="Sign in"><form class="password-form" @submit.prevent="passwordLogin"><label class="sr-only" for="plugin-email">Email</label><input id="plugin-email" v-model="email" name="email" type="email" autocomplete="username" placeholder="Email" required><label class="sr-only" for="plugin-password">Password</label><input id="plugin-password" v-model="password" name="password" type="password" autocomplete="current-password" placeholder="Password" required><button class="primary" type="submit" :disabled="authBusy">{{ authBusy ? 'Signing in…' : 'Sign in' }}</button></form><div class="auth-divider"><span>or</span></div><button class="oauth-button" type="button" @click="openLogin">Continue with Figma</button><label class="sr-only" for="auth-code">One-time code</label><div class="code-row"><input id="auth-code" v-model="authCode" autocomplete="one-time-code" placeholder="One-time code"><button :disabled="!authCode.trim()" @click="exchangeCode">Connect</button></div><p v-if="globalError" class="error" role="alert">{{ globalError }}</p></section>
     <template v-else>
       <header v-if="layoutMode === 'compact'">
@@ -351,10 +399,10 @@ onBeforeUnmount(clearAccountAvatar)
       <p v-if="canChooseDestination && selectedReviewBoard" class="destination-note">Frames will be uploaded to the library and submitted to this review.<template v-if="selectedReviewBoard.submission_deadline"> Deadline {{ new Date(selectedReviewBoard.submission_deadline).toLocaleDateString() }}.</template></p>
       <section v-if="!frames.length" class="center"><strong>Select frame to upload</strong><button class="layout-toggle frame-layout-toggle" type="button" :aria-label="layoutMode === 'widget' ? 'Switch to full-size layout' : 'Switch to widget layout'" @click="toggleLayoutMode"><ExpandToFullIcon v-if="isWidgetLayout" /><CollapseToWidgetIcon v-else /></button></section>
       <form v-else @submit.prevent="upload">
-        <section class="frames-section" aria-labelledby="selected-title"><h2 id="selected-title" class="sr-only">Selected frames</h2><ul class="frames"><li v-for="(frame, index) in frames" :key="frame.id" :class="{ 'has-layout-toggle': index === 0 }"><img :src="previewUrl(frame)" alt=""><div class="frame-fields"><label :for="`title-${frame.id}`"><span class="sr-only">Title</span><input :id="`title-${frame.id}`" v-model="frame.title" required maxlength="200"></label><p class="frame-meta"><span>{{ frame.width }} × {{ frame.height }}</span><span v-if="settings.format === 'MP4' && !frame.videoHash" class="frame-warning" title="No embedded video found in this frame"><span aria-hidden="true">No video</span><span class="sr-only">No embedded video found in this frame.</span></span></p><p v-if="!frame.fileKey" class="error">Reload this private plugin to enable a direct link to the file.</p><p v-if="frame.assetId && frame.progress !== 'done'" class="existing">This frame already exists in the library.</p><label v-if="frame.assetId && frame.progress !== 'done'" :for="`action-${frame.id}`"><span class="sr-only">Upload choice</span><select :id="`action-${frame.id}`" v-model="frame.existingAction" :disabled="busy"><option value="version">Upload new version</option><option value="separate">Create separate asset</option><option value="cancel">Skip this frame</option></select></label><p v-if="frame.progress === 'error'" class="progress" data-state="error">{{ frame.error }}</p></div><button v-if="index === 0" class="layout-toggle frame-layout-toggle" type="button" :aria-label="layoutMode === 'widget' ? 'Switch to full-size layout' : 'Switch to widget layout'" @click="toggleLayoutMode"><ExpandToFullIcon v-if="isWidgetLayout" /><CollapseToWidgetIcon v-else /></button></li></ul></section>
+        <section class="frames-section" aria-labelledby="selected-title"><h2 id="selected-title" class="sr-only">Selected frames</h2><ul class="frames"><li v-for="(frame, index) in frames" :key="frame.id" :class="{ 'has-layout-toggle': index === 0 }"><img :src="previewUrl(frame)" alt=""><div class="frame-fields"><label :for="`title-${frame.id}`"><span class="sr-only">Title</span><input :id="`title-${frame.id}`" v-model="frame.title" required maxlength="200"></label><p class="frame-meta"><span>{{ frame.width }} × {{ frame.height }}</span><span v-if="settings.format === 'MP4' && !frame.videoHash" class="frame-warning" title="No embedded video found in this frame"><span aria-hidden="true">No video</span><span class="sr-only">No embedded video found in this frame.</span></span></p><p v-if="frame.assetId && frame.progress !== 'done'" class="existing">This frame already exists in the library.</p><label v-if="frame.assetId && frame.progress !== 'done'" :for="`action-${frame.id}`"><span class="sr-only">Upload choice</span><select :id="`action-${frame.id}`" v-model="frame.existingAction" :disabled="busy"><option value="version">Upload new version</option><option value="separate">Create separate asset</option><option value="cancel">Skip this frame</option></select></label><p v-if="frame.progress === 'error'" class="progress" data-state="error">{{ frame.error }}</p></div><button v-if="index === 0" class="layout-toggle frame-layout-toggle" type="button" :aria-label="layoutMode === 'widget' ? 'Switch to full-size layout' : 'Switch to widget layout'" @click="toggleLayoutMode"><ExpandToFullIcon v-if="isWidgetLayout" /><CollapseToWidgetIcon v-else /></button></li></ul></section>
         <label v-if="workspaces.length > 1" class="workspace-field" for="plugin-workspace"><span class="sr-only">Workspace</span><select id="plugin-workspace" v-model="workspaceId" :disabled="workspaceBusy || busy" @change="switchWorkspace"><option v-for="workspace in workspaces" :key="workspace.id" :value="workspace.id">{{ workspace.name }} · {{ workspace.role }}</option></select></label>
         <section class="media-panel" aria-labelledby="export-title"><h2 id="export-title" class="sr-only">Media</h2><div class="settings"><label><span class="sr-only">Format</span><select v-model="settings.format"><option>PNG</option><option>JPG</option><option>MP4</option></select></label><label v-if="settings.format !== 'MP4'"><span class="sr-only">Scale</span><select v-model.number="settings.scale"><option :value="1">1×</option><option :value="2">2×</option><option :value="3">3×</option></select></label><label v-if="settings.format === 'JPG'"><span class="sr-only">JPG quality</span><input v-model.number="settings.jpgQuality" type="number" min="10" max="100" step="5"></label></div><p v-if="settings.format === 'MP4'" class="field-note">The original MP4 from the selected frame's video fill will be uploaded directly.</p></section>
-        <section class="details-panel"><div id="metadata-panel" v-show="detailsOpen" aria-labelledby="metadata-title"><h2 id="metadata-title">Details</h2><div class="tag-field"><span class="field-label">Tags</span><div v-if="selectedTags.length" class="selected-tags" aria-label="Selected tags"><button v-for="tag in selectedTags" :key="tag" class="tag-chip selected" type="button" :aria-label="`Remove ${tag}`" @click="removeTag(tag)"><span>{{ tag }}</span><span aria-hidden="true">×</span></button></div><div class="tag-entry"><input v-model="tagDraft" maxlength="80" aria-label="Add a tag" placeholder="Add a tag" @keydown="handleTagKeydown"><button type="button" :disabled="tagBusy || !tagDraft.trim()" @click="createTag">{{ tagBusy ? 'Adding…' : 'Add' }}</button></div><div v-if="suggestedTags.length" class="tag-quick-options" aria-label="Suggested tags"><button v-for="tag in suggestedTags" :key="tag.id" class="tag-chip" type="button" @click="selectTag(tag.name)">{{ tag.name }}</button></div></div><div class="project-field"><label for="plugin-project">Project<select id="plugin-project" v-model="shared.projectId"><option value="">No project</option><option v-for="project in projects" :key="project.id" :value="project.id">{{ project.name }}</option></select></label><div v-if="canCreateProjects" class="project-entry"><input v-model="projectDraft" maxlength="120" aria-label="New project name" placeholder="New project" @keydown.enter.prevent="createProject"><button type="button" :disabled="projectBusy||!projectDraft.trim()" @click="createProject">{{ projectBusy?'Creating…':'Create' }}</button></div><p v-else class="field-note">Editors and admins can create projects.</p></div><label>Description <textarea v-model="shared.description" rows="3" placeholder="Describe how this asset should be used"></textarea></label></div><button class="details-toggle" type="button" :aria-expanded="detailsOpen" aria-controls="metadata-panel" @click="detailsOpen = !detailsOpen">{{ detailsOpen ? 'Hide details' : 'Details (optional)' }}</button></section>
+        <section class="details-panel"><div id="metadata-panel" v-show="detailsOpen" aria-label="Details"><div class="tag-field"><span class="field-label">Tags</span><div v-if="selectedTags.length" class="selected-tags" aria-label="Selected tags"><button v-for="tag in selectedTags" :key="tag" class="tag-chip selected" type="button" :aria-label="`Remove ${tag}`" @click="removeTag(tag)"><span>{{ tag }}</span><span aria-hidden="true">×</span></button></div><div class="tag-entry"><input v-model="tagDraft" maxlength="80" aria-label="Add a tag" placeholder="Add a tag" @keydown="handleTagKeydown"><button type="button" :disabled="tagBusy || !tagDraft.trim()" @click="createTag">{{ tagBusy ? 'Adding…' : 'Add' }}</button></div><div v-if="suggestedTags.length" class="tag-quick-options" aria-label="Suggested tags"><button v-for="tag in suggestedTags" :key="tag.id" class="tag-chip" type="button" @click="selectTag(tag.name)">{{ tag.name }}</button></div></div><div class="project-field"><label for="plugin-project"><span>Project</span><select id="plugin-project" v-model="shared.projectId"><option value="">No project</option><option v-for="project in projects" :key="project.id" :value="project.id">{{ project.name }}</option></select></label><div v-if="canCreateProjects" class="project-entry"><input v-model="projectDraft" maxlength="120" aria-label="New project name" placeholder="New project" @keydown.enter.prevent="createProject"><button type="button" :disabled="projectBusy||!projectDraft.trim()" @click="createProject">{{ projectBusy?'Creating…':'Create' }}</button></div><p v-else class="field-note">Editors and admins can create projects.</p></div><label><span>Description</span> <textarea v-model="shared.description" rows="3" placeholder="Describe how this asset should be used"></textarea></label><button class="quiet file-link-action" type="button" @click="changeFileLink">Change file link</button></div><button class="details-toggle" type="button" :aria-expanded="detailsOpen" aria-controls="metadata-panel" @click="detailsOpen = !detailsOpen">{{ detailsOpen ? 'Hide details' : 'Details (optional)' }}</button></section>
         <p v-if="globalError" class="error" role="alert">{{ globalError }}</p><section v-if="account" class="account-panel" aria-label="Signed in account"><div class="account-identity"><span class="account-avatar" aria-hidden="true"><img v-if="accountAvatarUrl && !avatarFailed" :src="accountAvatarUrl" alt="" @error="avatarFailed = true"><span v-else>{{ account.email.charAt(0).toUpperCase() }}</span></span><div class="account-copy"><strong>{{ account.email }}</strong><span v-if="account.figmaHandle">{{ account.figmaHandle }}</span></div></div><button class="quiet" type="button" @click="signOut">Sign out</button></section><footer><span>{{ eligible.length }} ready</span><button class="primary" type="submit" :disabled="busy || !eligible.length || uploadSucceeded">{{ uploadButtonLabel }}</button></footer>
       </form>
     </template>
