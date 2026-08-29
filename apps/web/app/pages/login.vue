@@ -291,7 +291,7 @@ form {
 
 .figma-option {
   display: grid;
-  gap: var(--space);
+  gap: var(--filter-action-gap);
 }
 
 .figma-error {
@@ -339,10 +339,6 @@ form {
     background: var(--filter-overlay-panel-background-mobile);
   }
 
-  .auth-header {
-    margin-bottom: var(--filter-sheet-group-gap-mobile);
-  }
-
   .auth-field input {
     height: calc(var(--range-control-height-mobile) + .25rem);
     min-height: calc(var(--range-control-height-mobile) + .25rem);
@@ -353,9 +349,6 @@ form {
     min-height: calc(var(--range-control-height-mobile) + .25rem);
   }
 
-  .auth-divider {
-    margin-block: var(--filter-sheet-group-gap-mobile);
-  }
 }
 
 /* WebKit subtracts safe-area height from dynamic viewport units in some

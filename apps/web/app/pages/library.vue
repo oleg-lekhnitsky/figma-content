@@ -12,6 +12,7 @@ const selectedBoardId = computed(() => localBoardId.value ?? routedBoardId.value
 
 interface AssetCard {
   id: string; title: string; description?: string | null; previewUrl: string; preview2xUrl?: string | null; originalUrl?: string | null; mime_type?: string | null; width: number; height: number; status?: string; figma_url?: string
+  uploaded_by?: string
   created_at?: string; updated_at?: string; projects?: { name: string } | null
   asset_tags?: Array<{ tags: { id?: string; name: string; slug?: string } | null }>
   allowed_users?: { figma_handle: string | null; avatar_url: string | null } | null
@@ -20,7 +21,7 @@ interface Submitter { id: string; figma_handle: string | null; avatar_url: strin
 interface Project { id: string; name: string; slug: string }
 interface Tag { id: string; name: string; slug: string }
 interface AssetList { data: { assets: AssetCard[]; submitters: Submitter[]; total: number; page: number; pageSize: number } }
-interface SessionResponse { data: { authenticated: boolean; user?: { role: string; email?: string; figmaHandle?: string | null; avatarUrl?: string | null; hasPassword?: boolean; workspace?: { name: string } | null } } }
+interface SessionResponse { data: { authenticated: boolean; user?: { id?: string; role: string; email?: string; figmaHandle?: string | null; avatarUrl?: string | null; hasPassword?: boolean; workspace?: { name: string } | null } } }
 interface BoardSummary {
   id: string
   slug: string
@@ -981,12 +982,28 @@ const isAdmin = computed(() => session.value?.data?.user?.role === 'admin')
 const canManageProjects = computed(() => ['editor', 'admin'].includes(session.value?.data?.user?.role ?? ''))
 const canApprove = computed(() => ['editor', 'admin'].includes(session.value?.data?.user?.role ?? ''))
 const canShare = computed(() => ['contributor', 'editor', 'admin'].includes(session.value?.data?.user?.role ?? ''))
+const canAddAssetToBoard = (asset: AssetCard) => {
+  const user = session.value?.data?.user
+  if (!user) return false
+  if (['editor', 'admin'].includes(user.role)) return true
+  return user.role === 'contributor' && asset.uploaded_by === user.id && asset.status === 'approved'
+}
 const canRenameAssets = computed(() => ['editor', 'admin'].includes(session.value?.data?.user?.role ?? ''))
 const assetRenameFeedback = ref('')
 const setAssetTitle = (id: string, title: string) => {
   const update = (items: AssetCard[] | undefined) => {
     const asset = items?.find(item => item.id === id)
     if (asset) asset.title = title
+  }
+  update(assets.value)
+  update(data.value?.data.assets)
+  update(selectedBoardData.value?.assets)
+  for (const board of boards.value) update(board.previewAssets)
+}
+const setAssetStatus = (id: string, status: string) => {
+  const update = (items: AssetCard[] | undefined) => {
+    const asset = items?.find(item => item.id === id)
+    if (asset) asset.status = status
   }
   update(assets.value)
   update(data.value?.data.assets)
@@ -1011,6 +1028,10 @@ const handleAssetRenamed = (id: string, title: string) => {
   setAssetTitle(id, title)
   assetRenameFeedback.value = `${title} saved.`
 }
+const handleAssetAddedToBoard = (assetId: string, _boardId: string, approved: boolean) => {
+  if (approved) setAssetStatus(assetId, 'approved')
+  void refreshBoards()
+}
 const toggleAssetApproval = async (asset: AssetCard) => {
   const previousStatus = asset.status
   asset.status = asset.status === 'approved' ? 'draft' : 'approved'
@@ -1019,6 +1040,7 @@ const toggleAssetApproval = async (asset: AssetCard) => {
 }
 const routedAssetId = computed(() => typeof route.query.asset === 'string' ? route.query.asset : '')
 const localAssetId = ref<string | null>(null)
+const boardPickerAssetId = ref('')
 const selectedAssetId = computed(() => localAssetId.value ?? routedAssetId.value)
 const selectedAssetPreviewUrl = computed(() => {
   const selected = displayedAssets.value.find(asset => asset.id === selectedAssetId.value)
@@ -1037,8 +1059,9 @@ const selectAsset = (id: string) => {
     if (revision === assetRouteRevision && routedAssetId.value === id) localAssetId.value = null
   })
 }
-const openAsset = (id: string) => selectAsset(id)
-const closeAsset = () => selectAsset('')
+const openAsset = (id: string) => { boardPickerAssetId.value = ''; selectAsset(id) }
+const openAssetBoardPicker = (asset: AssetCard) => { boardPickerAssetId.value = asset.id; selectAsset(asset.id) }
+const closeAsset = () => { boardPickerAssetId.value = ''; selectAsset('') }
 const navigateAsset = (id: string) => selectAsset(id)
 const handleAssetDeleted = (id: string) => {
   assets.value = assets.value.filter(asset => asset.id !== id)
@@ -1430,10 +1453,11 @@ onBeforeUnmount(() => {
                 v-else :assets="displayedAssets" :play-videos="!videoExpanded && boardMotionPhase === 'idle'" instant-open instant-cards
                 :stable-columns="false"
                 :animate-changes="boardMotionPhase === 'idle'" :can-approve="canApprove && !arrangeExpanded"
+                :can-add="!selectedBoardId ? canAddAssetToBoard : false"
                 :editable-titles="canRenameAssets && !arrangeExpanded" :view-settings="libraryView"
                 :interactive="!arrangeExpanded" :reorderable="arrangeExpanded" :selectable="arrangeExpanded"
                 :selected-ids="arrangeSelectedIds" @reorder="reorderSelectedBoardAssets"
-                @toggle-selection="toggleArrangeSelection" @toggle-approval="toggleAssetApproval" @rename="renameAsset"
+                @toggle-selection="toggleArrangeSelection" @toggle-approval="toggleAssetApproval" @add-to-board="openAssetBoardPicker" @rename="renameAsset"
                 @open="openAsset" />
               <span class="sr-only" role="status" aria-live="polite">{{ assetRenameFeedback }}</span>
               <div v-if="canLoadMore" ref="loadMoreSentinel" class="load-more-sentinel" aria-hidden="true" />
@@ -1467,8 +1491,11 @@ onBeforeUnmount(() => {
       :confirm-label="arrangeRemoving ? 'Removing…' : 'Remove from board'" :busy="arrangeRemoving"
       @confirm="removeArrangeSelection" />
     <AssetOverlay v-if="selectedAssetId" :asset-id="selectedAssetId" :asset-ids="displayedAssets.map(asset => asset.id)"
+      :start-with-board-picker="selectedAssetId === boardPickerAssetId"
+      :boards="collections"
       :preview-url="selectedAssetPreviewUrl" :preview-urls="assetPreviewUrls" :mime-types="assetMimeTypes" @close="closeAsset"
-      @deleted="handleAssetDeleted" @navigate="navigateAsset" @renamed="handleAssetRenamed" />
+      @deleted="handleAssetDeleted" @navigate="navigateAsset" @renamed="handleAssetRenamed" @added-to-board="handleAssetAddedToBoard"
+      @refresh-boards="refreshBoards" />
   </div>
 </template>
 

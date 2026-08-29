@@ -1,6 +1,7 @@
 <script setup lang="ts" generic="T extends AssetMasonryItem">
 import type { RouteLocationRaw } from 'vue-router'
-import { Figma, Heart } from 'reicon-vue'
+import { Heart, Plus } from 'reicon-vue'
+// import { Figma } from 'reicon-vue'
 import type { BoardViewSettings } from '@content-library/shared'
 import type { AssetMasonryItem } from '../types/asset-masonry'
 import { boardViewStyle } from '../utils/board-view-style'
@@ -25,6 +26,7 @@ const props = withDefaults(defineProps<{
   stableColumns?: boolean
   animateChanges?: boolean
   canApprove?: boolean
+  canAdd?: boolean | ((asset: T) => boolean)
   editableTitles?: boolean
   playVideos?: boolean
   instantOpen?: boolean
@@ -43,6 +45,7 @@ const props = withDefaults(defineProps<{
   stableColumns: false,
   animateChanges: false,
   canApprove: false,
+  canAdd: false,
   editableTitles: false,
   playVideos: true,
   instantOpen: false,
@@ -53,6 +56,7 @@ const emit = defineEmits<{
   toggleSelection: [asset: T]
   reorder: [fromIndex: number, toIndex: number]
   toggleApproval: [asset: T]
+  addToBoard: [asset: T]
   rename: [asset: T, title: string]
   open: [id: string]
 }>()
@@ -76,6 +80,9 @@ const route = useRoute()
 const loadedImages = reactive(new Set<string>())
 const selectedIdSet = computed(() => new Set(props.selectedIds))
 const isSelected = (id: string) => selectedIdSet.value.has(id)
+const canAddAsset = (asset: T) => typeof props.canAdd === 'function' ? props.canAdd(asset) : props.canAdd
+// Open in Figma is temporarily hidden from masonry-card quick actions.
+const hasQuickActions = (asset: T) => Boolean(props.canApprove || canAddAsset(asset))
 const masonry = ref<HTMLElement | null>(null)
 const layoutReady = ref(false)
 const renderedAssets = shallowRef<T[]>([...props.assets])
@@ -150,7 +157,7 @@ const suppressNextOpen = (id: string) => {
   suppressNextOpenTimer = setTimeout(() => { suppressNextOpenId = null }, 800)
 }
 const startQuickActionsHold = (event: PointerEvent, asset: T) => {
-  if (event.pointerType !== 'touch' || !event.isPrimary || event.button !== 0 || !props.interactive || (!asset.figma_url && !props.canApprove) || props.reorderable) return
+  if (event.pointerType !== 'touch' || !event.isPrimary || event.button !== 0 || !props.interactive || !hasQuickActions(asset) || props.reorderable) return
   cancelQuickActionsHold()
   if (quickActionsAssetId.value !== asset.id) quickActionsAssetId.value = null
   quickActionsPointerId = event.pointerId
@@ -163,7 +170,7 @@ const startQuickActionsHold = (event: PointerEvent, asset: T) => {
   }, 500)
 }
 const openQuickActionsContextMenu = (event: MouseEvent, asset: T) => {
-  if (!props.interactive || (!asset.figma_url && !props.canApprove) || props.reorderable) return
+  if (!props.interactive || !hasQuickActions(asset) || props.reorderable) return
   event.preventDefault()
   cancelQuickActionsHold()
   quickActionsAssetId.value = asset.id
@@ -425,14 +432,14 @@ onBeforeUnmount(() => {
   <section ref="masonry" class="asset-masonry" :class="{ 'cards-hidden': !layoutReady, 'cards-leaving': hidden, 'instant-cards': instantCards, 'column-layout': layout === 'column', 'stable-columns': stableColumns, 'custom-view': effectiveViewSettings, 'hide-text': effectiveViewSettings && !effectiveViewSettings.showText, 'is-arranging': reorderable }" :style="viewStyle" :aria-label="label">
     <article
       v-for="(asset, index) in renderedAssets" :key="asset.id" class="asset-card"
-      :class="{ 'is-priority': index < 7, 'is-selected': isSelected(asset.id), 'is-dragging': draggedId === asset.id, 'is-pointer-dragging': pointerDragging && draggedId === asset.id, 'is-drop-target': dropIndex === index && draggedId !== asset.id, 'has-quick-actions': quickActionsAssetId === asset.id }"
+      :class="{ 'is-priority': index < 7, 'is-selected': isSelected(asset.id), 'is-dragging': draggedId === asset.id, 'is-pointer-dragging': pointerDragging && draggedId === asset.id, 'is-drop-target': dropIndex === index && draggedId !== asset.id, 'has-quick-actions': quickActionsAssetId === asset.id, 'can-add': canAddAsset(asset) }"
       :data-asset-id="asset.id"
       :style="{ '--media-stagger': instantCards ? '0ms' : `${Math.min(index * 35, 280)}ms` }"
       @pointerdown="startMouseDrag($event, index)" @pointermove="movePointerDrag" @pointerup="finishPointerDrag"
       @pointercancel="cancelPointerDrag" @lostpointercapture="handlePointerCaptureLost"
       @selectstart="preventNativeCardSelection" @dragstart="preventNativeCardSelection">
       <div
-        class="preview" :class="{ 'is-loading': !instantCards && !loadedImages.has(asset.id), 'has-context-actions': interactive && !reorderable && Boolean(asset.figma_url || canApprove) }"
+        class="preview" :class="{ 'is-loading': !instantCards && !loadedImages.has(asset.id), 'has-context-actions': interactive && !reorderable && hasQuickActions(asset) }"
         :style="{ aspectRatio: `${asset.width} / ${asset.height}` }"
         @pointerdown="startQuickActionsHold($event, asset)" @pointermove="moveQuickActionsHold"
         @pointerup="finishQuickActionsHold" @pointercancel="cancelQuickActionsHold"
@@ -441,7 +448,9 @@ onBeforeUnmount(() => {
           <AssetMedia :class="{ 'is-loaded': instantCards || loadedImages.has(asset.id) }" :data-asset-id="asset.id" :src="mediaSource(asset)" :fallback-srcs="mediaFallbacks(asset)" :sizes="previewSizes" :mime-type="asset.mime_type" :width="asset.width" :height="asset.height" :alt="`Preview of ${asset.title}`" :loading="mediaLoading(index)" :fetchpriority="mediaFetchPriority(index)" :autoplay="playVideos" @load="markImageLoaded(asset.id)" />
         </NuxtLink>
         <AssetMedia v-else :class="{ 'is-loaded': instantCards || loadedImages.has(asset.id) }" :data-asset-id="asset.id" :src="mediaSource(asset)" :fallback-srcs="mediaFallbacks(asset)" :sizes="previewSizes" :mime-type="asset.mime_type" :width="asset.width" :height="asset.height" :alt="asset.title" :loading="mediaLoading(index)" :fetchpriority="mediaFetchPriority(index)" :autoplay="playVideos" @load="markImageLoaded(asset.id)" />
-        <div v-if="interactive && (asset.figma_url || canApprove)" class="card-quick-actions" role="menu" :aria-label="`Actions for ${asset.title}`"><a v-if="asset.figma_url" class="figma-button" role="menuitem" :href="asset.figma_url" target="_blank" rel="noopener noreferrer" aria-label="Open in Figma" title="Open in Figma" @pointerdown.stop><Figma :size="16" aria-hidden="true" /></a><button v-if="canApprove" class="card-approval-toggle" type="button" role="menuitemcheckbox" :aria-checked="asset.status === 'approved'" :aria-label="asset.status === 'approved' ? `Remove approval from ${asset.title}` : `Approve ${asset.title}`" :title="asset.status === 'approved' ? 'Remove approval' : 'Approve'" @pointerdown.stop @click.stop="emit('toggleApproval', asset)"><Heart :size="16" :weight="asset.status === 'approved' ? 'Filled' : 'Outline'" aria-hidden="true" /></button></div>
+        <div v-if="interactive && hasQuickActions(asset)" class="card-quick-actions" role="group" :aria-label="`Actions for ${asset.title}`"><button v-if="canAddAsset(asset)" class="card-add-button" type="button" :aria-label="`Add ${asset.title} to a board`" title="Add to board" @pointerdown.stop @click.stop="emit('addToBoard', asset)"><Plus :size="17" aria-hidden="true" /></button><!-- Open in Figma is temporarily hidden from masonry cards.
+        <a v-if="asset.figma_url" class="figma-button" :href="asset.figma_url" target="_blank" rel="noopener noreferrer" aria-label="Open in Figma" title="Open in Figma" @pointerdown.stop><Figma :size="16" aria-hidden="true" /></a>
+        --><button v-if="canApprove" class="card-approval-toggle" type="button" :aria-pressed="asset.status === 'approved'" :aria-label="asset.status === 'approved' ? `Remove approval from ${asset.title}` : `Approve ${asset.title}`" :title="asset.status === 'approved' ? 'Remove approval' : 'Approve'" @pointerdown.stop @click.stop="emit('toggleApproval', asset)"><Heart :size="16" :weight="asset.status === 'approved' ? 'Filled' : 'Outline'" aria-hidden="true" /></button></div>
         <div class="preview-actions"><slot name="previewActions" :asset="asset" /></div>
         <button v-if="selectable" class="selection-control" type="button" :class="{ active: isSelected(asset.id) }" :aria-label="`${isSelected(asset.id) ? 'Deselect' : 'Select'} ${asset.title}`" :aria-pressed="isSelected(asset.id)" @click="emit('toggleSelection', asset)" />
         <button
@@ -483,12 +492,11 @@ onBeforeUnmount(() => {
 .card-body{display:flex;justify-content:space-between;align-items:flex-start;gap:var(--space);padding-top:8px}.card-body>div{min-width:0;flex:1}.card-body .card-title,.card-body :deep(p){margin:0;font:inherit;letter-spacing:inherit}.card-title{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.card-title a{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.card-body a{text-decoration:none}.card-body :deep(p),.card-meta{opacity:.3}.card-meta{white-space:nowrap}.card-status{text-transform:capitalize}
 .card-title-input{box-sizing:border-box;display:block;width:100%;min-width:0;overflow:hidden;padding:0;border:0;border-bottom:1px solid transparent;border-radius:0;color:inherit;background:transparent;font:inherit;font-weight:inherit;letter-spacing:inherit;line-height:inherit;text-overflow:ellipsis;white-space:nowrap}.card-title-input:focus{border-bottom-color:currentColor;outline:0;text-overflow:clip}.card-title-input:focus-visible{outline:0}
 .card-quick-actions{position:absolute;z-index:2;left:50%;bottom:10px;display:flex;align-items:center;gap:calc(var(--space)/4);visibility:hidden;transform:translate(-50%,8px) scale(.96);pointer-events:none;transition:transform 150ms cubic-bezier(.2,0,0,1);transition-behavior:allow-discrete}
-.figma-button,.card-approval-toggle{min-height:32px;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:999px;color:var(--material-tinted-fg);background:var(--material-tinted-bg);font-size:var(--font-size-label);text-decoration:none;white-space:nowrap;box-shadow:none;-webkit-backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));transition:scale 150ms,background-color 150ms cubic-bezier(.2,0,0,1)}
-.figma-button,.card-approval-toggle{width:32px;min-width:32px;padding:0}
+.figma-button,.card-approval-toggle,.card-add-button{width:32px;min-width:32px;min-height:32px;display:inline-flex;align-items:center;justify-content:center;padding:0;border:0;border-radius:999px;color:var(--material-tinted-fg);background:var(--material-tinted-bg);font-size:var(--font-size-label);text-decoration:none;white-space:nowrap;box-shadow:none;-webkit-backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));transition:scale 150ms,background-color 150ms cubic-bezier(.2,0,0,1)}
 .preview-actions{position:absolute;z-index:3;right:10px;bottom:10px;left:10px;display:flex;justify-content:center;opacity:0;transform:translateY(8px);pointer-events:none;transition:opacity 150ms,transform 150ms cubic-bezier(.2,0,0,1)}
 .selection-control.selection-control{position:absolute;z-index:3;top:10px;right:10px;width:24px;height:24px;min-height:24px;padding:0;border:1px solid rgb(0 0 0/.35);border-radius:50%;background:rgb(255 255 255/.9);box-shadow:0 1px 4px rgb(0 0 0/.12);opacity:0;transition:opacity 120ms,scale 150ms,background-color 150ms,border-color 150ms}.selection-control.active{border-color:var(--color-fg);background:var(--color-fg);opacity:1}.selection-control:hover{border-color:var(--color-fg)}.selection-control:active{scale:.9}
 .touch-reorder-handle{position:absolute;z-index:4;top:10px;left:10px;width:36px;height:36px;min-height:36px;display:none;place-items:center;padding:0;border-radius:50%;color:var(--material-tinted-fg);background:var(--material-tinted-bg);font-size:23px;line-height:1;touch-action:none;-webkit-appearance:none;appearance:none;-webkit-user-select:none;user-select:none;-webkit-backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation))}.touch-reorder-handle span{display:block;width:12px;height:18px;background:radial-gradient(circle,currentColor 2px,transparent 2.5px) center/6px 6px;pointer-events:none}
-.figma-button:is(:hover,:focus-visible),.card-approval-toggle:is(:hover,:focus-visible){opacity:1;background:var(--material-tinted-hover-bg);-webkit-backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation))}.figma-button:active,.card-approval-toggle:active{scale:.96}.figma-button:focus-visible,.card-approval-toggle:focus-visible{outline:2px solid var(--color-accent);outline-offset:2px}
+.figma-button:is(:hover,:focus-visible),.card-approval-toggle:is(:hover,:focus-visible),.card-add-button:is(:hover,:focus-visible){opacity:1;background:var(--material-tinted-hover-bg);-webkit-backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));backdrop-filter:blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation))}.figma-button:active,.card-approval-toggle:active,.card-add-button:active{scale:.96}.figma-button:focus-visible,.card-approval-toggle:focus-visible,.card-add-button:focus-visible{outline:2px solid var(--color-accent);outline-offset:2px}
 @media(hover:hover) and (pointer:fine){.asset-card:hover .selection-control,.asset-card:focus-within .selection-control{opacity:1}.asset-card:hover .card-quick-actions,.asset-card:focus-within .card-quick-actions{visibility:visible;transform:translate(-50%,0) scale(1);pointer-events:auto}.asset-card:hover .preview-actions,.asset-card:focus-within .preview-actions{opacity:1;transform:translateY(0);pointer-events:auto}}
 .asset-masonry.cards-hidden .asset-card{visibility:hidden}
 .asset-masonry.cards-leaving:not(.cards-hidden){opacity:0;transform:translateY(16px);pointer-events:none}.asset-masonry.cards-leaving:not(.cards-hidden) .asset-card{transition-delay:0ms}
@@ -506,6 +514,6 @@ onBeforeUnmount(() => {
 @media(max-width:1280px){.asset-masonry.custom-view:not(.column-layout){grid-template-columns:repeat(clamp(1,calc(4 + var(--board-column-offset,0)),6),minmax(0,1fr))}}
 @media(max-width:900px){.asset-masonry.custom-view:not(.column-layout){grid-template-columns:repeat(clamp(1,calc(3 + var(--board-column-offset,0)),5),minmax(0,1fr))}}
 @media(max-width:520px){.asset-masonry.custom-view:not(.column-layout){grid-template-columns:repeat(clamp(1,calc(2 + var(--board-column-offset,0)),4),minmax(0,1fr))}}
-@media(hover:none),(pointer:coarse){.selection-control.selection-control{opacity:1}.asset-card{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}.asset-card :is(input,textarea,[contenteditable="true"]){-webkit-user-select:text;user-select:text}.preview,.preview *{-webkit-touch-callout:none}.preview :is(img,video),.preview :deep(.asset-media-picture img){-webkit-user-drag:none}.asset-card.has-quick-actions .card-quick-actions,.asset-card:focus-within .card-quick-actions{visibility:visible;transform:translate(-50%,0) scale(1);pointer-events:auto}.figma-button,.card-approval-toggle{width:44px;min-width:44px;min-height:44px}.preview-actions{opacity:1;transform:none;pointer-events:auto}.touch-reorder-handle{display:grid}.preview-link,.preview-link:hover,.preview-link:active,.preview-link:focus{opacity:1}.preview :is(img,video){filter:none}}
-@media(prefers-reduced-motion:reduce){.asset-masonry{transition:none}.asset-masonry.is-arranging .asset-card .preview{animation:none}.asset-card{opacity:1;transform:none;transition:none}.asset-masonry:is(.cards-hidden,.cards-leaving) .asset-card{visibility:hidden}.preview :is(img,video),.preview :deep(.asset-media-picture img){opacity:1;transform:none;transition:none}.figma-button{transition-duration:.01ms;transform:translate(-50%,0)}.preview-actions{transition:none}.figma-button:active{scale:1}}
+@media(hover:none),(pointer:coarse){.selection-control.selection-control{opacity:1}.asset-card{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}.asset-card :is(input,textarea,[contenteditable="true"]){-webkit-user-select:text;user-select:text}.preview,.preview *{-webkit-touch-callout:none}.preview :is(img,video),.preview :deep(.asset-media-picture img){-webkit-user-drag:none}.asset-card:is(.can-add,.has-quick-actions,:focus-within) .card-quick-actions{visibility:visible;transform:translate(-50%,0) scale(1);pointer-events:auto}.asset-card.can-add:not(.has-quick-actions):not(:focus-within) .card-quick-actions>:not(.card-add-button){display:none}.figma-button,.card-approval-toggle,.card-add-button{width:44px;min-width:44px;min-height:44px}.preview-actions{opacity:1;transform:none;pointer-events:auto}.touch-reorder-handle{display:grid}.preview-link,.preview-link:hover,.preview-link:active,.preview-link:focus{opacity:1}.preview :is(img,video){filter:none}}
+@media(prefers-reduced-motion:reduce){.asset-masonry{transition:none}.asset-masonry.is-arranging .asset-card .preview{animation:none}.asset-card{opacity:1;transform:none;transition:none}.asset-masonry:is(.cards-hidden,.cards-leaving) .asset-card{visibility:hidden}.preview :is(img,video),.preview :deep(.asset-media-picture img){opacity:1;transform:none;transition:none}.figma-button,.card-approval-toggle,.card-add-button{transition-duration:.01ms}.preview-actions{transition:none}.figma-button:active,.card-approval-toggle:active,.card-add-button:active{scale:1}}
 </style>

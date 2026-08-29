@@ -229,7 +229,6 @@ form { display: grid; gap: var(--space); }
     border-radius: var(--radius-mobile);
     background: var(--filter-overlay-panel-background-mobile);
   }
-  .auth-header { margin-bottom: var(--filter-sheet-group-gap-mobile); }
   .auth-field input,
   .auth-submit.auth-submit,
   .auth-secondary.auth-secondary {

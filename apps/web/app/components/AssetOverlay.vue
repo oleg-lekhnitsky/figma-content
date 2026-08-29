@@ -2,11 +2,11 @@
 import { Figma, Heart, MoreH, Search, X } from 'reicon-vue'
 import { toTitleCase } from '~/utils/text'
 
-const props = withDefaults(defineProps<{ assetId: string; assetIds?: string[]; previewUrl?: string; previewUrls?: Record<string, string>; mimeTypes?: Record<string, string | null | undefined> }>(), { assetIds: () => [], previewUrl: '', previewUrls: () => ({}), mimeTypes: () => ({}) })
-const emit = defineEmits<{ close: []; deleted: [id: string]; navigate: [id: string]; renamed: [id: string, title: string] }>()
+const props = withDefaults(defineProps<{ assetId: string; assetIds?: string[]; previewUrl?: string; previewUrls?: Record<string, string>; mimeTypes?: Record<string, string | null | undefined>; startWithBoardPicker?: boolean; boards?: Board[] }>(), { assetIds: () => [], previewUrl: '', previewUrls: () => ({}), mimeTypes: () => ({}), startWithBoardPicker: false, boards: undefined })
+const emit = defineEmits<{ close: []; deleted: [id: string]; navigate: [id: string]; renamed: [id: string, title: string]; addedToBoard: [assetId: string, boardId: string, approved: boolean]; refreshBoards: [] }>()
 interface AssetDetail { id: string; uploaded_by: string; title: string; description: string | null; width: number; height: number; file_size: number; mime_type: string; status: string; version: number; created_at: string; updated_at: string; figma_url: string; language: string | null; content_type: string | null; project_id: string | null; campaign_id: string | null; projects: { name: string } | null; campaigns: { name: string } | null; asset_tags: Array<{ tags: { id: string; name: string } | null }>; allowed_users: { figma_handle: string | null; avatar_url: string | null } | null; versions: Array<{ id: string; version: number; width: number; height: number; file_size: number; created_at: string }> }
 interface SessionResponse { data: { authenticated: boolean; user?: { id: string; role: string } } }
-interface Board { id: string; title: string; mode: 'dynamic' | 'static'; role: 'owner' | 'editor' | 'contributor' | 'viewer'; itemCount: number; previewAssets: Array<{ id: string; previewUrl: string; mime_type?: string | null; width: number; height: number }> }
+interface Board { id: string; title: string; mode: 'dynamic' | 'static'; role: string; itemCount: number; previewAssets: Array<{ id: string; previewUrl: string; mime_type?: string | null; width: number; height: number }> }
 interface Option { id: string; name: string }
 const dialog = ref<HTMLDialogElement>()
 const overlayContent = ref<HTMLElement>()
@@ -19,6 +19,8 @@ const { data, error, status: assetStatus, refresh, execute: loadAsset } = useLaz
 const { data: previewData, execute: loadFullPreview } = useLazyFetch<{ data: { id: string; url: string } }>(() => `/api/assets/${props.assetId}/preview`, { immediate: false })
 const { data: session, execute: loadSession } = useLazyFetch<SessionResponse>('/api/auth/session', { immediate: false })
 const { data: boardData, status: boardStatus, refresh: refreshBoards, execute: loadBoards } = useLazyFetch<{ data: { collections: Board[] } }>('/api/shares', { immediate: false })
+const availableBoards = computed(() => props.boards ?? boardData.value?.data.collections ?? [])
+const availableBoardStatus = computed(() => props.boards !== undefined ? 'success' : boardStatus.value)
 const boardCreator = ref<{ openCreate: () => Promise<void> }>()
 const { data: projectData, execute: loadProjects } = useLazyFetch<{ data: { projects: Option[] } }>('/api/projects', { immediate: false })
 const { data: campaignData, execute: loadCampaigns } = useLazyFetch<{ data: { campaigns: Option[] } }>('/api/campaigns', { immediate: false })
@@ -76,7 +78,7 @@ const canOpenBoardPicker = computed(() => {
   if (!session.value?.data.user) return true
   return ['editor', 'admin'].includes(role.value ?? '') || (role.value === 'contributor' && asset.value?.uploaded_by === session.value.data.user.id)
 })
-const eligibleBoards = computed(() => (boardData.value?.data.collections ?? []).filter(board => board.mode === 'static' && ['owner', 'editor', 'contributor'].includes(board.role) && (board.role !== 'contributor' || asset.value?.uploaded_by === session.value?.data.user?.id)))
+const eligibleBoards = computed(() => availableBoards.value.filter(board => board.mode === 'static' && ['owner', 'editor', 'contributor'].includes(board.role) && (board.role !== 'contributor' || asset.value?.uploaded_by === session.value?.data.user?.id)))
 const boardSearch = ref('')
 const filteredEligibleBoards = computed(() => {
   const term = boardSearch.value.trim().toLocaleLowerCase()
@@ -93,7 +95,9 @@ const mobileSlides = computed(() => [
   nextAssetId.value && nextPreviewUrl.value ? { id: nextAssetId.value, position: 'next', url: nextPreviewUrl.value, mimeType: props.mimeTypes[nextAssetId.value], alt: '' } : null
 ].filter((slide): slide is NonNullable<typeof slide> => Boolean(slide)))
 const boardId = ref('')
-const boardPickerOpen = ref(false)
+const boardPickerOpen = ref(props.startWithBoardPicker)
+const boardSearchInput = ref<HTMLInputElement>()
+const boardPickerTrigger = ref<HTMLButtonElement>()
 const addingBoardId = ref('')
 const editing = ref(false); const title = ref(''); const description = ref(''); const projectId = ref(''); const campaignId = ref(''); const tagsText = ref(''); const language = ref(''); const contentType = ref(''); const actionError = ref(''); const actionMessage = ref(''); const downloading = ref(false); const saving = ref(false); const titleSaving = ref(false); const approvalBusy = ref(false)
 const isClosing = ref(false)
@@ -174,12 +178,13 @@ onMounted(() => {
   lockPageScroll()
   dialog.value?.showModal()
   dialog.value?.focus({ preventScroll: true })
+  if (props.startWithBoardPicker) nextTick(() => boardSearchInput.value?.focus({ preventScroll: true }))
   firstPaintFrame = requestAnimationFrame(() => {
     initialLoadFrame = requestAnimationFrame(() => {
       void loadAsset()
       void loadFullPreview()
       void loadSession()
-      void loadBoards()
+      if (props.boards === undefined) void loadBoards()
       void loadProjects()
       void loadCampaigns()
     })
@@ -298,8 +303,9 @@ const addToBoard = async (targetBoardId = boardId.value) => {
   try {
     const response = await $fetch<{ data: { added: boolean; approved: boolean } }>(`/api/shares/${targetBoardId}/assets`, { method: 'POST', body: { assetId: props.assetId } })
     if (response.data.approved && asset.value) asset.value.status = 'approved'
+    emit('addedToBoard', props.assetId, targetBoardId, response.data.approved)
     actionMessage.value = 'Added to board.'
-    boardPickerOpen.value = false
+    await closeBoardPicker()
   } catch { actionError.value = 'Unable to add this asset to the board.' }
   finally { addingBoardId.value = '' }
 }
@@ -314,12 +320,27 @@ const navigateAsset = (id?: string) => {
   emit('navigate', id)
 }
 const cancelOverlay = () => {
-  if (boardPickerOpen.value) boardPickerOpen.value = false
+  if (boardPickerOpen.value) void closeBoardPicker()
   else close()
 }
-const openBoardPicker = () => {
+const closeBoardPicker = async () => {
+  if (props.startWithBoardPicker) {
+    close()
+    return
+  }
+  boardPickerOpen.value = false
+  await nextTick()
+  boardPickerTrigger.value?.focus({ preventScroll: true })
+}
+const openBoardPicker = async () => {
   boardSearch.value = ''
   boardPickerOpen.value = true
+  await nextTick()
+  boardSearchInput.value?.focus({ preventScroll: true })
+}
+const handleBoardCreated = () => {
+  if (props.boards !== undefined) emit('refreshBoards')
+  else void refreshBoards()
 }
 const handleArrowNavigation = (event: KeyboardEvent, direction: -1 | 1) => {
   const target = event.target as HTMLElement | null
@@ -330,6 +351,7 @@ const handleArrowNavigation = (event: KeyboardEvent, direction: -1 | 1) => {
   navigateAsset(id)
 }
 const handleAssetNavigationKey = (event: KeyboardEvent) => {
+  if (boardPickerOpen.value) return
   if (event.key === 'ArrowLeft') handleArrowNavigation(event, -1)
   if (event.key === 'ArrowRight') handleArrowNavigation(event, 1)
 }
@@ -610,9 +632,9 @@ watch(() => props.assetId, id => {
     <dialog ref="dialog" class="asset-dialog" tabindex="-1" :class="{ 'is-closing': isClosing, 'is-gesture-active': gestureActive }"
       :style="dialogGestureStyle" aria-label="Asset details"
       @cancel.prevent="cancelOverlay" @keydown="handleAssetNavigationKey">
-      <div v-if="error && !asset && !showInitialSkeleton" class="overlay-state" role="alert"><strong>Unable to load this
+      <div v-if="error && !asset && !showInitialSkeleton" class="overlay-state" role="alert" :inert="boardPickerOpen || undefined" :aria-hidden="boardPickerOpen || undefined"><strong>Unable to load this
           asset.</strong><button @click="refresh()">Try again</button></div>
-      <main v-if="asset || showInitialSkeleton" ref="overlayContent" class="overlay-content">
+      <main v-if="asset || showInitialSkeleton" ref="overlayContent" class="overlay-content" :inert="boardPickerOpen || undefined" :aria-hidden="boardPickerOpen || undefined">
         <section ref="assetVisual" class="asset-visual"
           :class="{ 'skeleton-visual': !resolvedPreviewUrl, 'is-dragging': isMobile && gestureActive, 'is-zoomed': zoomActive, 'allows-opening-view-transition': allowsOpeningViewTransition }"
           :style="assetVisualStyle" aria-describedby="mobile-gesture-hint" @pointerdown="startGesture"
@@ -686,7 +708,7 @@ watch(() => props.assetId, id => {
                 @input="resizeTitleInput" @keydown="handleTitleKeydown" /><span v-else>{{ asset.title }}</span></h1>
             <p v-if="asset.description" class="description">{{ asset.description }}</p>
           </template>
-          <div v-if="!editing" class="primary-actions"><button v-if="canOpenBoardPicker"
+          <div v-if="!editing" class="primary-actions"><button v-if="canOpenBoardPicker" ref="boardPickerTrigger"
               class="button board-picker-trigger" type="button" @click="openBoardPicker">Add</button>
               <button v-if="canApprove" class="button-secondary approval-toggle" type="button"
               :aria-pressed="asset.status === 'approved'"
@@ -768,8 +790,8 @@ watch(() => props.assetId, id => {
           <h2 id="board-picker-title">Add to board</h2>
         </header>
         <label class="board-picker-search">
-          <Search :size="22" aria-hidden="true" /><span class="sr-only">Search boards</span><input v-model="boardSearch"
-            type="search" placeholder="Search" autofocus>
+          <Search :size="22" aria-hidden="true" /><span class="sr-only">Search boards</span><input ref="boardSearchInput" v-model="boardSearch"
+            type="search" placeholder="Search">
         </label>
         <div class="board-picker-list">
           <button v-for="board in filteredEligibleBoards" :key="board.id" class="board-picker-option" type="button"
@@ -783,16 +805,16 @@ watch(() => props.assetId, id => {
               'Adding…' :
               `${board.itemCount} ${board.itemCount === 1 ? 'item' : 'items'}` }}</span></span>
           </button>
-          <p v-if="boardStatus === 'pending'" class="board-picker-empty">Loading boards…</p>
+          <p v-if="availableBoardStatus === 'pending'" class="board-picker-empty">Loading boards…</p>
           <p v-else-if="!filteredEligibleBoards.length" class="board-picker-empty">No boards found</p>
         </div>
         <footer class="board-picker-footer"><button class="button" type="button"
             @click="boardCreator?.openCreate()">Create
             board</button><button class="button-secondary board-picker-cancel" type="button"
-            aria-label="Close board picker" @click="boardPickerOpen = false">
+            aria-label="Close board picker" @click="closeBoardPicker">
             <X :size="20" aria-hidden="true" />
           </button>
-          <ShareCollection ref="boardCreator" hide-trigger @created="() => refreshBoards()" />
+          <ShareCollection ref="boardCreator" hide-trigger @created="handleBoardCreated" />
         </footer>
       </section>
     </dialog>

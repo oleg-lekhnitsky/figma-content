@@ -127,7 +127,6 @@ const copyCode = async () => {
     background: var(--filter-overlay-panel-background-mobile);
   }
 
-  .auth-header { margin-bottom: var(--filter-sheet-group-gap-mobile); }
   .auth-code, .auth-submit.auth-submit { min-height: calc(var(--range-control-height-mobile) + .25rem); }
 }
 
