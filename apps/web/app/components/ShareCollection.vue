@@ -384,7 +384,7 @@ type="button"
       <section v-if="purpose === 'review'" class="filter-option-group" aria-labelledby="create-review-deadline"><h3 id="create-review-deadline">Submission deadline (optional)</h3><AppDatePicker v-model="submissionDeadline" label="Submission deadline (optional)" :show-label="false" surface="field" /></section>
       <section v-if="!staticOnly" class="board-setting-group"><p class="board-type-summary">{{ purpose === 'review' ? 'This board starts private. Add contributors after creating it.' : purpose === 'portfolio' ? 'Your portfolio starts private. Add work and publish when it is ready.' : 'This board starts private. Publish it when it is ready.' }}</p></section>
       <section v-if="errorMessage" class="board-setting-group"><p class="board-type-summary error" role="alert">{{ errorMessage }}</p></section>
-      <template #actions><button class="panel-primary-action" type="submit" :disabled="busy">{{ busy ? 'Creating…' : createPanelTitle }}</button><button type="button" class="panel-secondary-action" @click="close">Cancel</button></template>
+      <template #actions><button class="panel-primary-action" type="submit" :disabled="busy">{{ busy ? 'Creating…' : staticOnly ? 'Create' : createPanelTitle }}</button><button type="button" class="panel-secondary-action" @click="close">Cancel</button></template>
     </AssetFilterControls>
     <button class="filter-panel-toggle is-expanded" type="button" :aria-label="`Close ${createPanelTitle.toLocaleLowerCase()}`" aria-expanded="true" @click="close">
       <Xmark :size="20" :stroke-width="2" aria-hidden="true" />
