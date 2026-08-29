@@ -406,8 +406,8 @@ body:has(> .selection-panel.selection-panel--filter-overlay) > .selection-panel.
   border-radius: 0 !important;
   background: var(--filter-overlay-backdrop-background) !important;
   box-shadow: none !important;
-  backdrop-filter: blur(var(--filter-overlay-blur)) !important;
   -webkit-backdrop-filter: blur(var(--filter-overlay-blur)) !important;
+  backdrop-filter: blur(var(--filter-overlay-blur)) !important;
   transform: none !important;
   isolation: isolate;
   animation: none;
@@ -1134,8 +1134,8 @@ button.panel-dropdown-trigger:focus-visible {
     overflow: hidden !important;
     overscroll-behavior: contain;
     background: transparent !important;
-    backdrop-filter: blur(var(--filter-overlay-blur)) !important;
     -webkit-backdrop-filter: blur(var(--filter-overlay-blur)) !important;
+    backdrop-filter: blur(var(--filter-overlay-blur)) !important;
   }
 
   .selection-panel.selection-panel--filter-overlay::before {
