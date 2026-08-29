@@ -46,7 +46,7 @@
   --filter-overlay-radius: clamp(1.875rem, 5vw, 4.25rem);
   --filter-scroll-radius: clamp(1.875rem, 2.5vw, 4rem);
   --filter-overlay-group-gap: clamp(1.375rem, 3vh, 2.125rem);
-  --filter-option-gap: .375rem;
+  --filter-option-gap: .5rem;
   --filter-option-height: 2.125rem;
   --filter-option-padding: .75rem;
   --filter-option-font-size: var(--font-size-control);
@@ -504,6 +504,10 @@ body:has(> .selection-panel.selection-panel--filter-overlay) > .selection-panel.
 
   .selection-panel--filter-overlay .asset-filter-controls--filters.asset-filter-controls--expanded {
     height: calc(100% - var(--filter-overlay-margin) - var(--filter-overlay-margin));
+  }
+
+  .selection-panel--filter-overlay .asset-filter-controls--filters.asset-filter-controls--expanded.asset-filter-controls--content-height {
+    height: auto;
   }
 
   .selection-panel--filter-overlay .asset-filter-controls--expanded .filter-sheet-content {
@@ -1084,11 +1088,14 @@ button.panel-dropdown-trigger:focus-visible {
   flex: 1 1 0;
   margin: 0;
   padding-inline: calc(var(--filter-action-padding)/1) var(--filter-action-padding) ;
-  color: var(--filter-overlay-primary-color);
-  background: var(--filter-overlay-primary-background);
   font-size: var(--filter-action-font-size);
   line-height: 1;
   white-space: nowrap;
+}
+
+.selection-panel--filter-overlay .filter-actions > button:not(.panel-secondary-action, .button-secondary) {
+  color: var(--filter-overlay-primary-color);
+  background: var(--filter-overlay-primary-background);
 }
 
 :is(.selection-panel--filter-overlay .filter-actions > button, .filter-action-button) {

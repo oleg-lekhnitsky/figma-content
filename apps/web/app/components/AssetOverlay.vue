@@ -6,7 +6,7 @@ const props = withDefaults(defineProps<{ assetId: string; assetIds?: string[]; p
 const emit = defineEmits<{ close: []; deleted: [id: string]; navigate: [id: string]; renamed: [id: string, title: string]; addedToBoard: [assetId: string, boardId: string, approved: boolean]; refreshBoards: [] }>()
 interface AssetDetail { id: string; uploaded_by: string; title: string; description: string | null; width: number; height: number; file_size: number; mime_type: string; status: string; version: number; created_at: string; updated_at: string; figma_url: string; language: string | null; content_type: string | null; project_id: string | null; campaign_id: string | null; projects: { name: string } | null; campaigns: { name: string } | null; asset_tags: Array<{ tags: { id: string; name: string } | null }>; allowed_users: { figma_handle: string | null; avatar_url: string | null } | null; versions: Array<{ id: string; version: number; width: number; height: number; file_size: number; created_at: string }> }
 interface SessionResponse { data: { authenticated: boolean; user?: { id: string; role: string } } }
-interface Board { id: string; title: string; mode: 'dynamic' | 'static'; role: string; itemCount: number; previewAssets: Array<{ id: string; previewUrl: string; mime_type?: string | null; width: number; height: number }> }
+interface Board { id: string; title: string; purpose: 'showcase' | 'review' | 'portfolio' | 'case'; mode: 'dynamic' | 'static'; role: string; itemCount: number; previewAssets: Array<{ id: string; previewUrl: string; mime_type?: string | null; width: number; height: number }> }
 interface Option { id: string; name: string }
 const dialog = ref<HTMLDialogElement>()
 const overlayContent = ref<HTMLElement>()
@@ -78,7 +78,7 @@ const canOpenBoardPicker = computed(() => {
   if (!session.value?.data.user) return true
   return ['editor', 'admin'].includes(role.value ?? '') || (role.value === 'contributor' && asset.value?.uploaded_by === session.value.data.user.id)
 })
-const eligibleBoards = computed(() => availableBoards.value.filter(board => board.mode === 'static' && ['owner', 'editor', 'contributor'].includes(board.role) && (board.role !== 'contributor' || asset.value?.uploaded_by === session.value?.data.user?.id)))
+const eligibleBoards = computed(() => availableBoards.value.filter(board => board.purpose !== 'portfolio' && board.mode === 'static' && ['owner', 'editor', 'contributor'].includes(board.role) && (board.role !== 'contributor' || asset.value?.uploaded_by === session.value?.data.user?.id)))
 const boardSearch = ref('')
 const filteredEligibleBoards = computed(() => {
   const term = boardSearch.value.trim().toLocaleLowerCase()
@@ -787,7 +787,7 @@ watch(() => props.assetId, id => {
       <section v-if="boardPickerOpen" class="board-picker" role="dialog" aria-modal="true"
         aria-labelledby="board-picker-title">
         <header>
-          <h2 id="board-picker-title">Add to board</h2>
+          <h2 id="board-picker-title">Add to static board</h2>
         </header>
         <label class="board-picker-search">
           <Search :size="22" aria-hidden="true" /><span class="sr-only">Search boards</span><input ref="boardSearchInput" v-model="boardSearch"
@@ -1254,10 +1254,12 @@ h1 {
   box-sizing: border-box;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
-  gap: var(--space);
-  padding: var(--space);
+  gap: var(--filter-overlay-group-gap);
+  padding: var(--filter-overlay-padding);
   color: var(--color-fg);
-  background: var(--color-bg);
+  background: var(--filter-overlay-backdrop-background);
+  backdrop-filter: blur(var(--filter-overlay-blur));
+  -webkit-backdrop-filter: blur(var(--filter-overlay-blur));
   overflow: hidden
 }
 
@@ -1269,7 +1271,9 @@ h1 {
 
 .board-picker h2 {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: var(--filter-title-size);
+  font-weight: 500;
+  letter-spacing: -.04em;
   line-height: 1;
   text-align: center;
   white-space: nowrap
@@ -1278,22 +1282,24 @@ h1 {
 .board-picker-search,
 .board-picker-list,
 .board-picker-footer {
-  width: min(100%, 40rem);
+  width: min(100%, var(--filter-overlay-width));
   justify-self: center
 }
 
 .board-picker-search {
-  height: calc(var(--control-height) + var(--space) / 2);
+  height: var(--filter-action-height);
+  min-height: var(--filter-action-height);
   display: grid;
   grid-template-columns: auto 1fr;
   align-items: center;
-  gap: calc(var(--space) / 2);
+  gap: var(--filter-action-gap);
   box-sizing: border-box;
   margin: 0;
-  padding-inline: var(--space);
-  border-radius: calc(var(--control-height) + var(--space));
+  padding-inline: var(--filter-option-padding);
+  border-radius: calc(var(--radius) * 1.5);
   background: var(--color-surface);
-  color: var(--color-muted)
+  color: var(--color-muted);
+  font-size: var(--filter-action-font-size)
 }
 
 .board-picker-search input {
@@ -1328,16 +1334,17 @@ h1 {
 
 .board-picker-option {
   width: 100%;
-  min-height: calc(var(--control-height) + var(--space) * 2);
+  min-height: var(--filter-overlay-row-height);
   display: grid;
-  grid-template-columns: calc(var(--control-height) + var(--space) / 2) minmax(0, 1fr);
+  grid-template-columns: var(--filter-action-height) minmax(0, 1fr);
   align-items: center;
-  gap: var(--space);
-  padding: calc(var(--space) / 2);
+  gap: var(--filter-action-gap);
+  padding: var(--filter-option-padding);
   color: var(--color-fg);
   background: transparent;
+  font-size: var(--filter-option-font-size);
   text-align: left;
-  border-radius: var(--radius);
+  border-radius: calc(var(--radius) * 1.5);
 }
 
 .board-picker-option:hover {
@@ -1346,11 +1353,11 @@ h1 {
 }
 
 .board-picker-preview {
-  width: calc(var(--control-height) + var(--space) / 2);
-  height: calc(var(--control-height) + var(--space) / 2);
+  width: var(--filter-action-height);
+  height: var(--filter-action-height);
   display: block;
   overflow: hidden;
-  border-radius: var(--radius);
+  border-radius: calc(var(--radius) * 1.5);
   background: var(--color-surface)
 }
 
@@ -1373,7 +1380,7 @@ h1 {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: var(--space)
+  gap: var(--filter-action-gap)
 }
 
 .board-picker-info strong {
@@ -1395,18 +1402,19 @@ h1 {
 .board-picker-footer {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: calc(var(--space) / 2);
-  padding-top: var(--space);
-  background: var(--color-bg)
+  gap: var(--filter-action-gap);
+  padding-top: var(--filter-overlay-group-gap);
+  background: transparent
 }
 
 .board-picker-footer>button {
-  min-height: calc(var(--control-height) + var(--space) / 2);
-  padding-inline: calc(var(--space) * 1.5)
+  min-height: var(--filter-action-height);
+  padding-inline: var(--filter-action-padding);
+  font-size: var(--filter-action-font-size)
 }
 
 .board-picker-footer>.board-picker-cancel {
-  width: calc(var(--control-height) + var(--space) / 2);
+  width: var(--filter-action-height);
   padding: 0
 }
 
@@ -1715,7 +1723,14 @@ li span {
   }
 
   .board-picker {
-    padding: max(var(--space), env(safe-area-inset-top)) var(--space) max(var(--space), env(safe-area-inset-bottom))
+    --filter-action-height: var(--range-control-height-mobile);
+    --filter-option-font-size: var(--font-size-body);
+    --filter-action-font-size: var(--font-size-body);
+    padding: var(--filter-sheet-content-padding-mobile)
+  }
+
+  .board-picker-option {
+    min-height: var(--range-control-height-mobile)
   }
 }
 

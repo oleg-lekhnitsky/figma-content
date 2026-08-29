@@ -133,9 +133,20 @@ const { data, status: loadStatus, error, refresh } = await useLazyFetch<AssetLis
 const { data: projectData, refresh: refreshProjects } = await useLazyFetch<{ data: { projects: Project[] } }>('/api/projects', { cache: false, server: false })
 const { data: tagData, refresh: refreshTags } = await useLazyFetch<{ data: { tags: Tag[] } }>('/api/tags', { cache: false, server: false })
 const { data: boardData, status: boardStatus, refresh: refreshBoards } = await useLazyFetch<BoardList>('/api/shares', { cache: false, server: false })
-const boardCreator = ref<{ openCreate: () => Promise<void>; openCreateFromCurrentView: () => Promise<void> }>()
+const boardCreator = ref<{ openCreate: () => Promise<void>; openCreateFromCurrentView: () => Promise<void>; openCreateStatic: () => Promise<void> }>()
+const boardPickerAsset = ref<AssetCard | null>(null)
+const boardPickerVisible = ref(false)
+const pendingBoardPickerAsset = ref<AssetCard | null>(null)
+const openBoardCreatorAfterPickerClose = ref(false)
+const revealAssetBoardPicker = async (asset: AssetCard) => {
+  boardPickerAsset.value = asset
+  boardPickerVisible.value = false
+  await nextTick()
+  boardPickerVisible.value = true
+}
 const handleBoardCreated = async (boardId: string) => {
   await refreshBoards()
+  if (pendingBoardPickerAsset.value) return
   await selectBoard(boardId)
 }
 const projects = computed(() => projectData.value?.data.projects ?? [])
@@ -848,7 +859,7 @@ const closeBoardSettings = () => {
 const boardCreatorExpanded = ref(false)
 const headerActionsOpen = ref(false)
 const accountMenu = ref<{ openMenu: () => void }>()
-const openBoardCreator = (fromCurrentView = false) => {
+const openBoardCreator = (fromCurrentView = false, staticOnly = false) => {
   compactFiltersVisible.value = false
   searchExpanded.value = false
   filtersExpanded.value = false
@@ -856,7 +867,8 @@ const openBoardCreator = (fromCurrentView = false) => {
   videoExpanded.value = false
   boardSettingsExpanded.value = false
   boardCreatorExpanded.value = true
-  if (fromCurrentView) void boardCreator.value?.openCreateFromCurrentView()
+  if (staticOnly) void boardCreator.value?.openCreateStatic()
+  else if (fromCurrentView) void boardCreator.value?.openCreateFromCurrentView()
   else void boardCreator.value?.openCreate()
 }
 const openAccountMenu = async () => {
@@ -872,7 +884,14 @@ const finishExpandedPanelClose = () => {
 }
 const setBoardCreatorExpanded = (expanded: boolean) => {
   boardCreatorExpanded.value = expanded
-  if (!expanded) finishExpandedPanelClose()
+  if (!expanded) {
+    if (pendingBoardPickerAsset.value) {
+      const asset = pendingBoardPickerAsset.value
+      pendingBoardPickerAsset.value = null
+      void revealAssetBoardPicker(asset)
+    }
+    finishExpandedPanelClose()
+  }
 }
 const searchInput = ref<HTMLInputElement | null>(null)
 const toggleSearch = async () => {
@@ -1028,9 +1047,31 @@ const handleAssetRenamed = (id: string, title: string) => {
   setAssetTitle(id, title)
   assetRenameFeedback.value = `${title} saved.`
 }
-const handleAssetAddedToBoard = (assetId: string, _boardId: string, approved: boolean) => {
+const handleAssetAddedToBoard = (assetId: string, boardId: string, approved: boolean) => {
   if (approved) setAssetStatus(assetId, 'approved')
-  void refreshBoards()
+  const board = collections.value.find(collection => collection.id === boardId)
+  const alreadyAdded = board?.assetIds.includes(assetId) ?? false
+  const asset = assets.value.find(item => item.id === assetId)
+    ?? data.value?.data.assets.find(item => item.id === assetId)
+    ?? selectedBoardData.value?.assets.find(item => item.id === assetId)
+
+  if (board && !alreadyAdded) {
+    board.assetIds = [...board.assetIds, assetId]
+    board.itemCount = Math.max(board.itemCount + 1, board.assetIds.length)
+    if (asset && !board.previewAssets.some(item => item.id === assetId)) board.previewAssets = [asset, ...board.previewAssets]
+  }
+  if (asset) {
+    const cached = boardAssetCache.get(boardId) ?? []
+    if (!cached.some(item => item.id === assetId)) boardAssetCache.set(boardId, [...cached, asset])
+    if (selectedBoardData.value?.boardId === boardId && !selectedBoardData.value.assets.some(item => item.id === assetId)) {
+      selectedBoardData.value.assets = [...selectedBoardData.value.assets, asset]
+    }
+  }
+
+  void Promise.all([
+    refreshBoards(),
+    selectedBoardId.value === boardId ? refreshSelectedBoard() : Promise.resolve()
+  ])
 }
 const toggleAssetApproval = async (asset: AssetCard) => {
   const previousStatus = asset.status
@@ -1040,7 +1081,6 @@ const toggleAssetApproval = async (asset: AssetCard) => {
 }
 const routedAssetId = computed(() => typeof route.query.asset === 'string' ? route.query.asset : '')
 const localAssetId = ref<string | null>(null)
-const boardPickerAssetId = ref('')
 const selectedAssetId = computed(() => localAssetId.value ?? routedAssetId.value)
 const selectedAssetPreviewUrl = computed(() => {
   const selected = displayedAssets.value.find(asset => asset.id === selectedAssetId.value)
@@ -1059,9 +1099,22 @@ const selectAsset = (id: string) => {
     if (revision === assetRouteRevision && routedAssetId.value === id) localAssetId.value = null
   })
 }
-const openAsset = (id: string) => { boardPickerAssetId.value = ''; selectAsset(id) }
-const openAssetBoardPicker = (asset: AssetCard) => { boardPickerAssetId.value = asset.id; selectAsset(asset.id) }
-const closeAsset = () => { boardPickerAssetId.value = ''; selectAsset('') }
+const openAsset = (id: string) => selectAsset(id)
+const openAssetBoardPicker = (asset: AssetCard) => { void revealAssetBoardPicker(asset) }
+const closeAssetBoardPicker = () => { boardPickerVisible.value = false }
+const createBoardFromAssetPicker = () => {
+  pendingBoardPickerAsset.value = boardPickerAsset.value
+  openBoardCreatorAfterPickerClose.value = true
+  closeAssetBoardPicker()
+}
+const finishAssetBoardPickerClose = () => {
+  boardPickerAsset.value = null
+  if (openBoardCreatorAfterPickerClose.value) {
+    openBoardCreatorAfterPickerClose.value = false
+    openBoardCreator(false, true)
+  }
+}
+const closeAsset = () => selectAsset('')
 const navigateAsset = (id: string) => selectAsset(id)
 const handleAssetDeleted = (id: string) => {
   assets.value = assets.value.filter(asset => asset.id !== id)
@@ -1453,7 +1506,7 @@ onBeforeUnmount(() => {
                 v-else :assets="displayedAssets" :play-videos="!videoExpanded && boardMotionPhase === 'idle'" instant-open instant-cards
                 :stable-columns="false"
                 :animate-changes="boardMotionPhase === 'idle'" :can-approve="canApprove && !arrangeExpanded"
-                :can-add="!selectedBoardId ? canAddAssetToBoard : false"
+                :can-add="canAddAssetToBoard"
                 :editable-titles="canRenameAssets && !arrangeExpanded" :view-settings="libraryView"
                 :interactive="!arrangeExpanded" :reorderable="arrangeExpanded" :selectable="arrangeExpanded"
                 :selected-ids="arrangeSelectedIds" @reorder="reorderSelectedBoardAssets"
@@ -1491,11 +1544,14 @@ onBeforeUnmount(() => {
       :confirm-label="arrangeRemoving ? 'Removing…' : 'Remove from board'" :busy="arrangeRemoving"
       @confirm="removeArrangeSelection" />
     <AssetOverlay v-if="selectedAssetId" :asset-id="selectedAssetId" :asset-ids="displayedAssets.map(asset => asset.id)"
-      :start-with-board-picker="selectedAssetId === boardPickerAssetId"
       :boards="collections"
       :preview-url="selectedAssetPreviewUrl" :preview-urls="assetPreviewUrls" :mime-types="assetMimeTypes" @close="closeAsset"
       @deleted="handleAssetDeleted" @navigate="navigateAsset" @renamed="handleAssetRenamed" @added-to-board="handleAssetAddedToBoard"
       @refresh-boards="refreshBoards" />
+    <AssetBoardPicker v-if="boardPickerAsset" :visible="boardPickerVisible" :asset-id="boardPickerAsset.id"
+      :asset-owner-id="boardPickerAsset.uploaded_by" :current-user-id="session?.data.user?.id" :boards="collections"
+      @close="closeAssetBoardPicker" @after-leave="finishAssetBoardPickerClose" @create-board="createBoardFromAssetPicker"
+      @added-to-board="handleAssetAddedToBoard" />
   </div>
 </template>
 

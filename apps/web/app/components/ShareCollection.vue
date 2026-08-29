@@ -45,6 +45,21 @@ const message = ref('')
 const errorMessage = ref('')
 const boardFeedback = reactive<Record<string, { text: string; error: boolean }>>({})
 const usingCurrentFilters = ref(false)
+const staticOnly = ref(false)
+const createPanelTitle = computed(() => props.portfolioOnly
+  ? 'Create portfolio'
+  : purpose.value === 'review'
+    ? 'Create review board'
+    : staticOnly.value
+      ? 'Create static board'
+      : 'Create board')
+const createPanelDescription = computed(() => props.portfolioOnly
+  ? 'Start with the details, then add and arrange work.'
+  : purpose.value === 'review'
+    ? 'Invite contributors after creating it. Submissions arrive from the Figma plugin.'
+    : staticOnly.value
+      ? 'This board starts private. Publish it when it is ready.'
+      : 'Name the board and choose what should appear in it.')
 let previousBodyOverflow = ''
 let previousRootOverflow = ''
 let scrollLocked = false
@@ -153,10 +168,11 @@ const close = () => {
   if (!panelWasOpen) emit('openChange', false)
 }
 const finishPanelClose = () => emit('openChange', false)
-const showCreate = async (fromCurrentView = false) => {
+const showCreate = async (fromCurrentView = false, forceStatic = false) => {
   emit('openChange', true)
   message.value = ''
   errorMessage.value = ''
+  staticOnly.value = forceStatic
   usingCurrentFilters.value = fromCurrentView
   purpose.value = props.portfolioOnly ? 'portfolio' : 'showcase'
   portfolioKind.value = 'main'
@@ -175,7 +191,7 @@ const showCreate = async (fromCurrentView = false) => {
     dateFrom.value = ''
     dateTo.value = ''
   }
-  title.value = defaultTitle()
+  title.value = ''
   view.value = 'create'
   dialog.value?.close()
   unlockPageScroll()
@@ -201,7 +217,16 @@ const openCreateFromCurrentView = async () => {
   opening.value = false
   void hydrateCreateOptions()
 }
-defineExpose({ openCreate, openCreateFromCurrentView })
+const openCreateStatic = async () => {
+  if (opening.value) return
+  opening.value = true
+  message.value = ''
+  errorMessage.value = ''
+  await showCreate(false, true)
+  opening.value = false
+  void hydrateCreateOptions()
+}
+defineExpose({ openCreate, openCreateFromCurrentView, openCreateStatic })
 const focusCurrentView = () => {
   if (view.value === 'create') titleInput.value?.focus()
   else createButton.value?.focus()
@@ -213,17 +238,18 @@ const createCollection = async () => {
   try {
     const review = purpose.value === 'review'
     const portfolio = purpose.value === 'portfolio'
+    const resolvedMode = review || portfolio || staticOnly.value ? 'static' : mode.value
     const reviewStart = review ? new Date(`${reviewMonth.value}-01T00:00:00.000`) : null
     const reviewEnd = reviewStart ? new Date(reviewStart.getFullYear(), reviewStart.getMonth() + 1, 0, 23, 59, 59, 999) : null
     const response = await $fetch<CreateResponse>('/api/shares', {
       method: 'POST', body: {
         title: title.value || (review ? reviewTitle() : portfolio ? 'Portfolio' : defaultTitle()),
         purpose: purpose.value,
-        mode: review || portfolio ? 'static' : mode.value,
-        contentStrategy: review || portfolio ? 'manual' : mode.value === 'dynamic' ? 'dynamic' : usingCurrentFilters.value ? 'snapshot' : 'manual',
+        mode: resolvedMode,
+        contentStrategy: review || portfolio || staticOnly.value ? 'manual' : resolvedMode === 'dynamic' ? 'dynamic' : usingCurrentFilters.value ? 'snapshot' : 'manual',
         filters: review
           ? { search: '', projectId: null, tagId: null, projectIds: [], tagIds: [], uploadedBy: null, dateFrom: reviewStart?.toISOString(), dateTo: reviewEnd?.toISOString() }
-          : { search: mode.value === 'dynamic' ? '' : searchFilter.value, projectId: null, tagId: null, projectIds: projectIds.value, tagIds: tagIds.value, uploadedBy: usingCurrentFilters.value ? props.currentFilters?.uploadedBy ?? null : null, ...datesForRange() },
+          : { search: resolvedMode === 'dynamic' ? '' : searchFilter.value, projectId: null, tagId: null, projectIds: projectIds.value, tagIds: tagIds.value, uploadedBy: usingCurrentFilters.value ? props.currentFilters?.uploadedBy ?? null : null, ...datesForRange() },
         expiresAt: null,
         reviewMonth: review ? `${reviewMonth.value}-01` : null,
         submissionDeadline: review ? isoAt(submissionDeadline.value, true) : null,
@@ -322,17 +348,18 @@ type="button"
       </Transition>
     </div>
   </dialog>
-  <SelectionPanel :visible="createPanelOpen" :label="props.portfolioOnly ? 'Create portfolio' : 'Create board'" wide overlay
+  <SelectionPanel :visible="createPanelOpen" :label="createPanelTitle" wide overlay
     @close="close" @after-leave="finishPanelClose">
     <AssetFilterControls
       v-model:search="searchFilter" v-model:project-ids="projectIds" v-model:tag-ids="tagIds"
       v-model:date-range="range" v-model:date-from="dateFrom" v-model:date-to="dateTo"
-      :projects="projects" :tags="tags" :heading="props.portfolioOnly ? 'Create portfolio' : 'Create board'"
-      :description="props.portfolioOnly ? 'Start with the details, then add and arrange work.' : 'Name the board and choose what should appear in it.'"
-      :show-asset-filters="purpose === 'showcase' && mode === 'dynamic'" :use-date-presets="purpose === 'showcase' && mode === 'dynamic'" expanded
+      :class="{ 'asset-filter-controls--content-height': staticOnly }"
+      :projects="projects" :tags="tags" :heading="createPanelTitle"
+      :description="createPanelDescription"
+      :show-asset-filters="!staticOnly && purpose === 'showcase' && mode === 'dynamic'" :use-date-presets="!staticOnly && purpose === 'showcase' && mode === 'dynamic'" expanded
       :actions-visible="true" @submit="createCollection">
       <template #before>
-        <section class="filter-option-group"><h3 id="create-title-label">{{ props.portfolioOnly ? 'Portfolio name' : 'Board name' }}</h3><input ref="titleInput" v-model="title" class="panel-field" name="title" required maxlength="120" aria-labelledby="create-title-label"></section>
+        <div class="filter-option-group"><label><span class="sr-only">{{ props.portfolioOnly ? 'Portfolio name' : 'Board name' }}</span><input ref="titleInput" v-model="title" class="panel-field" name="title" required maxlength="120" :placeholder="props.portfolioOnly ? 'Portfolio name' : 'Board name'"></label></div>
         <section
           v-if="!props.portfolioOnly"
           class="filter-option-group"
@@ -351,15 +378,15 @@ type="button"
         <section v-if="purpose === 'portfolio' && portfolioKind === 'client'" class="filter-option-group"><h3 id="create-client-label">Client or recipient</h3><input v-model="portfolioClient" class="panel-field" name="portfolio-client" required maxlength="120" placeholder="Acme Studio" aria-labelledby="create-client-label"></section>
         <section v-if="purpose === 'portfolio'" class="filter-option-group"><h3 id="create-introduction-label">Introduction</h3><textarea v-model="introduction" class="panel-field" name="introduction" rows="3" maxlength="2000" placeholder="A short note about this selection" aria-labelledby="create-introduction-label" /></section>
         <section v-if="usingCurrentFilters && purpose === 'showcase'" class="board-setting-group"><p class="board-type-summary"><strong>Starting with current filters</strong><br>{{ currentFilterLabels.join(' · ') || 'All dates' }}<br>{{ props.currentFilters?.status === 'draft' ? 'Draft status is not included because boards contain approved assets only.' : 'Boards contain approved assets only.' }}</p></section>
-        <section v-if="purpose === 'showcase'" class="filter-option-group" aria-labelledby="create-board-updates"><h3 id="create-board-updates">Updates</h3><div class="filter-option-list filter-option-list--segmented"><button type="button" :aria-pressed="mode === 'static'" @click="mode = 'static'">Manual</button><button type="button" :aria-pressed="mode === 'dynamic'" @click="mode = 'dynamic'">Automatic</button></div><p class="board-type-summary">{{ mode === 'dynamic' ? 'Choose filters below. New approved items that match them appear automatically.' : usingCurrentFilters ? 'Create a fixed snapshot from the current view.' : 'Start with an empty board and add work manually.' }}</p></section>
+        <section v-if="purpose === 'showcase' && !staticOnly" class="filter-option-group" aria-labelledby="create-board-updates"><h3 id="create-board-updates">Updates</h3><div class="filter-option-list filter-option-list--segmented"><button type="button" :aria-pressed="mode === 'static'" @click="mode = 'static'">Manual</button><button type="button" :aria-pressed="mode === 'dynamic'" @click="mode = 'dynamic'">Automatic</button></div><p class="board-type-summary">{{ mode === 'dynamic' ? 'Choose filters below. New approved items that match them appear automatically.' : usingCurrentFilters ? 'Create a fixed snapshot from the current view.' : 'Start with an empty board and add work manually.' }}</p></section>
       </template>
-      <section v-if="purpose === 'review'" class="filter-option-group"><AppDatePicker v-model="reviewMonth" label="Submission month" precision="month" :clearable="false" surface="field" /></section>
-      <section v-if="purpose === 'review'" class="filter-option-group"><AppDatePicker v-model="submissionDeadline" label="Submission deadline (optional)" surface="field" /></section>
-      <section class="board-setting-group"><p class="board-type-summary">{{ purpose === 'review' ? 'This board starts private. Add contributors after creating it.' : purpose === 'portfolio' ? 'Your portfolio starts private. Add work and publish when it is ready.' : 'This board starts private. Publish it when it is ready.' }}</p></section>
+      <section v-if="purpose === 'review'" class="filter-option-group" aria-labelledby="create-review-month"><h3 id="create-review-month">Submission month</h3><AppDatePicker v-model="reviewMonth" label="Submission month" precision="month" :clearable="false" :show-label="false" surface="field" /></section>
+      <section v-if="purpose === 'review'" class="filter-option-group" aria-labelledby="create-review-deadline"><h3 id="create-review-deadline">Submission deadline (optional)</h3><AppDatePicker v-model="submissionDeadline" label="Submission deadline (optional)" :show-label="false" surface="field" /></section>
+      <section v-if="!staticOnly" class="board-setting-group"><p class="board-type-summary">{{ purpose === 'review' ? 'This board starts private. Add contributors after creating it.' : purpose === 'portfolio' ? 'Your portfolio starts private. Add work and publish when it is ready.' : 'This board starts private. Publish it when it is ready.' }}</p></section>
       <section v-if="errorMessage" class="board-setting-group"><p class="board-type-summary error" role="alert">{{ errorMessage }}</p></section>
-      <template #actions><button class="filter-create-board" type="submit" :disabled="busy">{{ busy ? 'Creating…' : purpose === 'portfolio' ? 'Create portfolio' : 'Create board' }}</button><button type="button" class="clear-filters-button" @click="close">Cancel</button></template>
+      <template #actions><button class="panel-primary-action" type="submit" :disabled="busy">{{ busy ? 'Creating…' : createPanelTitle }}</button><button type="button" class="panel-secondary-action" @click="close">Cancel</button></template>
     </AssetFilterControls>
-    <button class="filter-panel-toggle is-expanded" type="button" :aria-label="props.portfolioOnly ? 'Close create portfolio' : 'Close create board'" aria-expanded="true" @click="close">
+    <button class="filter-panel-toggle is-expanded" type="button" :aria-label="`Close ${createPanelTitle.toLocaleLowerCase()}`" aria-expanded="true" @click="close">
       <Xmark :size="20" :stroke-width="2" aria-hidden="true" />
     </button>
   </SelectionPanel>

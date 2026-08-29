@@ -40,7 +40,7 @@ const signOut = async () => {
     </button>
 
     <SelectionPanel :visible="open" label="Your account" wide overlay raised @close="close">
-      <div class="asset-filter-controls asset-filter-controls--filters asset-filter-controls--expanded account-panel">
+      <div class="asset-filter-controls asset-filter-controls--expanded account-panel">
         <button class="filter-sheet-handle" type="button" aria-label="Close account" @click="close"><span aria-hidden="true" /></button>
         <div class="filter-sheet-content">
           <section class="filter-option-group account-profile">

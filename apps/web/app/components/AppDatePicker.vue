@@ -9,13 +9,15 @@ const props = withDefaults(defineProps<{
   surface?: 'line' | 'field'
   precision?: 'day' | 'month'
   clearable?: boolean
+  showLabel?: boolean
 }>(), {
   modelValue: '',
   min: '',
   max: '',
   surface: 'line',
   precision: 'day',
-  clearable: true
+  clearable: true,
+  showLabel: true
 })
 
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
@@ -214,7 +216,7 @@ const clear = () => {
       <template #trigger="{ triggerProps }">
         <button ref="trigger" v-bind="triggerProps" class="app-date-picker-trigger" type="button" :aria-label="`${label}: ${displayValue || 'No date selected'}`">
           <span class="app-date-picker-trigger-copy" :class="{ 'has-value': displayValue }">
-            <span class="app-date-picker-trigger-label">{{ label }}</span>
+            <span v-if="showLabel" class="app-date-picker-trigger-label">{{ label }}</span>
             <span v-if="displayValue" class="app-date-picker-trigger-value">{{ displayValue }}</span>
           </span>
           <Calendar :size="16" weight="Outline" :stroke-width="2" aria-hidden="true" />

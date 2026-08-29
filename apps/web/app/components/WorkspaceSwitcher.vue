@@ -93,6 +93,14 @@ const canInviteMember = computed(() => {
   const email = inviteEmail.value.trim()
   return !managementBusy.value && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 })
+const measureInlineAction = (element: Element) => {
+  const action = element as HTMLElement
+  const width = Math.max(action.scrollWidth, action.getBoundingClientRect().width)
+  action.parentElement?.style.setProperty('--workspace-inline-action-width', `${Math.ceil(width)}px`)
+}
+const clearInlineActionMeasure = (element: Element) => {
+  element.parentElement?.style.removeProperty('--workspace-inline-action-width')
+}
 watch(current, workspace => { workspaceName.value = workspace?.name ?? '' }, { immediate: true })
 watch(() => route.query.workspaceSettings, value => {
   if (value === '1') open.value = true
@@ -148,6 +156,24 @@ const workspaceMonogram = (name = 'Workspace') => name
   .toLocaleUpperCase()
 const contributorName = (contributor: WorkspaceContributor) => contributor.figma_handle ?? contributor.email ?? 'Contributor'
 const contributorInitial = (contributor: WorkspaceContributor) => contributorName(contributor).trim().charAt(0).toLocaleUpperCase() || '?'
+const relativeDayFormatter = new Intl.RelativeTimeFormat(undefined, { numeric: 'always' })
+const memberActivityLabel = (value: string | null) => {
+  if (!value) return 'Never signed in'
+  const activeAt = new Date(value)
+  if (Number.isNaN(activeAt.getTime())) return 'Activity date unavailable'
+  const today = new Date()
+  const todayKey = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())
+  const activeDayKey = Date.UTC(activeAt.getFullYear(), activeAt.getMonth(), activeAt.getDate())
+  const daysAgo = Math.max(0, Math.round((todayKey - activeDayKey) / 86_400_000))
+  if (daysAgo === 0) return 'Active today'
+  if (daysAgo === 1) return 'Active yesterday'
+  if (daysAgo < 7) return `Active ${relativeDayFormatter.format(-daysAgo, 'day')}`
+  return `Last active ${activeAt.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    ...(activeAt.getFullYear() === today.getFullYear() ? {} : { year: 'numeric' })
+  })}`
+}
 const workspaceTriggerLabel = computed(() => {
   const workspaceName = current.value?.name ?? 'Content Library'
   if (!contributors.value.length) return `Current workspace: ${workspaceName}. Choose workspace.`
@@ -373,13 +399,18 @@ const deleteWorkspace = async () => {
           </section>
 
           <section v-if="current?.role === 'admin'" class="filter-option-group workspace-rename-section">
-            <h2 class="filter-overlay-title">Rename {{ current.name }}</h2>
+            <h2 class="filter-overlay-title">Rename {{ current.name }} workspace</h2>
             <form class="workspace-name-form" @submit.prevent="renameWorkspace">
               <label>
                 <span class="sr-only">Workspace name</span>
                 <input v-model="workspaceName" class="panel-field" required maxlength="120" placeholder="Workspace name">
               </label>
-              <Transition name="workspace-inline-action">
+              <Transition
+                name="workspace-inline-action"
+                @before-enter="measureInlineAction"
+                @before-leave="measureInlineAction"
+                @after-leave="clearInlineActionMeasure"
+              >
                 <button v-if="canRenameWorkspace || renameWorkspaceBusy" class="panel-primary-action workspace-inline-action" type="submit" :disabled="renameWorkspaceBusy">
                   {{ renameWorkspaceBusy ? 'Saving…' : 'Save' }}
                 </button>
@@ -389,7 +420,7 @@ const deleteWorkspace = async () => {
           </section>
 
           <section v-if="current?.role === 'admin'" class="filter-option-group workspace-management-section">
-            <h2 class="filter-overlay-title">Invite someone to {{ current?.name ?? 'this workspace' }}</h2>
+            <h2 class="filter-overlay-title">Invite someone to {{ current?.name ?? 'this' }} workspace</h2>
             <div class="workspace-management-grid">
               <form v-if="inviteComposerOpen" class="workspace-setting-card" @submit.prevent="inviteMember">
                 <fieldset class="workspace-role-field">
@@ -406,7 +437,12 @@ const deleteWorkspace = async () => {
                     <span class="sr-only">Email</span>
                     <input ref="inviteEmailInput" v-model="inviteEmail" class="panel-field" required type="email" autocomplete="email" placeholder="Email">
                   </label>
-                  <Transition name="workspace-inline-action">
+                  <Transition
+                    name="workspace-inline-action"
+                    @before-enter="measureInlineAction"
+                    @before-leave="measureInlineAction"
+                    @after-leave="clearInlineActionMeasure"
+                  >
                     <button v-if="canInviteMember || (managementBusy && inviteEmail.trim())" class="panel-primary-action workspace-inline-action" type="submit" :disabled="managementBusy">
                       {{ managementBusy ? 'Inviting…' : 'Invite' }}
                     </button>
@@ -433,7 +469,7 @@ const deleteWorkspace = async () => {
           </section>
 
           <section v-if="current?.role === 'admin'" class="filter-option-group workspace-members-section">
-            <h2 class="filter-overlay-title">People in {{ current.name }}</h2>
+            <h2 class="filter-overlay-title">People in {{ current.name }} workspace</h2>
             <p v-if="membersLoading && !members.length" class="workspace-management-message">Loading people…</p>
             <p v-if="membersMessage" class="workspace-management-message" role="status" aria-live="polite">{{ membersMessage }}</p>
             <div v-if="members.length" class="workspace-member-list">
@@ -447,7 +483,7 @@ const deleteWorkspace = async () => {
                     <strong>{{ member.email ?? member.figma_handle }}</strong>
                     <span v-if="member.is_self" class="workspace-member-status">You</span>
                   </div>
-                  <span>{{ member.has_password ? (member.must_change_password ? 'Temporary password' : 'Password sign-in') : member.figma_handle ? `@${member.figma_handle}` : 'Figma sign-in' }} · {{ member.last_login_at ? `Last active ${new Date(member.last_login_at).toLocaleDateString()}` : 'Never signed in' }}</span>
+                  <span :title="member.last_login_at ? new Date(member.last_login_at).toLocaleString() : undefined">{{ memberActivityLabel(member.last_login_at) }}</span>
                   <span v-if="memberFeedback[member.id]" class="workspace-member-feedback" role="status" aria-live="polite">{{ memberFeedback[member.id] }}</span>
                 </div>
                 <div class="workspace-member-controls">
@@ -499,7 +535,7 @@ const deleteWorkspace = async () => {
           </section>
 
           <section v-if="current?.canDelete" class="filter-option-group workspace-delete-section">
-            <h2 class="filter-overlay-title">Delete {{ current.name }}</h2>
+            <h2 class="filter-overlay-title">Delete {{ current.name }} workspace</h2>
             <p>This permanently removes the workspace, its assets, boards, members, and public links.</p>
             <button class="panel-secondary-action workspace-delete-action" type="button" :disabled="workspaces.length <= 1" @click="deleteWorkspaceDialogOpen = true">
               Delete workspace
@@ -686,35 +722,40 @@ const deleteWorkspace = async () => {
 .workspace-inline-form-row {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 0;
   align-items: center;
   gap: 0;
+  transition:
+    grid-template-columns 240ms cubic-bezier(.2, .8, .2, 1),
+    column-gap 240ms cubic-bezier(.2, .8, .2, 1);
 }
 .workspace-name-form:has(.workspace-inline-action),
 .workspace-inline-form-row:has(.workspace-inline-action) {
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--filter-action-gap);
+  grid-template-columns: minmax(0, 1fr) var(--workspace-inline-action-width, 0px);
+  column-gap: var(--filter-action-gap);
+}
+.workspace-name-form:has(.workspace-inline-action-enter-from),
+.workspace-inline-form-row:has(.workspace-inline-action-enter-from),
+.workspace-name-form:has(.workspace-inline-action-leave-to),
+.workspace-inline-form-row:has(.workspace-inline-action-leave-to) {
+  grid-template-columns: minmax(0, 1fr) 0;
+  column-gap: 0;
 }
 .workspace-name-form > label,
 .workspace-inline-form-row > label { min-width: 0; }
 .workspace-inline-action.panel-primary-action {
-  width: auto;
+  width: 100%;
   min-width: 0;
+  overflow: hidden;
   white-space: nowrap;
 }
 
-.workspace-inline-action-enter-active,
-.workspace-inline-action-leave-active {
-  max-width: 10rem;
-  overflow: hidden;
+.workspace-inline-action.panel-primary-action:is(.workspace-inline-action-enter-active, .workspace-inline-action-leave-active) {
   transition:
-    max-width 240ms cubic-bezier(.2, .8, .2, 1),
     opacity 160ms ease,
     translate 240ms cubic-bezier(.2, .8, .2, 1);
 }
-.workspace-inline-action-enter-from,
-.workspace-inline-action-leave-to {
-  max-width: 0;
+.workspace-inline-action.panel-primary-action:is(.workspace-inline-action-enter-from, .workspace-inline-action-leave-to) {
   opacity: 0;
   translate: -.375rem 0;
 }
@@ -799,10 +840,8 @@ const deleteWorkspace = async () => {
 }
 .workspace-member-avatar {
   position: relative;
-  width: auto;
-  height: 100%;
-  aspect-ratio: 1;
-  align-self: stretch;
+  width: calc(var(--filter-action-height) - .5rem);
+  height: calc(var(--filter-action-height) - .5rem);
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -830,7 +869,7 @@ const deleteWorkspace = async () => {
 .workspace-member-copy {
   min-width: 0;
   display: grid;
-  gap: var(--filter-option-gap);
+  gap: calc(var(--filter-option-gap)*.5);
   padding-inline: calc(var(--filter-option-padding) / 2);
 }
 .workspace-member-heading {
@@ -855,6 +894,12 @@ const deleteWorkspace = async () => {
   font-size: var(--font-size-caption);
   font-weight: 400;
   letter-spacing: var(--letter-spacing-caption);
+}
+.workspace-member-copy > span:not(.workspace-member-feedback) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .workspace-member-copy > .workspace-member-feedback {
   color: var(--filter-overlay-panel-color);
@@ -910,8 +955,9 @@ const deleteWorkspace = async () => {
   display: grid;
   align-content: start;
   justify-items: center;
-  gap: var(--filter-option-gap);
+  gap: calc(var(--filter-option-gap)/2);
   padding: var(--filter-action-gap) var(--filter-option-gap);
+  padding-bottom: 0;
   text-align: center;
 }
 .workspace-option-copy strong { max-width: 100%; overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
@@ -935,6 +981,8 @@ const deleteWorkspace = async () => {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .workspace-name-form,
+  .workspace-inline-form-row,
   .workspace-inline-action-enter-active,
   .workspace-inline-action-leave-active { transition: none; }
 }
