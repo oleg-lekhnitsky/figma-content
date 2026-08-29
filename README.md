@@ -53,7 +53,7 @@ Copy `.env.example` to `.env`. Required variables are:
 | `FIGMA_REDIRECT_URI` | Server | Exact registered callback URL |
 | `SESSION_SECRET` | Server secret | At least 32 random bytes |
 | `PLUGIN_CALLBACK_URL` | Server | Plugin authentication completion page |
-| `SESSION_TTL_SECONDS` | Server | Application session lifetime, default `28800` |
+| `SESSION_TTL_SECONDS` | Server | Application session lifetime, default `2592000` (30 days) |
 | `MAX_UPLOAD_BYTES` | Server | Upload limit, default `104857600` |
 
 Never prefix a secret with `NUXT_PUBLIC_`. Production values belong in the deployment platform's secret store.

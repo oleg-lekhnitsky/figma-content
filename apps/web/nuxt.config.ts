@@ -70,7 +70,7 @@ export default defineNuxtConfig({
     figmaRedirectUri: process.env.FIGMA_REDIRECT_URI ?? '',
     sessionSecret: process.env.SESSION_SECRET ?? '',
     pluginCallbackUrl: process.env.PLUGIN_CALLBACK_URL ?? '',
-    sessionTtlSeconds: Number(process.env.SESSION_TTL_SECONDS ?? 28_800),
+    sessionTtlSeconds: Number(process.env.SESSION_TTL_SECONDS ?? 2_592_000),
     maxUploadBytes: Math.max(Number(process.env.MAX_UPLOAD_BYTES) || 0, 104_857_600),
     r2AccountId: process.env.R2_ACCOUNT_ID ?? '',
     r2AccessKeyId: process.env.R2_ACCESS_KEY_ID ?? '',
