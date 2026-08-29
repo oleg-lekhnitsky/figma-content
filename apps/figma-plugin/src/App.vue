@@ -33,6 +33,7 @@ const workspaceId = ref('')
 const workspaceBusy = ref(false)
 const reviewBoards = ref<ReviewBoard[]>([])
 const reviewBoardId = ref('')
+const uploadedDestinationBoardId = ref('')
 const settings = reactive<ExportSettings>({ format: 'PNG', scale: 2, jpgQuality: 90 })
 const shared = reactive({ tags: '', projectId: '', campaignId: '', language: '', contentType: '', description: '', status: 'draft' })
 const busy = ref(false)
@@ -52,7 +53,7 @@ const eligible = computed(() => frames.value.filter(frame => frame.existingActio
 const uploadSucceeded = computed(() => eligible.value.length > 0 && eligible.value.every(frame => frame.progress === 'done'))
 const uploadButtonLabel = computed(() => {
   if (busy.value) return reviewBoardId.value ? 'Submitting…' : 'Uploading…'
-  if (uploadSucceeded.value) return reviewBoardId.value ? 'Submitted' : 'Uploaded'
+  if (uploadSucceeded.value) return uploadedDestinationBoardId.value ? 'Open board' : 'Open library'
   const action = reviewBoardId.value ? 'Submit' : 'Upload'
   const count = eligible.value.length
   return `${action} ${count} ${count === 1 ? 'frame' : 'frames'}`
@@ -67,6 +68,13 @@ const reviewBoardLabel = (board: ReviewBoard) => board.review_month
   ? `${board.title} · ${new Intl.DateTimeFormat(undefined, { month: 'short', year: 'numeric' }).format(new Date(`${board.review_month}T12:00:00`))}`
   : board.title
 const post = (message: UiMessage) => parent.postMessage({ pluginMessage: message }, '*')
+const openUploadedDestination = () => {
+  if (!uploadSucceeded.value) return
+  const boardQuery = uploadedDestinationBoardId.value
+    ? `?board=${encodeURIComponent(uploadedDestinationBoardId.value)}`
+    : ''
+  post({ type: 'open-external', url: `${appUrl}/library${boardQuery}` })
+}
 const rejectFileLink = (message: string) => {
   fileLinkError.value = message
   void nextTick(() => fileLinkInput.value?.focus())
@@ -110,6 +118,7 @@ const clearSession = (message = '') => {
   availableTags.value = []
   reviewBoards.value = []
   reviewBoardId.value = ''
+  uploadedDestinationBoardId.value = ''
   workspaces.value = []
   workspaceId.value = ''
   busy.value = false
@@ -255,7 +264,7 @@ const switchWorkspace = async () => {
     const response = await authenticatedFetch(`${appUrl}/api/plugin/workspaces`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspaceId: workspaceId.value }) })
     const payload = await response.json().catch(() => null) as { data?: { token?: string }; error?: { message?: string } } | null
     if (!response.ok || !payload?.data?.token) throw new Error(payload?.error?.message || 'Unable to switch workspace.')
-    token.value = payload.data.token; post({ type: 'save-session', token: token.value }); shared.projectId = ''; shared.tags = ''; reviewBoardId.value = ''; projects.value = []; availableTags.value = []; reviewBoards.value = []; await loadWorkspace(); announcement.value = 'Workspace changed.'
+    token.value = payload.data.token; post({ type: 'save-session', token: token.value }); shared.projectId = ''; shared.tags = ''; reviewBoardId.value = ''; uploadedDestinationBoardId.value = ''; projects.value = []; availableTags.value = []; reviewBoards.value = []; await loadWorkspace(); announcement.value = 'Workspace changed.'
   } catch (error) { globalError.value = error instanceof Error ? error.message : 'Unable to switch workspace.'; await loadWorkspaces().catch(() => undefined) }
   finally { workspaceBusy.value = false }
 }
@@ -297,6 +306,8 @@ const exportFrame = (frame: Item) => new Promise<Uint8Array>((resolve, reject) =
   const requestId = createRequestId(); pending.set(requestId, { resolve, reject }); post({ type: 'export', requestId, nodeId: frame.id, settings: { ...settings } })
 })
 const upload = async () => {
+  const destinationBoardId = reviewBoardId.value
+  uploadedDestinationBoardId.value = ''
   busy.value = true; globalError.value = ''; let completed = 0
   for (const frame of eligible.value) {
     try {
@@ -326,8 +337,8 @@ const upload = async () => {
       const payload = await response.json() as { data: { asset: { id: string } } }
       frame.assetId = payload.data.asset.id
       frame.existingAction = 'version'
-      if (reviewBoardId.value) {
-        const submission = await authenticatedFetch(`${appUrl}/api/plugin/boards/${reviewBoardId.value}/assets`, {
+      if (destinationBoardId) {
+        const submission = await authenticatedFetch(`${appUrl}/api/plugin/boards/${destinationBoardId}/assets`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${token.value}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ assetId: payload.data.asset.id })
@@ -343,13 +354,15 @@ const upload = async () => {
       frame.progress = 'error'; frame.error = error instanceof Error ? error.message : 'Upload failed.'
     }
   }
-  busy.value = false; announcement.value = `${completed} of ${eligible.value.length} frames ${reviewBoardId.value ? 'submitted' : 'uploaded'}.`; savePreferences()
+  if (eligible.value.length > 0 && eligible.value.every(frame => frame.progress === 'done')) uploadedDestinationBoardId.value = destinationBoardId
+  busy.value = false; announcement.value = `${completed} of ${eligible.value.length} frames ${destinationBoardId ? 'submitted' : 'uploaded'}.`; savePreferences()
 }
 
 window.onmessage = (event: MessageEvent<{ pluginMessage?: ControllerMessage }>) => {
   const message = event.data.pluginMessage; if (!message) return
   if (message.type === 'selection') {
     for (const url of previewUrls.values()) URL.revokeObjectURL(url); previewUrls.clear()
+    uploadedDestinationBoardId.value = ''
     frames.value = message.frames.map(frame => { if (frame.preview) previewUrls.set(frame.id, URL.createObjectURL(new Blob([new Uint8Array(frame.preview)], { type: 'image/png' }))); return { ...frame, title: frame.name, progress: 'idle', existingAction: frame.assetId ? 'version' : 'separate' } })
     if (authState.value === 'signed-in') void resolveExistingFrames()
   }
@@ -391,7 +404,7 @@ onBeforeUnmount(clearAccountAvatar)
       </header>
       <label v-if="canChooseDestination && reviewBoards.length" class="destination-field" for="plugin-destination">
         Destination
-        <select id="plugin-destination" v-model="reviewBoardId" :disabled="busy">
+        <select id="plugin-destination" v-model="reviewBoardId" :disabled="busy || uploadSucceeded">
           <option value="">Library</option>
           <option v-for="board in reviewBoards" :key="board.id" :value="board.id">{{ reviewBoardLabel(board) }}</option>
         </select>
@@ -400,10 +413,10 @@ onBeforeUnmount(clearAccountAvatar)
       <section v-if="!frames.length" class="center"><strong>Select frame to upload</strong><button class="layout-toggle frame-layout-toggle" type="button" :aria-label="layoutMode === 'widget' ? 'Switch to full-size layout' : 'Switch to widget layout'" @click="toggleLayoutMode"><ExpandToFullIcon v-if="isWidgetLayout" /><CollapseToWidgetIcon v-else /></button></section>
       <form v-else @submit.prevent="upload">
         <section class="frames-section" aria-labelledby="selected-title"><h2 id="selected-title" class="sr-only">Selected frames</h2><ul class="frames"><li v-for="(frame, index) in frames" :key="frame.id" :class="{ 'has-layout-toggle': index === 0 }"><img :src="previewUrl(frame)" alt=""><div class="frame-fields"><label :for="`title-${frame.id}`"><span class="sr-only">Title</span><input :id="`title-${frame.id}`" v-model="frame.title" required maxlength="200"></label><p class="frame-meta"><span>{{ frame.width }} × {{ frame.height }}</span><span v-if="settings.format === 'MP4' && !frame.videoHash" class="frame-warning" title="No embedded video found in this frame"><span aria-hidden="true">No video</span><span class="sr-only">No embedded video found in this frame.</span></span></p><p v-if="frame.assetId && frame.progress !== 'done'" class="existing">This frame already exists in the library.</p><label v-if="frame.assetId && frame.progress !== 'done'" :for="`action-${frame.id}`"><span class="sr-only">Upload choice</span><select :id="`action-${frame.id}`" v-model="frame.existingAction" :disabled="busy"><option value="version">Upload new version</option><option value="separate">Create separate asset</option><option value="cancel">Skip this frame</option></select></label><p v-if="frame.progress === 'error'" class="progress" data-state="error">{{ frame.error }}</p></div><button v-if="index === 0" class="layout-toggle frame-layout-toggle" type="button" :aria-label="layoutMode === 'widget' ? 'Switch to full-size layout' : 'Switch to widget layout'" @click="toggleLayoutMode"><ExpandToFullIcon v-if="isWidgetLayout" /><CollapseToWidgetIcon v-else /></button></li></ul></section>
-        <label v-if="workspaces.length > 1" class="workspace-field" for="plugin-workspace"><span class="sr-only">Workspace</span><select id="plugin-workspace" v-model="workspaceId" :disabled="workspaceBusy || busy" @change="switchWorkspace"><option v-for="workspace in workspaces" :key="workspace.id" :value="workspace.id">{{ workspace.name }} · {{ workspace.role }}</option></select></label>
+        <label v-if="workspaces.length > 1" class="workspace-field" for="plugin-workspace"><span class="sr-only">Workspace</span><select id="plugin-workspace" v-model="workspaceId" :disabled="workspaceBusy || busy || uploadSucceeded" @change="switchWorkspace"><option v-for="workspace in workspaces" :key="workspace.id" :value="workspace.id">{{ workspace.name }} · {{ workspace.role }}</option></select></label>
         <section class="media-panel" aria-labelledby="export-title"><h2 id="export-title" class="sr-only">Media</h2><div class="settings"><label><span class="sr-only">Format</span><select v-model="settings.format"><option>PNG</option><option>JPG</option><option>MP4</option></select></label><label v-if="settings.format !== 'MP4'"><span class="sr-only">Scale</span><select v-model.number="settings.scale"><option :value="1">1×</option><option :value="2">2×</option><option :value="3">3×</option></select></label><label v-if="settings.format === 'JPG'"><span class="sr-only">JPG quality</span><input v-model.number="settings.jpgQuality" type="number" min="10" max="100" step="5"></label></div><p v-if="settings.format === 'MP4'" class="field-note">The original MP4 from the selected frame's video fill will be uploaded directly.</p></section>
         <section class="details-panel"><div id="metadata-panel" v-show="detailsOpen" aria-label="Details"><div class="tag-field"><span class="field-label">Tags</span><div v-if="selectedTags.length" class="selected-tags" aria-label="Selected tags"><button v-for="tag in selectedTags" :key="tag" class="tag-chip selected" type="button" :aria-label="`Remove ${tag}`" @click="removeTag(tag)"><span>{{ tag }}</span><span aria-hidden="true">×</span></button></div><div class="tag-entry"><input v-model="tagDraft" maxlength="80" aria-label="Add a tag" placeholder="Add a tag" @keydown="handleTagKeydown"><button type="button" :disabled="tagBusy || !tagDraft.trim()" @click="createTag">{{ tagBusy ? 'Adding…' : 'Add' }}</button></div><div v-if="suggestedTags.length" class="tag-quick-options" aria-label="Suggested tags"><button v-for="tag in suggestedTags" :key="tag.id" class="tag-chip" type="button" @click="selectTag(tag.name)">{{ tag.name }}</button></div></div><div class="project-field"><label for="plugin-project"><span>Project</span><select id="plugin-project" v-model="shared.projectId"><option value="">No project</option><option v-for="project in projects" :key="project.id" :value="project.id">{{ project.name }}</option></select></label><div v-if="canCreateProjects" class="project-entry"><input v-model="projectDraft" maxlength="120" aria-label="New project name" placeholder="New project" @keydown.enter.prevent="createProject"><button type="button" :disabled="projectBusy||!projectDraft.trim()" @click="createProject">{{ projectBusy?'Creating…':'Create' }}</button></div><p v-else class="field-note">Editors and admins can create projects.</p></div><label><span>Description</span> <textarea v-model="shared.description" rows="3" placeholder="Describe how this asset should be used"></textarea></label><button class="quiet file-link-action" type="button" @click="changeFileLink">Change file link</button></div><button class="details-toggle" type="button" :aria-expanded="detailsOpen" aria-controls="metadata-panel" @click="detailsOpen = !detailsOpen">{{ detailsOpen ? 'Hide details' : 'Details (optional)' }}</button></section>
-        <p v-if="globalError" class="error" role="alert">{{ globalError }}</p><section v-if="account" class="account-panel" aria-label="Signed in account"><div class="account-identity"><span class="account-avatar" aria-hidden="true"><img v-if="accountAvatarUrl && !avatarFailed" :src="accountAvatarUrl" alt="" @error="avatarFailed = true"><span v-else>{{ account.email.charAt(0).toUpperCase() }}</span></span><div class="account-copy"><strong>{{ account.email }}</strong><span v-if="account.figmaHandle">{{ account.figmaHandle }}</span></div></div><button class="quiet" type="button" @click="signOut">Sign out</button></section><footer><span>{{ eligible.length }} ready</span><button class="primary" type="submit" :disabled="busy || !eligible.length || uploadSucceeded">{{ uploadButtonLabel }}</button></footer>
+        <p v-if="globalError" class="error" role="alert">{{ globalError }}</p><section v-if="account" class="account-panel" aria-label="Signed in account"><div class="account-identity"><span class="account-avatar" aria-hidden="true"><img v-if="accountAvatarUrl && !avatarFailed" :src="accountAvatarUrl" alt="" @error="avatarFailed = true"><span v-else>{{ account.email.charAt(0).toUpperCase() }}</span></span><div class="account-copy"><strong>{{ account.email }}</strong><span v-if="account.figmaHandle">{{ account.figmaHandle }}</span></div></div><button class="quiet" type="button" @click="signOut">Sign out</button></section><footer><span>{{ eligible.length }} ready</span><button class="primary" :type="uploadSucceeded ? 'button' : 'submit'" :disabled="busy || !eligible.length" @click="uploadSucceeded && openUploadedDestination()">{{ uploadButtonLabel }}</button></footer>
       </form>
     </template>
   </main>
