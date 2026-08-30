@@ -3,6 +3,9 @@ import type { BoardLayout } from '@content-library/shared'
 import { ArrowUpRight, Copy } from 'reicon-vue'
 import { boardLayoutOptions } from '../utils/board-layouts'
 
+interface FilterOption { id: string; name: string }
+interface FilterSubmitter { id: string; figma_handle: string | null }
+
 const props = defineProps<{
   title: string
   purpose: 'showcase' | 'review' | 'portfolio' | 'case'
@@ -16,26 +19,98 @@ const props = defineProps<{
   busy?: boolean
   publicUrl: string
   fullSettingsUrl: string
-  members: Array<{ user_id: string; role: string; allowed_users: { email: string | null; figma_handle: string | null } | null }>
+  filterSearch: string
+  filterProjectIds: string[]
+  filterTagIds: string[]
+  filterUploadedBy: string | null
+  filterDateFrom: string
+  filterDateTo: string
+  projects: FilterOption[]
+  tags: FilterOption[]
+  submitters: FilterSubmitter[]
+  members: Array<{ user_id: string; role: string; allowed_users: { email: string | null; figma_handle: string | null; avatar_url: string | null } | null }>
   feedback?: string
   error?: boolean
 }>()
 
 const memberEmail = ref('')
-const memberRole = ref<'editor' | 'contributor' | 'viewer'>('contributor')
+type BoardMemberRole = 'editor' | 'contributor' | 'viewer'
+const memberRole = ref<BoardMemberRole>('contributor')
 const memberRoleOpen = ref(false)
-const memberRoles = ['editor', 'contributor', 'viewer'] as const
-const memberRoleLabel = computed(() => memberRole.value[0]!.toUpperCase() + memberRole.value.slice(1))
+const memberRowRoleOpen = ref('')
+const memberRowActionOpen = ref('')
+const memberRoleOptions = [
+  { value: 'viewer', label: 'Viewer', description: 'View this board.' },
+  { value: 'contributor', label: 'Contributor', description: 'Add and manage their own assets.' },
+  { value: 'editor', label: 'Editor', description: 'Manage the board and all of its assets.' }
+] as const
+const canAddMember = computed(() => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(memberEmail.value.trim()))
+const setMemberRole = (role: string) => { memberRole.value = role as BoardMemberRole }
+const memberName = (member: typeof props.members[number]) => member.allowed_users?.email ?? member.allowed_users?.figma_handle ?? 'Workspace member'
+const memberInitial = (member: typeof props.members[number]) => memberName(member).trim().charAt(0).toLocaleUpperCase() || '?'
 const addingMember = ref(false)
 const emit = defineEmits<{
   setPublication: [enabled: boolean]
   setLayout: [layout: BoardLayout]
+  'update:filterSearch': [value: string]
+  'update:filterProjectIds': [value: string[]]
+  'update:filterTagIds': [value: string[]]
+  'update:filterUploadedBy': [value: string | null]
+  'update:filterDateFrom': [value: string]
+  'update:filterDateTo': [value: string]
   copyLink: []
-  saveMember: [email: string, role: 'editor' | 'contributor' | 'viewer']
+  saveMember: [email: string, role: BoardMemberRole]
   removeMember: [userId: string]
   deleteBoard: []
   dismissFeedback: []
 }>()
+const updateExistingMember = (member: typeof props.members[number], role: string) => {
+  const email = member.allowed_users?.email
+  if (!email || member.role === 'owner') return
+  memberRowRoleOpen.value = ''
+  emit('saveMember', email, role as BoardMemberRole)
+}
+const removeExistingMember = (member: typeof props.members[number]) => {
+  memberRowActionOpen.value = ''
+  emit('removeMember', member.user_id)
+}
+const toggleFilterOption = (values: string[], id: string) => values.includes(id)
+  ? values.filter(value => value !== id)
+  : [...values, id]
+const editingFilters = ref(false)
+watch(() => props.title, () => { editingFilters.value = false })
+const boardFilterCount = computed(() => [
+  props.filterSearch,
+  props.filterProjectIds.length,
+  props.filterTagIds.length,
+  props.filterUploadedBy,
+  props.filterDateFrom || props.filterDateTo
+].filter(Boolean).length)
+const formatFilterDate = (value: string) => value ? value.split('-').reverse().join('.') : ''
+const boardFilterSummary = computed(() => {
+  const parts: string[] = []
+  if (props.filterSearch) parts.push(`Search “${props.filterSearch}”`)
+  const projectNames = props.projects.filter(option => props.filterProjectIds.includes(option.id)).map(option => option.name)
+  if (projectNames.length) parts.push(`Projects: ${projectNames.join(', ')}`)
+  const tagNames = props.tags.filter(option => props.filterTagIds.includes(option.id)).map(option => option.name)
+  if (tagNames.length) parts.push(`Tags: ${tagNames.join(', ')}`)
+  if (props.filterUploadedBy) {
+    const submitter = props.submitters.find(option => option.id === props.filterUploadedBy)
+    parts.push(`Submitter: ${submitter?.figma_handle || 'Selected contributor'}`)
+  }
+  if (props.filterDateFrom && props.filterDateTo) parts.push(`${formatFilterDate(props.filterDateFrom)}–${formatFilterDate(props.filterDateTo)}`)
+  else if (props.filterDateFrom) parts.push(`From ${formatFilterDate(props.filterDateFrom)}`)
+  else if (props.filterDateTo) parts.push(`Until ${formatFilterDate(props.filterDateTo)}`)
+  return parts.join(' · ') || 'All approved assets'
+})
+const clearBoardFilters = () => {
+  emit('update:filterSearch', '')
+  emit('update:filterProjectIds', [])
+  emit('update:filterTagIds', [])
+  emit('update:filterUploadedBy', null)
+  emit('update:filterDateFrom', '')
+  emit('update:filterDateTo', '')
+}
 const submitMember = () => {
   const email = memberEmail.value.trim()
   if (!email) return
@@ -59,10 +134,58 @@ onBeforeUnmount(() => {
   <div class="asset-filter-controls asset-filter-controls--expanded board-settings-controls">
     <button class="filter-sheet-handle" type="button" aria-label="Close board settings"><span aria-hidden="true" /></button>
     <div class="filter-sheet-content">
-      <div class="board-settings-intro">
+    <div class="board-settings-intro">
       <h2 class="filter-overlay-title">{{ title }}</h2>
       <p class="board-type-summary"><strong>{{ mode === 'dynamic' ? 'Dynamic board.' : 'Static board.' }}</strong> {{ mode === 'dynamic' ? 'Matching assets update automatically from filters.' : 'Assets are selected and arranged manually.' }}</p>
     </div>
+
+    <section v-if="mode === 'dynamic'" class="filter-option-group board-filter-settings" role="group" aria-labelledby="board-saved-filters">
+      <div class="board-filter-settings-heading">
+        <h3 id="board-saved-filters">Board filters</h3>
+        <button v-if="canEdit && !editingFilters" class="board-filter-change" type="button" :disabled="busy" @click="editingFilters = true">Change filters</button>
+      </div>
+      <p class="board-filter-summary">{{ boardFilterSummary }}</p>
+      <Transition name="board-filter-editor">
+        <div v-if="editingFilters" class="board-filter-editor">
+          <div class="board-filter-field">
+            <h4>Search</h4>
+            <input class="panel-field" type="search" :value="filterSearch" placeholder="Search assets" :disabled="busy" @input="$emit('update:filterSearch', ($event.target as HTMLInputElement).value)">
+          </div>
+          <div class="board-filter-field">
+            <h4>Projects</h4>
+            <div class="filter-option-list">
+              <button type="button" :aria-pressed="filterProjectIds.length === 0" :disabled="busy" @click="$emit('update:filterProjectIds', [])">All</button>
+              <button v-for="option in projects" :key="option.id" type="button" :aria-pressed="filterProjectIds.includes(option.id)" :disabled="busy" @click="$emit('update:filterProjectIds', toggleFilterOption(filterProjectIds, option.id))">{{ option.name }}</button>
+            </div>
+          </div>
+          <div class="board-filter-field">
+            <h4>Tags</h4>
+            <div class="filter-option-list">
+              <button type="button" :aria-pressed="filterTagIds.length === 0" :disabled="busy" @click="$emit('update:filterTagIds', [])">All</button>
+              <button v-for="option in tags" :key="option.id" type="button" :aria-pressed="filterTagIds.includes(option.id)" :disabled="busy" @click="$emit('update:filterTagIds', toggleFilterOption(filterTagIds, option.id))">{{ option.name }}</button>
+            </div>
+          </div>
+          <div v-if="submitters.length" class="board-filter-field">
+            <h4>Submitter</h4>
+            <div class="filter-option-list">
+              <button type="button" :aria-pressed="!filterUploadedBy" :disabled="busy" @click="$emit('update:filterUploadedBy', null)">All</button>
+              <button v-for="submitter in submitters" :key="submitter.id" type="button" :aria-pressed="filterUploadedBy === submitter.id" :disabled="busy" @click="$emit('update:filterUploadedBy', submitter.id)">{{ submitter.figma_handle || 'Unknown submitter' }}</button>
+            </div>
+          </div>
+          <div class="board-filter-field">
+            <h4>Date</h4>
+            <div class="filter-date-range">
+              <AppDatePicker :model-value="filterDateFrom" label="From" :max="filterDateTo" surface="field" :disabled="busy" @update:model-value="$emit('update:filterDateFrom', $event)" />
+              <AppDatePicker :model-value="filterDateTo" label="To" :min="filterDateFrom" surface="field" :disabled="busy" @update:model-value="$emit('update:filterDateTo', $event)" />
+            </div>
+          </div>
+          <div class="board-filter-editor-actions">
+            <button v-if="boardFilterCount" class="panel-secondary-action" type="button" :disabled="busy" @click="clearBoardFilters">Clear filters</button>
+            <button class="panel-primary-action" type="button" @click="editingFilters = false">Done</button>
+          </div>
+        </div>
+      </Transition>
+    </section>
 
     <section class="filter-option-group" role="group" aria-labelledby="board-public-access">
       <h3 id="board-public-access">Public access</h3>
@@ -99,24 +222,43 @@ onBeforeUnmount(() => {
 
     <section class="board-setting-group board-members">
       <h3>Board members</h3>
-      <ul v-if="members.length">
-        <li v-for="member in members" :key="member.user_id"><span><strong>{{ member.allowed_users?.email ?? member.allowed_users?.figma_handle ?? 'Workspace member' }}</strong><small>{{ member.role }}</small></span><button v-if="canManageMembers && member.role !== 'owner'" type="button" :disabled="busy" @click="$emit('removeMember', member.user_id)">Remove</button></li>
-      </ul>
+      <div v-if="members.length" class="board-member-list">
+        <AppPersonRow
+          v-for="member in members"
+          :key="member.user_id"
+          :name="memberName(member)"
+          :avatar-url="member.allowed_users?.avatar_url"
+          :fallback="memberInitial(member)"
+          :role="member.role.charAt(0).toUpperCase() + member.role.slice(1)"
+          :role-options="canManageMembers && member.role !== 'owner' ? memberRoleOptions : []"
+          :actions="canManageMembers && member.role !== 'owner' ? [{ value: 'remove', label: 'Remove from board' }] : []"
+          :role-open="memberRowRoleOpen === member.user_id"
+          :actions-open="memberRowActionOpen === member.user_id"
+          :disabled="busy"
+          @update:role-open="memberRowRoleOpen = $event ? member.user_id : ''"
+          @update:actions-open="memberRowActionOpen = $event ? member.user_id : ''"
+          @select-role="updateExistingMember(member, $event)"
+          @select-action="removeExistingMember(member)"
+        />
+      </div>
       <p v-else>No board members yet.</p>
       <Transition name="member-form">
         <form v-if="canManageMembers && addingMember" class="member-form" @submit.prevent="submitMember">
-          <input v-model="memberEmail" class="panel-field" required type="email" autocomplete="email" placeholder="Member email">
-          <AppDropdownMenu v-model:open="memberRoleOpen" width="anchor" content-class="panel-dropdown-menu">
-            <template #trigger="{ triggerProps }">
-              <button v-bind="triggerProps" class="panel-field panel-dropdown-trigger" type="button" aria-label="Board role">
-                <span>{{ memberRoleLabel }}</span><span class="filter-dropdown-chevron" aria-hidden="true" />
-              </button>
-            </template>
-            <template #default>
-              <button v-for="role in memberRoles" :key="role" role="menuitemradio" :aria-checked="memberRole === role" tabindex="-1" type="button" @click="memberRole = role">{{ role[0]!.toUpperCase() + role.slice(1) }}</button>
-            </template>
-          </AppDropdownMenu>
-          <button class="panel-primary-action" type="submit" :disabled="busy">Add member</button>
+          <AppRolePicker
+            :model-value="memberRole"
+            :options="memberRoleOptions"
+            :open="memberRoleOpen"
+            aria-label="Board role"
+            @update:model-value="setMemberRole"
+            @update:open="memberRoleOpen = $event"
+          />
+          <AppInlineActionField
+            v-model="memberEmail"
+            action-label="Add"
+            busy-label="Adding…"
+            :show-action="canAddMember || Boolean(busy && memberEmail.trim())"
+            :busy="busy"
+          />
         </form>
       </Transition>
       <button v-if="canManageMembers" class="panel-secondary-action" type="button" :aria-expanded="addingMember" @click="addingMember = !addingMember">{{ addingMember ? 'Cancel' : 'Add member' }}</button>
@@ -158,6 +300,77 @@ onBeforeUnmount(() => {
 
 .board-settings-intro .filter-overlay-title { margin: 0; }
 
+.board-filter-settings,
+.board-filter-field {
+  display: grid;
+  gap: var(--filter-option-gap);
+}
+
+.board-filter-settings-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--filter-option-gap);
+}
+
+.board-filter-summary {
+  margin: 0;
+  color: var(--filter-overlay-panel-color);
+  font-size: var(--filter-option-font-size);
+  line-height: 1.35;
+}
+
+.board-filter-editor {
+  min-width: 0;
+  display: grid;
+  gap: var(--space);
+  overflow: hidden;
+}
+
+.board-filter-editor-enter-active,
+.board-filter-editor-leave-active {
+  max-height: 60rem;
+  transition:
+    max-height var(--filter-action-transition-duration) var(--filter-overlay-enter-easing),
+    opacity 180ms ease,
+    translate var(--filter-action-transition-duration) var(--filter-overlay-enter-easing);
+}
+
+.board-filter-editor-enter-from,
+.board-filter-editor-leave-to {
+  max-height: 0;
+  opacity: 0;
+  translate: 0 calc(var(--space) * -.5);
+}
+
+.board-filter-editor .panel-field { width: 100%; min-width: 0; }
+
+.board-filter-editor-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--filter-option-gap);
+}
+
+.board-filter-settings h4 {
+  margin: 0;
+  color: var(--filter-overlay-panel-color);
+  font-size: var(--filter-caption-size);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.board-filter-change {
+  min-height: var(--filter-option-height);
+  padding: 0 var(--filter-option-padding);
+  border: var(--filter-hairline) solid var(--filter-overlay-border-color);
+  border-radius: var(--filter-pill-radius);
+  color: var(--filter-overlay-panel-color);
+  background: transparent;
+  font: inherit;
+  font-size: var(--filter-option-font-size);
+  cursor: pointer;
+}
+
 
 
 .board-type-summary,
@@ -171,8 +384,7 @@ onBeforeUnmount(() => {
 .board-type-summary strong { color: var(--filter-overlay-panel-color); }
 .board-setting-group { display: grid; gap: var(--space); }
 
-.board-settings-actions :is(a, button),
-.board-members li button {
+.board-settings-actions :is(a, button) {
   min-height: var(--filter-option-height);
   padding: 0 var(--filter-option-padding);
   border: var(--filter-hairline) solid var(--filter-overlay-border-color);
@@ -270,8 +482,7 @@ onBeforeUnmount(() => {
   .public-access-actions-leave-active { transition: none; }
 }
 
-.board-settings-actions :is(a, button),
-.board-members li button { display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.board-settings-actions :is(a, button) { display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
 
 .member-form {
   width: 100%;
@@ -282,17 +493,6 @@ onBeforeUnmount(() => {
   padding-top: 0;
   overflow: hidden;
 }
-
-.member-form input {
-  min-width: 0;
-  outline: none;
-}
-
-.member-form input {
-  width: 100%;
-}
-
-.member-form input::placeholder { color: var(--filter-overlay-muted-color); }
 
 .member-form-enter-active,
 .member-form-leave-active {
@@ -307,25 +507,7 @@ onBeforeUnmount(() => {
   translate: 0 -.375rem;
 }
 
-.board-members ul {
-  display: grid;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.board-members li {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: .75rem;
-  padding: .25rem 0;
-}
-
-.board-members li > span { min-width: 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: .25rem .5rem; }
-.board-members li strong { overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
-.board-members li small { color: var(--filter-overlay-muted-color); font-size: var(--filter-caption-size); text-transform: capitalize; }
+.board-member-list { display: grid; gap: var(--filter-option-gap); }
 
 .board-settings-feedback {
   position: fixed;
@@ -363,6 +545,8 @@ onBeforeUnmount(() => {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .board-filter-editor-enter-active,
+  .board-filter-editor-leave-active,
   .member-form-enter-active,
   .member-form-leave-active,
   .board-settings-toast-enter-active,

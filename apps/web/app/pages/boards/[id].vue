@@ -21,7 +21,7 @@ if (error.value) throw createError({ statusCode: error.value.statusCode ?? 404, 
 
 const collection = reactive({ ...data.value!.data.collection })
 if (collection.purpose === 'showcase' || collection.purpose === 'case') {
-  await navigateTo({ path:'/library', query:{ board:collection.id, panel:'settings' } }, { replace:true })
+  throw createError({ statusCode: 404, statusMessage: 'This board opens in the library' })
 }
 const defaultViewSettings:BoardViewSettings={showText:true,radius:'default',gap:'default',columns:'auto'}
 const viewSettings=ref<BoardViewSettings>({ ...defaultViewSettings, ...(collection.view_settings ?? {}) })

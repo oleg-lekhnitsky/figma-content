@@ -502,14 +502,6 @@ body:has(> .selection-panel.selection-panel--filter-overlay) > .selection-panel.
     background: transparent;
   }
 
-  .selection-panel--filter-overlay .asset-filter-controls--filters.asset-filter-controls--expanded {
-    height: calc(100% - var(--filter-overlay-margin) - var(--filter-overlay-margin));
-  }
-
-  .selection-panel--filter-overlay .asset-filter-controls--filters.asset-filter-controls--expanded.asset-filter-controls--content-height {
-    height: auto;
-  }
-
   .selection-panel--filter-overlay .asset-filter-controls--expanded .filter-sheet-content {
     gap: calc(var(--space) / 2);
     border-radius: var(--filter-scroll-radius);

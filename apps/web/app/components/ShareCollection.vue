@@ -81,6 +81,9 @@ const unlockPageScroll = () => {
 onBeforeUnmount(unlockPageScroll)
 
 const collectionUrl = (slug: string) => `/s/${slug}`
+const collectionDestination = (collection: Collection) => collection.purpose === 'review' || collection.purpose === 'portfolio'
+  ? `/boards/${collection.id}`
+  : { path: '/library', query: { board: collection.id } }
 const isoAt = (value: string, end = false) => {
   if (!value) return null
   const date = new Date(`${value}T${end ? '23:59:59.999' : '00:00:00.000'}`)
@@ -335,7 +338,7 @@ type="button"
           <p v-if="errorMessage" class="feedback error" role="alert">{{ errorMessage }}</p>
           <ul v-if="collections.length" class="board-grid">
             <li v-for="collection in collections" :key="collection.id" class="board-card">
-              <NuxtLink class="board-preview" :class="{ 'is-empty': !collection.previewAssets.length }" :to="`/boards/${collection.id}`" :aria-label="`${['owner', 'editor', 'admin'].includes(collection.role) ? 'Edit' : 'Open'} ${collection.title}`"><div class="preview-strip"><template v-if="collection.previewAssets.length"><AssetMedia v-for="asset in collection.previewAssets" :key="asset.id" :src="asset.previewUrl" :mime-type="asset.mime_type" :width="asset.width" :height="asset.height" alt="" loading="lazy" /></template><span v-else>No items yet</span></div></NuxtLink>
+              <NuxtLink class="board-preview" :class="{ 'is-empty': !collection.previewAssets.length }" :to="collectionDestination(collection)" :aria-label="`${['owner', 'editor', 'admin'].includes(collection.role) ? 'Edit' : 'Open'} ${collection.title}`"><div class="preview-strip"><template v-if="collection.previewAssets.length"><AssetMedia v-for="asset in collection.previewAssets" :key="asset.id" :src="asset.previewUrl" :mime-type="asset.mime_type" :width="asset.width" :height="asset.height" alt="" loading="lazy" /></template><span v-else>No items yet</span></div></NuxtLink>
               <div class="board-info"><div><label v-if="['owner', 'editor', 'admin'].includes(collection.role)" class="board-title"><span class="sr-only">Board name</span><textarea
 :value="collection.title" rows="1" maxlength="120" :aria-describedby="`board-feedback-${collection.id}`"
                     :aria-invalid="boardFeedback[collection.id]?.error || undefined" @change="renameBoard(collection, $event)" /><span
@@ -353,7 +356,6 @@ type="button"
     <AssetFilterControls
       v-model:search="searchFilter" v-model:project-ids="projectIds" v-model:tag-ids="tagIds"
       v-model:date-range="range" v-model:date-from="dateFrom" v-model:date-to="dateTo"
-      :class="{ 'asset-filter-controls--content-height': staticOnly }"
       :projects="projects" :tags="tags" :heading="createPanelTitle"
       :description="createPanelDescription"
       :show-asset-filters="!staticOnly && purpose === 'showcase' && mode === 'dynamic'" :use-date-presets="!staticOnly && purpose === 'showcase' && mode === 'dynamic'" expanded

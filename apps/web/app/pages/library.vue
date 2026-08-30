@@ -39,7 +39,7 @@ interface BoardSummary {
   filters: { search: string; projectId: string | null; tagId: string | null; projectIds: string[]; tagIds: string[]; uploadedBy: string | null; dateFrom: string | null; dateTo: string | null }
   view_settings?: BoardViewSettings | null
 }
-interface BoardMember { user_id: string; role: string; allowed_users: { email: string | null; figma_handle: string | null } | null }
+interface BoardMember { user_id: string; role: string; allowed_users: { email: string | null; figma_handle: string | null; avatar_url: string | null } | null }
 interface BoardList { data: { collections: BoardSummary[] } }
 interface BoardContent { data: { assets: AssetCard[] } }
 
@@ -311,11 +311,13 @@ const deleteSelectedBoard = async () => {
     boardSettingsFeedback.error = true
   } finally { boardSettingsBusy.value = false }
 }
-const dynamicBoardFilters = reactive({ projectIds: [] as string[], tagIds: [] as string[], dateFrom: '', dateTo: '' })
+const dynamicBoardFilters = reactive({ search: '', projectIds: [] as string[], tagIds: [] as string[], uploadedBy: null as string | null, dateFrom: '', dateTo: '' })
 const hydrateDynamicBoardFilters = (board: BoardSummary | null | undefined) => {
   const filters = board?.mode === 'dynamic' ? board.filters : null
+  dynamicBoardFilters.search = filters?.search ?? ''
   dynamicBoardFilters.projectIds = [...(filters?.projectIds?.length ? filters.projectIds : filters?.projectId ? [filters.projectId] : [])]
   dynamicBoardFilters.tagIds = [...(filters?.tagIds?.length ? filters.tagIds : filters?.tagId ? [filters.tagId] : [])]
+  dynamicBoardFilters.uploadedBy = filters?.uploadedBy ?? null
   dynamicBoardFilters.dateFrom = filters?.dateFrom?.slice(0, 10) ?? ''
   dynamicBoardFilters.dateTo = filters?.dateTo?.slice(0, 10) ?? ''
 }
@@ -816,7 +818,6 @@ const currentBoardFilters = computed(() => ({
 }))
 const hasFilters = computed(() => Boolean(search.value || status.value || projectIds.value.length || tagIds.value.length || uploadedBys.value.length || dateRange.value !== 'all'))
 const activeFilterCount = computed(() => [status.value, projectIds.value.length, tagIds.value.length, uploadedBys.value.length, dateRange.value !== 'all'].filter(Boolean).length)
-const dynamicBoardFilterCount = computed(() => [dynamicBoardFilters.projectIds.length, dynamicBoardFilters.tagIds.length, dynamicBoardFilters.dateFrom || dynamicBoardFilters.dateTo].filter(Boolean).length)
 const clearFilters = () => {
   search.value = ''
   status.value = ''
@@ -903,16 +904,16 @@ const toggleSearch = async () => {
 }
 const isoBoardDate = (value: string, end = false) => value ? new Date(`${value}T${end ? '23:59:59.999' : '00:00:00.000'}`).toISOString() : null
 let dynamicBoardSaveTimer: ReturnType<typeof setTimeout> | undefined
-watch(() => [dynamicBoardFilters.projectIds.join(','), dynamicBoardFilters.tagIds.join(','), dynamicBoardFilters.dateFrom, dynamicBoardFilters.dateTo], () => {
+watch(() => [dynamicBoardFilters.search, dynamicBoardFilters.projectIds.join(','), dynamicBoardFilters.tagIds.join(','), dynamicBoardFilters.uploadedBy, dynamicBoardFilters.dateFrom, dynamicBoardFilters.dateTo], () => {
   if (!selectedDynamicBoard.value || hydratingDynamicBoard) return
   clearTimeout(dynamicBoardSaveTimer)
   dynamicBoardSaveTimer = setTimeout(async () => {
     const board = selectedDynamicBoard.value
     if (!board) return
     const filters = {
-      search: '', projectId: null, tagId: null,
+      search: dynamicBoardFilters.search, projectId: null, tagId: null,
       projectIds: dynamicBoardFilters.projectIds, tagIds: dynamicBoardFilters.tagIds,
-      uploadedBy: board.filters.uploadedBy,
+      uploadedBy: dynamicBoardFilters.uploadedBy,
       dateFrom: isoBoardDate(dynamicBoardFilters.dateFrom), dateTo: isoBoardDate(dynamicBoardFilters.dateTo, true)
     }
     board.filters = filters
@@ -922,12 +923,6 @@ watch(() => [dynamicBoardFilters.projectIds.join(','), dynamicBoardFilters.tagId
     } catch { hydrateDynamicBoardFilters(board) }
   }, 350)
 })
-const clearDynamicBoardFilters = () => {
-  dynamicBoardFilters.projectIds = []
-  dynamicBoardFilters.tagIds = []
-  dynamicBoardFilters.dateFrom = ''
-  dynamicBoardFilters.dateTo = ''
-}
 const assets = ref<AssetCard[]>([])
 const loadMoreSentinel = ref<HTMLElement | null>(null)
 const loadingNextPage = ref(false)
@@ -1321,6 +1316,13 @@ onBeforeUnmount(() => {
           :publication-enabled="selectedBoard.publication_enabled" :can-edit="canRenameSelectedBoard"
           :can-manage-members="canManageSelectedBoardMembers" :busy="boardSettingsBusy"
           :public-url="selectedBoardPublicUrl" :full-settings-url="`/boards/${selectedBoard.id}`"
+          v-model:filter-search="dynamicBoardFilters.search"
+          v-model:filter-project-ids="dynamicBoardFilters.projectIds"
+          v-model:filter-tag-ids="dynamicBoardFilters.tagIds"
+          v-model:filter-uploaded-by="dynamicBoardFilters.uploadedBy"
+          v-model:filter-date-from="dynamicBoardFilters.dateFrom"
+          v-model:filter-date-to="dynamicBoardFilters.dateTo"
+          :projects="projects" :tags="tags" :submitters="submitters"
           :members="boardMembers" :feedback="boardSettingsFeedback.text" :error="boardSettingsFeedback.error"
           @set-publication="setSelectedBoardPublication" @set-layout="setSelectedBoardLayout"
           @copy-link="copySelectedBoardLink" @save-member="saveSelectedBoardMember"
@@ -1397,22 +1399,6 @@ onBeforeUnmount(() => {
               </span></button></div>
         </SelectionPanel>
       </template>
-      <template v-else>
-        <SelectionPanel v-if="selectedDynamicBoard" :visible="filtersExpanded" label="Board asset filters" wide overlay
-          raised @close="closeFilters" @after-leave="finishExpandedPanelClose">
-          <AssetFilterControls v-model:project-ids="dynamicBoardFilters.projectIds" v-model:tag-ids="dynamicBoardFilters.tagIds"
-            v-model:date-from="dynamicBoardFilters.dateFrom" v-model:date-to="dynamicBoardFilters.dateTo"
-            :projects="projects" :tags="tags" heading="Filters" expanded
-            :actions-visible="Boolean(dynamicBoardFilterCount)">
-            <template #actions><button class="clear-filters-button" type="button"
-                @click="clearDynamicBoardFilters">Clear filters</button></template>
-          </AssetFilterControls>
-          <button class="filter-panel-toggle is-expanded" type="button" aria-label="Hide filters" aria-expanded="true"
-            @click="closeFilters">
-            <Xmark :size="20" :stroke-width="2" aria-hidden="true" />
-          </button>
-        </SelectionPanel>
-      </template>
 
       <div
         class="board-swipe-region" @pointerdown="startBoardSwipe" @pointermove="moveBoardSwipe"
@@ -1436,11 +1422,6 @@ onBeforeUnmount(() => {
                 :class="{ error: boardRenameFeedback.error }" role="status" aria-live="polite">{{
                 boardRenameFeedback.text }}</span></div>
             <div class="selected-board-actions">
-              <button v-if="selectedDynamicBoard" class="button-secondary selected-board-action-button"
-                :class="{ 'has-filter-count': dynamicBoardFilterCount }"
-                type="button" aria-label="Show board filters" :aria-expanded="filtersExpanded"
-                @click="openFilters"><span>Filters</span><span v-if="dynamicBoardFilterCount" class="filter-count">{{
-                  dynamicBoardFilterCount }}</span></button>
               <button class="button-secondary selected-board-action-button" type="button" aria-label="Change library view"
                 :aria-expanded="viewExpanded" @click="openView">View</button>
               <button class="button-secondary selected-board-action-button" type="button"
@@ -1493,8 +1474,8 @@ onBeforeUnmount(() => {
                 </template>
                 <template v-else-if="selectedDynamicBoard">
                   <strong>No assets match this board’s filters</strong>
-                  <span>Change the filters to include more approved assets.</span>
-                  <button type="button" @click="openFilters">Change filters</button>
+                  <span>Change the saved filters in Board settings to include more approved assets.</span>
+                  <button type="button" @click="openBoardSettings">Board settings</button>
                 </template>
                 <template v-else>
                   <strong>{{ hasFilters ? 'No matching assets' : 'No assets yet' }}</strong>
@@ -1891,7 +1872,7 @@ button {
 .board-tabs {
   display: flex;
   gap: calc(var(--space)*1.25);
-  padding: 0 var(--space);
+  padding: 0 calc(var(--space)*1.25);
   overflow-x: auto;
   background: var(--color-bg);
   scrollbar-width: none

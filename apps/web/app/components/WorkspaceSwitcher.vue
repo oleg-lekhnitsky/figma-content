@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { MoreH, Plus, Xmark } from 'reicon-vue'
+import { Plus, Xmark } from 'reicon-vue'
 
 interface Workspace {
   id: string
@@ -47,6 +47,16 @@ const workspaceRoleDescriptions: Record<WorkspaceRole, string> = {
   editor: 'Manage, approve, and organize all assets.',
   admin: 'Full access, including people and workspace settings.'
 }
+const workspaceRoleOptions = workspaceRoles.map(role => ({
+  value: role,
+  label: role.charAt(0).toUpperCase() + role.slice(1),
+  description: workspaceRoleDescriptions[role],
+  separated: role === 'admin'
+}))
+const memberRowRoleOptions = workspaceRoles.map(role => ({
+  value: role,
+  label: role.charAt(0).toUpperCase() + role.slice(1)
+}))
 
 const route = useRoute()
 const router = useRouter()
@@ -55,8 +65,9 @@ const switchingId = ref('')
 const managementBusy = ref(false)
 const managementMessage = ref('')
 const inviteEmail = ref('')
-const inviteEmailInput = ref<HTMLInputElement | null>(null)
+const inviteEmailInput = ref<{ focus: () => void } | null>(null)
 const inviteRole = ref<WorkspaceRole>('viewer')
+const inviteRoleMenuOpen = ref(false)
 const inviteUrl = ref('')
 const inviteId = ref('')
 const inviteComposerOpen = ref(true)
@@ -324,6 +335,15 @@ const revokeMemberSessions = async (member: WorkspaceMember) => {
   }
 }
 
+const memberActions = (member: WorkspaceMember) => member.is_self
+  ? [{ value: 'sessions', label: 'Sign out everywhere' }]
+  : [{ value: 'remove', label: 'Remove from workspace' }, { value: 'sessions', label: 'Revoke sessions' }]
+
+const handleMemberAction = (member: WorkspaceMember, action: string) => {
+  if (action === 'remove') void removeMember(member)
+  else if (action === 'sessions') void revokeMemberSessions(member)
+}
+
 onBeforeUnmount(() => memberFeedbackTimers.forEach(timer => clearTimeout(timer)))
 
 const renameWorkspace = async () => {
@@ -379,7 +399,7 @@ const deleteWorkspace = async () => {
         <button class="filter-sheet-handle" type="button" aria-label="Close workspaces" @click="closePanel"><span aria-hidden="true" /></button>
         <div class="filter-sheet-content">
           <section class="filter-option-group">
-            <h2 class="filter-overlay-title">Workspaces</h2>
+            <h2 class="filter-overlay-title">Your workspaces</h2>
             <div class="workspace-option-list">
               <button
                 v-for="workspace in workspaces" :key="workspace.id" type="button"
@@ -423,31 +443,22 @@ const deleteWorkspace = async () => {
             <h2 class="filter-overlay-title">Invite to {{ current?.name ?? 'this' }} workspace</h2>
             <div class="workspace-management-grid">
               <form v-if="inviteComposerOpen" class="workspace-setting-card" @submit.prevent="inviteMember">
-                <fieldset class="workspace-role-field">
-                  <legend class="sr-only">Role</legend>
-                  <div class="filter-option-list filter-option-list--segmented">
-                    <button v-for="roleOption in workspaceRoles" :key="roleOption" type="button" :aria-pressed="inviteRole === roleOption" @click="inviteRole = roleOption">
-                      {{ roleOption.charAt(0).toUpperCase() + roleOption.slice(1) }}
-                    </button>
-                  </div>
-                </fieldset>
-                <p class="workspace-role-description" aria-live="polite">{{ workspaceRoleDescriptions[inviteRole] }}</p>
-                <div class="workspace-inline-form-row">
-                  <label>
-                    <span class="sr-only">Email</span>
-                    <input ref="inviteEmailInput" v-model="inviteEmail" class="panel-field" required type="email" autocomplete="email" placeholder="Email">
-                  </label>
-                  <Transition
-                    name="workspace-inline-action"
-                    @enter="measureInlineAction"
-                    @before-leave="measureInlineAction"
-                    @after-leave="clearInlineActionMeasure"
-                  >
-                    <button v-if="canInviteMember || (managementBusy && inviteEmail.trim())" class="panel-primary-action workspace-inline-action" type="submit" :disabled="managementBusy">
-                      {{ managementBusy ? 'Inviting…' : 'Invite' }}
-                    </button>
-                  </Transition>
-                </div>
+                <AppRolePicker
+                  :model-value="inviteRole"
+                  :options="workspaceRoleOptions"
+                  :open="inviteRoleMenuOpen"
+                  aria-label="Invitation role"
+                  @update:model-value="inviteRole = $event as WorkspaceRole"
+                  @update:open="inviteRoleMenuOpen = $event"
+                />
+                <AppInlineActionField
+                  ref="inviteEmailInput"
+                  v-model="inviteEmail"
+                  action-label="Invite"
+                  busy-label="Inviting…"
+                  :show-action="canInviteMember || Boolean(managementBusy && inviteEmail.trim())"
+                  :busy="managementBusy"
+                />
               </form>
               <button v-else class="panel-secondary-action workspace-invite-another" type="button" @click="openInviteComposer">Invite another person</button>
             </div>
@@ -473,64 +484,26 @@ const deleteWorkspace = async () => {
             <p v-if="membersLoading && !members.length" class="workspace-management-message">Loading people…</p>
             <p v-if="membersMessage" class="workspace-management-message" role="status" aria-live="polite">{{ membersMessage }}</p>
             <div v-if="members.length" class="workspace-member-list">
-              <article v-for="member in members" :key="member.id" class="workspace-member-card">
-                <span class="workspace-member-avatar" aria-hidden="true">
-                  <img v-if="member.avatar_url" :src="member.avatar_url" alt="">
-                  <span v-else>{{ contributorInitial(member) }}</span>
-                </span>
-                <div class="workspace-member-copy">
-                  <div class="workspace-member-heading">
-                    <strong>{{ member.email ?? member.figma_handle }}</strong>
-                    <span v-if="member.is_self" class="workspace-member-status">You</span>
-                  </div>
-                  <span :title="member.last_login_at ? new Date(member.last_login_at).toLocaleString() : undefined">{{ memberActivityLabel(member.last_login_at) }}</span>
-                  <span v-if="memberFeedback[member.id]" class="workspace-member-feedback" role="status" aria-live="polite">{{ memberFeedback[member.id] }}</span>
-                </div>
-                <div class="workspace-member-controls">
-                  <AppDropdownMenu
-                    :open="memberRoleMenuOpen === member.id"
-                    class="workspace-member-role"
-                    width="anchor"
-                    content-class="panel-dropdown-menu"
-                    @update:open="memberRoleMenuOpen = $event ? member.id : ''"
-                  >
-                    <template #trigger="{ triggerProps }">
-                      <button v-bind="triggerProps" class="panel-field panel-dropdown-trigger" type="button" :aria-label="`Role for ${member.email ?? member.figma_handle}`">
-                        <span>{{ member.role.charAt(0).toUpperCase() + member.role.slice(1) }}</span>
-                        <span class="filter-dropdown-chevron" aria-hidden="true" />
-                      </button>
-                    </template>
-                    <template #default>
-                      <button
-                        v-for="roleOption in workspaceRoles"
-                        :key="roleOption"
-                        role="menuitemradio"
-                        type="button"
-                        :aria-checked="member.role === roleOption"
-                        @click="updateMember(member, { role: roleOption })"
-                      >
-                        {{ roleOption.charAt(0).toUpperCase() + roleOption.slice(1) }}
-                      </button>
-                    </template>
-                  </AppDropdownMenu>
-                  <AppDropdownMenu
-                    :open="memberMenuOpen === member.id"
-                    align="end"
-                    content-class="panel-dropdown-menu"
-                    @update:open="memberMenuOpen = $event ? member.id : ''"
-                  >
-                    <template #trigger="{ triggerProps }">
-                      <button v-bind="triggerProps" class="panel-secondary-action panel-icon-action workspace-member-more" type="button" :aria-label="`Actions for ${member.email ?? member.figma_handle}`">
-                        <MoreH :size="18" aria-hidden="true" />
-                      </button>
-                    </template>
-                    <template #default>
-                      <button v-if="!member.is_self" role="menuitem" type="button" @click.stop="removeMember(member)">Remove from workspace</button>
-                      <button role="menuitem" type="button" @click.stop="revokeMemberSessions(member)">{{ member.is_self ? 'Sign out everywhere' : 'Revoke sessions' }}</button>
-                    </template>
-                  </AppDropdownMenu>
-                </div>
-              </article>
+              <AppPersonRow
+                v-for="member in members"
+                :key="member.id"
+                :name="member.email ?? member.figma_handle ?? 'Workspace member'"
+                :avatar-url="member.avatar_url"
+                :fallback="contributorInitial(member)"
+                :meta="memberActivityLabel(member.last_login_at)"
+                :meta-title="member.last_login_at ? new Date(member.last_login_at).toLocaleString() : ''"
+                :badge="member.is_self ? 'You' : ''"
+                :feedback="memberFeedback[member.id]"
+                :role="member.role.charAt(0).toUpperCase() + member.role.slice(1)"
+                :role-options="memberRowRoleOptions"
+                :actions="memberActions(member)"
+                :role-open="memberRoleMenuOpen === member.id"
+                :actions-open="memberMenuOpen === member.id"
+                @update:role-open="memberRoleMenuOpen = $event ? member.id : ''"
+                @update:actions-open="memberMenuOpen = $event ? member.id : ''"
+                @select-role="updateMember(member, { role: $event as WorkspaceRole })"
+                @select-action="handleMemberAction(member, $event)"
+              />
             </div>
           </section>
 
@@ -723,8 +696,7 @@ const deleteWorkspace = async () => {
 }
 
 .workspace-management-grid { display: grid; gap: var(--space); }
-.workspace-name-form,
-.workspace-inline-form-row {
+.workspace-name-form {
   min-width: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 0;
@@ -734,20 +706,16 @@ const deleteWorkspace = async () => {
     grid-template-columns var(--filter-action-transition-duration) var(--filter-overlay-enter-easing),
     column-gap var(--filter-action-transition-duration) var(--filter-overlay-enter-easing);
 }
-.workspace-name-form:has(.workspace-inline-action),
-.workspace-inline-form-row:has(.workspace-inline-action) {
+.workspace-name-form:has(.workspace-inline-action) {
   grid-template-columns: minmax(0, 1fr) var(--workspace-inline-action-width, 0px);
   column-gap: var(--filter-action-gap);
 }
 .workspace-name-form:has(.workspace-inline-action-enter-from),
-.workspace-inline-form-row:has(.workspace-inline-action-enter-from),
-.workspace-name-form:has(.workspace-inline-action-leave-to),
-.workspace-inline-form-row:has(.workspace-inline-action-leave-to) {
+.workspace-name-form:has(.workspace-inline-action-leave-to) {
   grid-template-columns: minmax(0, 1fr) 0;
   column-gap: 0;
 }
-.workspace-name-form > label,
-.workspace-inline-form-row > label { min-width: 0; }
+.workspace-name-form > label { min-width: 0; }
 .workspace-inline-action.panel-primary-action {
   justify-self: end;
   width: max-content;
@@ -775,16 +743,6 @@ const deleteWorkspace = async () => {
   background: transparent;
 }
 
-.workspace-role-field { min-width: 0; margin: 0; padding: 0; border: 0; }
-.workspace-role-description {
-  margin: 0;
-  padding: calc(var(--filter-option-padding) / 2);
-  color: var(--filter-overlay-muted-color);
-  font-size: var(--font-size-caption);
-  letter-spacing: var(--letter-spacing-caption);
-  line-height: 1.25;
-}
-
 .workspace-management-message { margin: 0; color: var(--filter-overlay-muted-color); font-size: var(--font-size-caption); letter-spacing: var(--letter-spacing-caption); }
 
 .workspace-invitations { display: grid; gap: var(--filter-option-gap); }
@@ -794,8 +752,7 @@ const deleteWorkspace = async () => {
   font-size: var(--filter-caption-size);
   font-weight: 700;
 }
-.workspace-invitation-card,
-.workspace-member-card {
+.workspace-invitation-card {
   min-width: 0;
   display: grid;
   align-items: center;
@@ -840,108 +797,6 @@ const deleteWorkspace = async () => {
 }
 
 .workspace-member-list { display: grid; gap: var(--filter-option-gap); }
-.workspace-member-card {
-  grid-template-columns: auto minmax(0, 1fr) auto;
-}
-.workspace-member-avatar {
-  position: relative;
-  width: calc(var(--filter-action-height) - .5rem);
-  height: calc(var(--filter-action-height) - .5rem);
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-  border-radius: 50%;
-  color: var(--color-fg);
-  background: var(--color-surface);
-  font: inherit;
-  line-height: 1;
-}
-.workspace-member-avatar img,
-.workspace-member-avatar > span {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-.workspace-member-avatar img {
-  display: block;
-  object-fit: cover;
-}
-.workspace-member-avatar > span {
-  display: grid;
-  place-items: center;
-}
-.workspace-member-copy {
-  min-width: 0;
-  display: grid;
-  gap: calc(var(--filter-option-gap)*.5);
-  padding: calc(var(--filter-option-padding) / 2);
-}
-.workspace-member-heading {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: var(--filter-option-gap);
-  line-height: 1.2;
-}
-.workspace-member-copy strong {
-  min-width: 0;
-  padding: 0;
-  overflow: hidden;
-  font-size: var(--filter-action-font-size);
-  font-weight: 500;
-  line-height: inherit;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.workspace-member-copy > span {
-  color: var(--filter-overlay-muted-color);
-  font-size: var(--font-size-caption);
-  font-weight: 400;
-  letter-spacing: var(--letter-spacing-caption);
-}
-.workspace-member-copy > span:not(.workspace-member-feedback) {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.workspace-member-copy > .workspace-member-feedback {
-  color: var(--filter-overlay-panel-color);
-}
-.workspace-member-copy .workspace-member-status {
-  flex: 0 0 auto;
-  padding: .2rem .45rem;
-  border-radius: 999px;
-  color: var(--filter-overlay-primary-color);
-  background: var(--filter-overlay-primary-background);
-  font-size: .625rem;
-  font-weight: 500;
-  letter-spacing: .01em;
-  line-height: 1;
-}
-.workspace-member-copy .workspace-member-status.is-disabled {
-  color: var(--filter-overlay-muted-color);
-  background: color-mix(in srgb, var(--filter-overlay-panel-color) 7%, transparent);
-}
-.workspace-member-controls {
-  display: flex;
-  align-items: center;
-  gap: var(--filter-action-gap);
-}
-.workspace-member-role {
-  width: 7.5rem;
-  min-width: 0;
-}
-.workspace-member-role .panel-field {
-  min-height: calc(var(--filter-action-height) - .5rem);
-}
-.workspace-member-more.panel-icon-action {
-  width: calc(var(--filter-action-height) - .5rem);
-  min-width: calc(var(--filter-action-height) - .5rem);
-  min-height: calc(var(--filter-action-height) - .5rem);
-  flex-basis: calc(var(--filter-action-height) - .5rem);
-}
 
 .workspace-delete-section > p {
   margin: 0;
@@ -981,14 +836,10 @@ const deleteWorkspace = async () => {
   .workspace-invitation-card { grid-template-columns: minmax(0, 1fr); }
   .workspace-invitation-actions { justify-content: stretch; }
   .workspace-invitation-actions .panel-secondary-action { flex: 1 1 0; }
-  .workspace-member-card { grid-template-columns: auto minmax(0, 1fr); }
-  .workspace-member-controls { grid-column: 1 / -1; justify-content: stretch; }
-  .workspace-member-role { width: auto; flex: 1 1 auto; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .workspace-name-form,
-  .workspace-inline-form-row,
   .workspace-inline-action-enter-active,
   .workspace-inline-action-leave-active { transition: none; }
 }

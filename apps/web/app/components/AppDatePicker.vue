@@ -10,6 +10,7 @@ const props = withDefaults(defineProps<{
   precision?: 'day' | 'month'
   clearable?: boolean
   showLabel?: boolean
+  disabled?: boolean
 }>(), {
   modelValue: '',
   min: '',
@@ -17,7 +18,8 @@ const props = withDefaults(defineProps<{
   surface: 'line',
   precision: 'day',
   clearable: true,
-  showLabel: true
+  showLabel: true,
+  disabled: false
 })
 
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
@@ -196,6 +198,7 @@ const handleMonthKeydown = (event: KeyboardEvent, date: Date) => {
 }
 
 const setOpen = (value: boolean) => {
+  if (props.disabled) return
   open.value = value
   if (!value) return
   const initialDate = selectedDate.value ?? today
@@ -214,7 +217,7 @@ const clear = () => {
   <div class="date-field app-date-picker" :class="`app-date-picker--${surface}`">
     <AppPopover :open="open" :width="320" align="start" haspopup="dialog" @update:open="setOpen">
       <template #trigger="{ triggerProps }">
-        <button ref="trigger" v-bind="triggerProps" class="app-date-picker-trigger" type="button" :aria-label="`${label}: ${displayValue || 'No date selected'}`">
+        <button ref="trigger" v-bind="triggerProps" class="app-date-picker-trigger" type="button" :disabled="disabled" :aria-label="`${label}: ${displayValue || 'No date selected'}`">
           <span class="app-date-picker-trigger-copy" :class="{ 'has-value': displayValue }">
             <span v-if="showLabel" class="app-date-picker-trigger-label">{{ label }}</span>
             <span v-if="displayValue" class="app-date-picker-trigger-value">{{ displayValue }}</span>

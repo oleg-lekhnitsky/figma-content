@@ -9,7 +9,7 @@ const changePassword = async () => {
   errorMessage.value = ''
   try {
     await $fetch('/api/auth/password/change', { method: 'POST', body: { currentPassword: currentPassword.value, newPassword: newPassword.value } })
-    await navigateTo('/library')
+    await navigateTo('/library', { replace: true })
   } catch { errorMessage.value = 'Unable to change the password. Check your current password and use at least 12 characters for the new one.' }
   finally { submitting.value = false }
 }

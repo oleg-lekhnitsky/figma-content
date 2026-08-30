@@ -1,6 +1,30 @@
 <script setup lang="ts">
+type AuthSessionResponse = {
+  data: {
+    authenticated: boolean
+    user?: { mustChangePassword?: boolean }
+  }
+}
+
 const route = useRoute()
 const redirectPath = computed(() => typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/') && !route.query.redirect.startsWith('//') ? route.query.redirect : '/library')
+
+const authenticatedDestination = (session: AuthSessionResponse) => session.data.user?.mustChangePassword ? '/change-password' : redirectPath.value
+const redirectAuthenticatedSession = async () => {
+  const session = await $fetch<AuthSessionResponse>('/api/auth/session').catch(() => undefined)
+  if (session?.data.authenticated) await navigateTo(authenticatedDestination(session), { replace: true })
+}
+
+const { data: initialSession } = await useFetch<AuthSessionResponse>('/api/auth/session', { key: 'auth-session' })
+if (initialSession.value?.data.authenticated) {
+  await navigateTo(authenticatedDestination(initialSession.value), { replace: true })
+}
+
+const handlePageShow = (event: PageTransitionEvent) => {
+  if (event.persisted) void redirectAuthenticatedSession()
+}
+onMounted(() => window.addEventListener('pageshow', handlePageShow))
+onBeforeUnmount(() => window.removeEventListener('pageshow', handlePageShow))
 
 const email = ref('')
 const password = ref('')
@@ -17,7 +41,7 @@ const passwordLogin = async () => {
   errorMessage.value = ''
   try {
     const response = await $fetch<{ data: { mustChangePassword: boolean } }>('/api/auth/password/login', { method: 'POST', body: { email: email.value, password: password.value } })
-    await navigateTo(response.data.mustChangePassword ? '/change-password' : redirectPath.value)
+    await navigateTo(response.data.mustChangePassword ? '/change-password' : redirectPath.value, { replace: true })
   } catch {
     errorMessage.value = 'Email or password is incorrect. Check both fields and try again.'
     await nextTick()
@@ -276,7 +300,7 @@ form {
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: var(--filter-action-gap);
-  margin: var(--filter-overlay-group-gap) 0;
+  margin: calc(var(--filter-overlay-group-gap)/2) 0;
   color: var(--filter-overlay-muted-color);
   font-size: var(--font-size-caption);
   letter-spacing: var(--letter-spacing-caption);
