@@ -29,14 +29,16 @@ const props = defineProps<{
   tags: FilterOption[]
   submitters: FilterSubmitter[]
   members: Array<{ user_id: string; role: string; allowed_users: { email: string | null; figma_handle: string | null; avatar_url: string | null } | null }>
+  workspaceMembers: Array<{ id: string; email: string | null; figma_handle: string | null; avatar_url: string | null; role: string }>
   feedback?: string
   error?: boolean
 }>()
 
-const memberEmail = ref('')
+const selectedMemberId = ref('')
 type BoardMemberRole = 'editor' | 'contributor' | 'viewer'
 const memberRole = ref<BoardMemberRole>('contributor')
 const memberRoleOpen = ref(false)
+const memberPickerOpen = ref(false)
 const memberRowRoleOpen = ref('')
 const memberRowActionOpen = ref('')
 const memberRoleOptions = [
@@ -44,7 +46,19 @@ const memberRoleOptions = [
   { value: 'contributor', label: 'Contributor', description: 'Add and manage their own assets.' },
   { value: 'editor', label: 'Editor', description: 'Manage the board and all of its assets.' }
 ] as const
-const canAddMember = computed(() => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(memberEmail.value.trim()))
+const availableWorkspaceMembers = computed(() => {
+  const assignedIds = new Set(props.members.map(member => member.user_id))
+  return props.workspaceMembers.filter(member => !assignedIds.has(member.id) && Boolean(member.email))
+})
+const workspaceMemberOptions = computed(() => availableWorkspaceMembers.value.map(member => ({
+  value: member.id,
+  label: member.email ?? member.figma_handle ?? 'Workspace member',
+  description: `${member.role.charAt(0).toUpperCase()}${member.role.slice(1)} workspace member`
+})))
+const selectedWorkspaceMember = computed(() => availableWorkspaceMembers.value.find(member => member.id === selectedMemberId.value))
+watch(availableWorkspaceMembers, members => {
+  if (!members.some(member => member.id === selectedMemberId.value)) selectedMemberId.value = members[0]?.id ?? ''
+}, { immediate: true })
 const setMemberRole = (role: string) => { memberRole.value = role as BoardMemberRole }
 const memberName = (member: typeof props.members[number]) => member.allowed_users?.email ?? member.allowed_users?.figma_handle ?? 'Workspace member'
 const memberInitial = (member: typeof props.members[number]) => memberName(member).trim().charAt(0).toLocaleUpperCase() || '?'
@@ -112,11 +126,14 @@ const clearBoardFilters = () => {
   emit('update:filterDateTo', '')
 }
 const submitMember = () => {
-  const email = memberEmail.value.trim()
+  const email = selectedWorkspaceMember.value?.email?.trim()
   if (!email) return
   emit('saveMember', email, memberRole.value)
-  memberEmail.value = ''
   addingMember.value = false
+}
+const toggleMemberForm = () => {
+  addingMember.value = !addingMember.value
+  if (addingMember.value) selectedMemberId.value = availableWorkspaceMembers.value[0]?.id ?? ''
 }
 
 let feedbackTimer: ReturnType<typeof setTimeout> | undefined
@@ -191,7 +208,7 @@ onBeforeUnmount(() => {
       <h3 id="board-public-access">Public access</h3>
       <div class="board-public-access-row">
         <div class="filter-option-list filter-option-list--segmented">
-          <button type="button" :aria-pressed="!publicationEnabled" :disabled="!canEdit || busy" @click="$emit('setPublication', false)">Private</button>
+          <button type="button" :aria-pressed="!publicationEnabled" :disabled="!canEdit || busy" @click="$emit('setPublication', false)">Unpublished</button>
           <button type="button" :aria-pressed="publicationEnabled" :disabled="!canEdit || busy" @click="$emit('setPublication', true)">Published</button>
         </div>
         <Transition name="public-access-actions">
@@ -221,7 +238,8 @@ onBeforeUnmount(() => {
     </section>
 
     <section class="board-setting-group board-members">
-      <h3>Board members</h3>
+      <h3>Board roles</h3>
+      <p>{{ purpose === 'review' ? 'Only added members can access this review board.' : 'Everyone in the workspace can view this board. Roles below grant additional permissions.' }}</p>
       <div v-if="members.length" class="board-member-list">
         <AppPersonRow
           v-for="member in members"
@@ -241,9 +259,22 @@ onBeforeUnmount(() => {
           @select-action="removeExistingMember(member)"
         />
       </div>
-      <p v-else>No board members yet.</p>
+      <p v-else>{{ purpose === 'review' ? 'No board members yet.' : 'No additional board roles yet.' }}</p>
       <Transition name="member-form">
         <form v-if="canManageMembers && addingMember" class="member-form" @submit.prevent="submitMember">
+          <div class="member-form-field">
+            <h4>Workspace member</h4>
+            <AppRolePicker
+              :model-value="selectedMemberId"
+              :options="workspaceMemberOptions"
+              :open="memberPickerOpen"
+              aria-label="Workspace member"
+              @update:model-value="selectedMemberId = $event"
+              @update:open="memberPickerOpen = $event"
+            />
+          </div>
+          <div class="member-form-field">
+            <h4>Board role</h4>
           <AppRolePicker
             :model-value="memberRole"
             :options="memberRoleOptions"
@@ -252,16 +283,12 @@ onBeforeUnmount(() => {
             @update:model-value="setMemberRole"
             @update:open="memberRoleOpen = $event"
           />
-          <AppInlineActionField
-            v-model="memberEmail"
-            action-label="Add"
-            busy-label="Adding…"
-            :show-action="canAddMember || Boolean(busy && memberEmail.trim())"
-            :busy="busy"
-          />
+          </div>
+          <button class="panel-primary-action" type="submit" :disabled="busy">{{ busy ? 'Assigning…' : purpose === 'review' ? 'Add review member' : 'Assign board role' }}</button>
         </form>
       </Transition>
-      <button v-if="canManageMembers" class="panel-secondary-action" type="button" :aria-expanded="addingMember" @click="addingMember = !addingMember">{{ addingMember ? 'Cancel' : 'Add member' }}</button>
+      <p v-if="canManageMembers && !availableWorkspaceMembers.length">All eligible workspace members already have a board role.</p>
+      <button v-if="canManageMembers && availableWorkspaceMembers.length" class="panel-secondary-action" type="button" :aria-expanded="addingMember" @click="toggleMemberForm">{{ addingMember ? 'Cancel' : purpose === 'review' ? 'Add review member' : 'Assign board role' }}</button>
     </section>
 
     <section v-if="canManageMembers" class="board-setting-group danger-zone">
@@ -492,6 +519,20 @@ onBeforeUnmount(() => {
   gap: var(--space);
   padding-top: 0;
   overflow: hidden;
+}
+
+.member-form-field {
+  min-width: 0;
+  display: grid;
+  gap: var(--filter-option-gap);
+}
+
+.member-form-field h4 {
+  margin: 0;
+  color: var(--filter-overlay-panel-color);
+  font-size: var(--filter-caption-size);
+  font-weight: 700;
+  line-height: 1;
 }
 
 .member-form-enter-active,

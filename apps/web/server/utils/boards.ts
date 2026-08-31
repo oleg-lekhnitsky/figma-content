@@ -3,6 +3,22 @@ import { appError, databaseError } from './app-error'
 
 const rank: Record<BoardRole, number> = { viewer: 0, contributor: 1, editor: 2, owner: 3 }
 
+export const resolveBoardRole = ({
+  membershipRole,
+  isCreator,
+  workspaceRole,
+  purpose
+}: {
+  membershipRole?: BoardRole | null
+  isCreator: boolean
+  workspaceRole?: Role
+  purpose: 'showcase' | 'review' | 'portfolio' | 'case'
+}): BoardRole | null => {
+  if (isCreator || workspaceRole === 'admin') return 'owner'
+  if (membershipRole) return membershipRole
+  return purpose === 'review' ? null : 'viewer'
+}
+
 export const requireBoardRole = async (
   collectionId: string,
   organizationId: string,
@@ -19,7 +35,12 @@ export const requireBoardRole = async (
   const { data: membership, error } = await db.from('public_collection_members')
     .select('role').eq('collection_id', collectionId).eq('organization_id', organizationId).eq('user_id', userId).maybeSingle()
   if (error) throw databaseError('read board membership', error)
-  const role = (membership?.role ?? (collection.created_by === userId ? 'owner' : workspaceRole === 'admin' ? 'owner' : null)) as BoardRole | null
+  const role = resolveBoardRole({
+    membershipRole: membership?.role as BoardRole | null | undefined,
+    isCreator: collection.created_by === userId,
+    workspaceRole,
+    purpose: collection.purpose as 'showcase' | 'review' | 'portfolio' | 'case'
+  })
   if (!role || !allowed.includes(role)) throw appError(403, 'BOARD_FORBIDDEN', 'You do not have permission to change this board.')
   return { collection, role }
 }

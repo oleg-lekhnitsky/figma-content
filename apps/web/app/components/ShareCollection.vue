@@ -58,7 +58,7 @@ const createPanelDescription = computed(() => props.portfolioOnly
   : purpose.value === 'review'
     ? 'Invite contributors after creating it. Submissions arrive from the Figma plugin.'
     : staticOnly.value
-      ? 'This board starts private. Publish it when it is ready.'
+      ? 'Its public link starts off. Publish it when it is ready.'
       : 'Name the board and choose what should appear in it.')
 let previousBodyOverflow = ''
 let previousRootOverflow = ''
@@ -275,7 +275,7 @@ const createCollection = async () => {
       ? `Board created with ${response.data.collection.itemCount ?? 0} approved items.`
       : 'Board created. New approved items matching these filters will appear automatically.'
     close()
-  } catch { errorMessage.value = 'Unable to create the public link. Check the settings and try again.' }
+  } catch { errorMessage.value = 'Unable to create the board. Check the settings and try again.' }
   finally { busy.value = false }
 }
 const copyLink = async (collection: Collection) => {
@@ -325,7 +325,7 @@ ref="dialog" class="share-dialog" aria-labelledby="share-title" @click.self="clo
     @close="unlockPageScroll">
     <div class="share-panel">
       <header v-if="view === 'list'">
-        <div class="dialog-heading"><h2 id="share-title" class="display-title">{{ props.portfolioOnly ? 'Create portfolio' : 'My boards and shared with me' }}</h2></div><button
+        <div class="dialog-heading"><h2 id="share-title" class="display-title">{{ props.portfolioOnly ? 'Create portfolio' : 'Workspace boards' }}</h2></div><button
 type="button"
           class="button-secondary button-icon close-button" aria-label="Close board settings" @click="close">
           <Xmark :size="20" :stroke-width="2" aria-hidden="true" />
@@ -342,7 +342,7 @@ type="button"
               <div class="board-info"><div><label v-if="['owner', 'editor', 'admin'].includes(collection.role)" class="board-title"><span class="sr-only">Board name</span><textarea
 :value="collection.title" rows="1" maxlength="120" :aria-describedby="`board-feedback-${collection.id}`"
                     :aria-invalid="boardFeedback[collection.id]?.error || undefined" @change="renameBoard(collection, $event)" /><span
-:id="`board-feedback-${collection.id}`" class="field-message" :class="{ error: boardFeedback[collection.id]?.error }" role="status" aria-live="polite">{{ boardFeedback[collection.id]?.text }}</span></label><template v-else><strong>{{ collection.title }}</strong></template><span class="board-meta">{{ collection.role }} · {{ collection.purpose === 'review' ? 'submissions on' : collection.purpose === 'portfolio' ? 'portfolio' : collection.mode }} · {{ collection.publication_enabled ? 'public' : 'private' }}<template v-if="collection.expires_at"> · expires {{ new Date(collection.expires_at).toLocaleDateString() }}</template></span></div>
+:id="`board-feedback-${collection.id}`" class="field-message" :class="{ error: boardFeedback[collection.id]?.error }" role="status" aria-live="polite">{{ boardFeedback[collection.id]?.text }}</span></label><template v-else><strong>{{ collection.title }}</strong></template><span class="board-meta">{{ collection.role }} · {{ collection.purpose === 'review' ? 'submissions on' : collection.purpose === 'portfolio' ? 'portfolio' : collection.mode }} · {{ collection.publication_enabled ? 'published' : 'public link off' }}<template v-if="collection.expires_at"> · expires {{ new Date(collection.expires_at).toLocaleDateString() }}</template></span></div>
                 <details class="action-menu board-menu" @keydown.esc.prevent="closeActionMenu"><summary aria-label="More board actions">•••</summary><div><a v-if="collection.publication_enabled" :href="collectionUrl(collection.slug)" target="_blank" rel="noopener noreferrer">View public page</a><button v-if="collection.publication_enabled" type="button" @click="copyLink(collection); closeActionMenu($event)">Copy public link</button><button v-if="['owner', 'editor', 'admin'].includes(collection.role)" type="button" :disabled="busy" @click="collection.publication_enabled ? revoke(collection) : publish(collection); closeActionMenu($event)">{{ collection.publication_enabled ? 'Disable public link' :'Enable public link' }}</button></div></details></div>
             </li>
           </ul>
@@ -384,7 +384,7 @@ type="button"
       </template>
       <section v-if="purpose === 'review'" class="filter-option-group" aria-labelledby="create-review-month"><h3 id="create-review-month">Submission month</h3><AppDatePicker v-model="reviewMonth" label="Submission month" precision="month" :clearable="false" :show-label="false" surface="field" /></section>
       <section v-if="purpose === 'review'" class="filter-option-group" aria-labelledby="create-review-deadline"><h3 id="create-review-deadline">Submission deadline (optional)</h3><AppDatePicker v-model="submissionDeadline" label="Submission deadline (optional)" :show-label="false" surface="field" /></section>
-      <section v-if="!staticOnly" class="board-setting-group"><p class="board-type-summary">{{ purpose === 'review' ? 'This board starts private. Add contributors after creating it.' : purpose === 'portfolio' ? 'Your portfolio starts private. Add work and publish when it is ready.' : 'This board starts private. Publish it when it is ready.' }}</p></section>
+      <section v-if="!staticOnly" class="board-setting-group"><p class="board-type-summary">{{ purpose === 'review' ? 'Only invited contributors can access this review board. Its public link starts off.' : purpose === 'portfolio' ? 'Its public link starts off. Add work and publish when it is ready.' : 'Its public link starts off. Publish it when it is ready.' }}</p></section>
       <section v-if="errorMessage" class="board-setting-group"><p class="board-type-summary error" role="alert">{{ errorMessage }}</p></section>
       <template #actions><button class="panel-primary-action" type="submit" :disabled="busy">{{ busy ? 'Creating…' : staticOnly ? 'Create' : createPanelTitle }}</button><button type="button" class="panel-secondary-action" @click="close">Cancel</button></template>
     </AssetFilterControls>

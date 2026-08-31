@@ -33,7 +33,7 @@ const feedback = ref('')
 const eligibleBoards = computed(() => props.boards.filter(board => board.purpose !== 'portfolio'
   && board.mode === 'static'
   && !board.assetIds.includes(props.assetId)
-  && ['owner', 'editor', 'contributor'].includes(board.role)
+  && ['owner', 'editor', 'contributor', 'admin'].includes(board.role)
   && (board.role !== 'contributor' || props.assetOwnerId === props.currentUserId)))
 const filteredBoards = computed(() => {
   const term = search.value.trim().toLocaleLowerCase()

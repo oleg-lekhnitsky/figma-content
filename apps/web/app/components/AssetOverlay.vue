@@ -78,7 +78,7 @@ const canOpenBoardPicker = computed(() => {
   if (!session.value?.data.user) return true
   return ['editor', 'admin'].includes(role.value ?? '') || (role.value === 'contributor' && asset.value?.uploaded_by === session.value.data.user.id)
 })
-const eligibleBoards = computed(() => availableBoards.value.filter(board => board.purpose !== 'portfolio' && board.mode === 'static' && ['owner', 'editor', 'contributor'].includes(board.role) && (board.role !== 'contributor' || asset.value?.uploaded_by === session.value?.data.user?.id)))
+const eligibleBoards = computed(() => availableBoards.value.filter(board => board.purpose !== 'portfolio' && board.mode === 'static' && ['owner', 'editor', 'contributor', 'admin'].includes(board.role) && (board.role !== 'contributor' || asset.value?.uploaded_by === session.value?.data.user?.id)))
 const boardSearch = ref('')
 const filteredEligibleBoards = computed(() => {
   const term = boardSearch.value.trim().toLocaleLowerCase()

@@ -366,9 +366,9 @@ const deleteBoard = async () => {
         </div>
       </section>
       <section v-if="collection.purpose !== 'portfolio' && (collection.purpose !== 'review' || activeView === 'members')" class="members" aria-labelledby="members-title">
-        <div><p class="section-label">Private access</p><h2 id="members-title">Board members</h2></div>
+        <div><p class="section-label">Workspace access</p><h2 id="members-title">Board roles</h2></div>
         <div>
-          <p class="muted member-explanation">Members manage this board after signing in. They do not control who can view its public link. Workspace admins can manage every board without being added here.</p>
+          <p class="muted member-explanation">{{ collection.purpose === 'review' ? 'Only added members can access this review board.' : 'Everyone in the workspace can view this board. Roles grant additional board permissions.' }} Public-link access is controlled separately. Workspace admins can manage every board without being added here.</p>
           <form v-if="canManageMembers" class="member-form" @submit.prevent="saveMember"><label>Email<input v-model="memberEmail" required type="email" autocomplete="email"></label><label>Board role<select v-model="memberRole"><option value="editor">Editor</option><option value="contributor">Contributor</option><option value="viewer">Viewer</option></select></label><button class="button-secondary" type="submit" :disabled="busy">Save access</button></form>
           <ul><li v-for="member in members" :key="member.user_id"><div><strong>{{ member.allowed_users?.email ?? member.allowed_users?.figma_handle ?? 'Workspace member' }}</strong><span class="muted">{{ member.role }}</span></div><button v-if="canManageMembers && member.role!=='owner'" class="button-secondary" type="button" :disabled="busy" @click="removeMember(member)">Remove</button></li></ul>
         </div>

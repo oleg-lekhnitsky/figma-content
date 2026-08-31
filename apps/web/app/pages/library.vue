@@ -40,6 +40,7 @@ interface BoardSummary {
   view_settings?: BoardViewSettings | null
 }
 interface BoardMember { user_id: string; role: string; allowed_users: { email: string | null; figma_handle: string | null; avatar_url: string | null } | null }
+interface BoardWorkspaceMember { id: string; email: string | null; figma_handle: string | null; avatar_url: string | null; role: string }
 interface BoardList { data: { collections: BoardSummary[] } }
 interface BoardContent { data: { assets: AssetCard[] } }
 
@@ -172,6 +173,7 @@ const dismissBoardSettingsFeedback = () => {
   boardSettingsFeedback.error = false
 }
 const boardMembers = ref<BoardMember[]>([])
+const boardWorkspaceMembers = ref<BoardWorkspaceMember[]>([])
 const boardTitleDraft = ref('')
 const boardTitleWords = computed(() => boardTitleDraft.value.trim().split(/\s+/).filter(Boolean))
 const boardTitleInput = ref<HTMLTextAreaElement | null>(null)
@@ -244,9 +246,14 @@ const copySelectedBoardLink = async () => {
 const loadSelectedBoardMembers = async () => {
   const board = selectedBoard.value
   if (!board) return
+  boardMembers.value = []
+  boardWorkspaceMembers.value = []
   try {
-    const response = await $fetch<{ data: { members: BoardMember[] } }>(`/api/shares/${board.id}/members`)
-    if (selectedBoardId.value === board.id) boardMembers.value = response.data.members
+    const response = await $fetch<{ data: { members: BoardMember[]; workspaceMembers: BoardWorkspaceMember[] } }>(`/api/shares/${board.id}/members`)
+    if (selectedBoardId.value === board.id) {
+      boardMembers.value = response.data.members
+      boardWorkspaceMembers.value = response.data.workspaceMembers
+    }
   } catch {
     boardSettingsFeedback.text = 'Unable to load board members.'
     boardSettingsFeedback.error = true
@@ -275,10 +282,10 @@ const saveSelectedBoardMember = async (email: string, role: 'editor' | 'contribu
   try {
     await $fetch(`/api/shares/${board.id}/members`, { method: 'POST', body: { email, role } })
     await loadSelectedBoardMembers()
-    boardSettingsFeedback.text = 'Board access saved.'
+    boardSettingsFeedback.text = board.purpose === 'review' ? 'Review member added.' : 'Board role assigned.'
     boardSettingsFeedback.error = false
   } catch {
-    boardSettingsFeedback.text = 'Unable to add this person. Add them to the workspace first.'
+    boardSettingsFeedback.text = board.purpose === 'review' ? 'Unable to add this review member.' : 'Unable to assign this board role.'
     boardSettingsFeedback.error = true
   } finally { boardSettingsBusy.value = false }
 }
@@ -289,7 +296,7 @@ const removeSelectedBoardMember = async (userId: string) => {
   try {
     await $fetch(`/api/shares/${board.id}/members/${userId}`, { method: 'DELETE' })
     await loadSelectedBoardMembers()
-    boardSettingsFeedback.text = 'Board access removed.'
+    boardSettingsFeedback.text = board.purpose === 'review' ? 'Review member removed.' : 'Board role removed.'
     boardSettingsFeedback.error = false
   } catch {
     boardSettingsFeedback.text = 'Unable to remove this board member.'
@@ -1281,8 +1288,8 @@ onBeforeUnmount(() => {
           <nav class="board-tabs" aria-label="Browse boards">
             <button type="button" :aria-pressed="!selectedBoardId" @click="selectBoard('')">All</button>
             <button v-for="board in boards" :key="board.id" type="button"
-              :title="`${board.title} · ${board.publication_enabled ? 'Published' : 'Private'}`"
-              :aria-label="`Show ${board.title}, ${board.publication_enabled ? 'published' : 'private'}`"
+              :title="`${board.title} · ${board.publication_enabled ? 'Published' : 'Public link off'}`"
+              :aria-label="`Show ${board.title}, ${board.publication_enabled ? 'published' : 'public link off'}`"
               :aria-pressed="selectedBoardId === board.id" @click="selectBoard(board.id)"><span
                 v-if="board.publication_enabled" class="board-tab-status" aria-hidden="true" /><span
                 class="board-tab-title">{{ board.title }}</span></button>
@@ -1323,7 +1330,7 @@ onBeforeUnmount(() => {
           v-model:filter-date-from="dynamicBoardFilters.dateFrom"
           v-model:filter-date-to="dynamicBoardFilters.dateTo"
           :projects="projects" :tags="tags" :submitters="submitters"
-          :members="boardMembers" :feedback="boardSettingsFeedback.text" :error="boardSettingsFeedback.error"
+          :members="boardMembers" :workspace-members="boardWorkspaceMembers" :feedback="boardSettingsFeedback.text" :error="boardSettingsFeedback.error"
           @set-publication="setSelectedBoardPublication" @set-layout="setSelectedBoardLayout"
           @copy-link="copySelectedBoardLink" @save-member="saveSelectedBoardMember"
           @remove-member="removeSelectedBoardMember" @delete-board="deleteBoardDialogOpen = true"
@@ -1417,7 +1424,7 @@ onBeforeUnmount(() => {
           </h1>
           <div class="selected-board-subhead">
             <div class="selected-board-meta"><span>{{ selectedBoard.mode === 'dynamic' ? 'Dynamic board' : 'Static board' }} ·
-                {{ selectedBoard.publication_enabled ? 'Public' : 'Private' }}</span><span
+                {{ selectedBoard.publication_enabled ? 'Published' : 'Public link off' }}</span><span
                 id="selected-board-title-feedback" class="selected-board-title-feedback"
                 :class="{ error: boardRenameFeedback.error }" role="status" aria-live="polite">{{
                 boardRenameFeedback.text }}</span></div>
