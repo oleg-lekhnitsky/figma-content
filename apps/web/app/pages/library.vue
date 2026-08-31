@@ -1341,7 +1341,7 @@ onBeforeUnmount(() => {
         </nav>
         </header>
 
-        <div v-if="boards.length || boardStatus === 'idle' || boardStatus === 'pending'" class="board-tabs-shell" :class="{ 'toolbar-hidden': !toolbarVisible }">
+        <div v-if="boards.length || boardStatus === 'idle' || boardStatus === 'pending'" class="board-tabs-shell">
           <nav class="board-tabs" aria-label="Browse boards">
             <button type="button" :aria-pressed="!selectedBoardId" @click="selectBoard('')">All</button>
             <button v-for="board in boards" :key="board.id" type="button"
@@ -1636,6 +1636,21 @@ main {
   padding-bottom: calc(var(--space) + 68px)
 }
 
+.library-top-chrome {
+  position: sticky;
+  z-index: 5;
+  top: 0;
+  background: var(--color-bg);
+  backface-visibility: hidden;
+  will-change: transform;
+  transition: transform .18s cubic-bezier(.2, 0, 0, 1)
+}
+
+.library-top-chrome.toolbar-hidden {
+  pointer-events: none;
+  transform: translate3d(0, -100%, 0)
+}
+
 .index-toolbar {
   --identity-avatar-size: 36px;
   position: relative;
@@ -1898,21 +1913,6 @@ button {
 }
 
 @media(max-width:520px) {
-  .library-top-chrome {
-    position: sticky;
-    z-index: 5;
-    top: 0;
-    background: var(--color-bg);
-    backface-visibility: hidden;
-    will-change: transform;
-    transition: transform .18s cubic-bezier(.2, 0, 0, 1)
-  }
-
-  .library-top-chrome.toolbar-hidden {
-    pointer-events: none;
-    transform: translate3d(0, -100%, 0)
-  }
-
   .index-toolbar {
     grid-template-columns: 1fr auto;
     gap: 8px
@@ -1955,9 +1955,8 @@ button {
 }
 
 .board-tabs-shell {
-  position: sticky;
+  position: static;
   z-index: 3;
-  top: 0;
   margin: 0 calc(var(--space)*-1) calc(var(--space)*1);
   overflow: hidden;
   background: var(--color-bg);
@@ -2027,12 +2026,6 @@ button {
   left: 0;
   height: 2px;
   background: currentColor
-}
-
-.board-tabs-shell.toolbar-hidden {
-  pointer-events: none;
-  opacity: 0;
-  transform: translateY(-100%)
 }
 
 @media(hover:hover) and (pointer:fine) {
@@ -2686,8 +2679,7 @@ button {
     height: calc(var(--identity-avatar-size) - 2px)
   }
 
-  .board-tabs-shell,
-  .board-tabs-shell.toolbar-hidden {
+  .board-tabs-shell {
     position: static;
     pointer-events: auto;
     opacity: 1;
