@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveBoardRole } from './boards'
+import { projectBoardLocksAction, resolveBoardRole } from './boards'
 
 describe('board authorization', () => {
   it('lets workspace members view standard boards without an explicit board role', () => {
@@ -16,5 +16,12 @@ describe('board authorization', () => {
   it('always lets creators and workspace admins manage a board', () => {
     expect(resolveBoardRole({ membershipRole: 'viewer', isCreator: true, workspaceRole: 'viewer', purpose: 'showcase' })).toBe('owner')
     expect(resolveBoardRole({ membershipRole: 'viewer', isCreator: false, workspaceRole: 'admin', purpose: 'review' })).toBe('owner')
+  })
+
+  it('keeps project-backed board membership tied to its project', () => {
+    expect(projectBoardLocksAction('project-id', 'settings')).toBe(true)
+    expect(projectBoardLocksAction('project-id', 'apply-filters')).toBe(true)
+    expect(projectBoardLocksAction('project-id', 'delete')).toBe(true)
+    expect(projectBoardLocksAction(null, 'settings')).toBe(false)
   })
 })

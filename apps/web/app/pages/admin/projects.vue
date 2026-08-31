@@ -23,7 +23,7 @@ const createProject = async () => {
   creating.value = true
   try {
     await $fetch('/api/projects', { method: 'POST', body: { name: name.value } })
-    name.value = ''; await refresh(); message.value = 'Project created. It is now available in the Figma plugin.'
+    name.value = ''; await refresh(); message.value = 'Project and Smart Board created.'
   } catch { errorMessage.value = 'Unable to create this project. Try a different name.' }
   finally { creating.value = false }
 }

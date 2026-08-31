@@ -91,6 +91,8 @@ const membersMessage = ref('')
 const memberFeedback = ref<Record<string, string>>({})
 const memberFeedbackTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const { data, refresh } = await useFetch<{ data: { currentId: string; workspaces: Workspace[]; contributors: { items: WorkspaceContributor[]; total: number } } }>('/api/workspaces')
+const workspaceDataRefreshing = ref(false)
+const retriedWorkspacePreviews = new Set<string>()
 const workspaces = computed(() => data.value?.data.workspaces ?? [])
 const currentId = computed(() => data.value?.data.currentId ?? '')
 const current = computed(() => workspaces.value.find(workspace => workspace.id === currentId.value))
@@ -111,6 +113,25 @@ const measureInlineAction = (element: Element) => {
 }
 const clearInlineActionMeasure = (element: Element) => {
   element.parentElement?.style.removeProperty('--workspace-inline-action-width')
+}
+const refreshWorkspaceData = async () => {
+  if (workspaceDataRefreshing.value) return
+  workspaceDataRefreshing.value = true
+  try {
+    await refresh()
+  } finally {
+    workspaceDataRefreshing.value = false
+  }
+}
+const recoverWorkspacePreview = (event: Event, previewId: string) => {
+  const image = event.currentTarget as HTMLImageElement
+  image.classList.add('is-unavailable')
+  if (retriedWorkspacePreviews.has(previewId)) return
+  retriedWorkspacePreviews.add(previewId)
+  void refreshWorkspaceData()
+}
+const revealWorkspacePreview = (event: Event) => {
+  (event.currentTarget as HTMLImageElement).classList.remove('is-unavailable')
 }
 watch(current, workspace => { workspaceName.value = workspace?.name ?? '' }, { immediate: true })
 watch(() => route.query.workspaceSettings, value => {
@@ -153,6 +174,10 @@ const loadInvitations = async () => {
 }
 
 watch([open, currentId], ([isOpen]) => {
+  if (isOpen) {
+    retriedWorkspacePreviews.clear()
+    void refreshWorkspaceData()
+  }
   if (isOpen && current.value?.role === 'admin') {
     void loadMembers()
     void loadInvitations()
@@ -406,7 +431,9 @@ const deleteWorkspace = async () => {
                 :aria-pressed="workspace.id === currentId" :disabled="Boolean(switchingId)"
                 @click="switchWorkspace(workspace)">
                 <span class="workspace-preview" :class="`has-${Math.min(workspace.previewAssets.length, 4)}`" aria-hidden="true">
-                  <img v-for="asset in workspace.previewAssets.slice(0, 4)" :key="asset.id" :src="asset.previewUrl" alt="">
+                  <img
+                    v-for="asset in workspace.previewAssets.slice(0, 4)" :key="asset.id" :src="asset.previewUrl" alt=""
+                    @load="revealWorkspacePreview" @error="recoverWorkspacePreview($event, `${workspace.id}:${asset.id}`)">
                   <span v-if="!workspace.previewAssets.length">{{ workspaceMonogram(workspace.name) }}</span>
                 </span>
                 <span class="workspace-option-copy"><strong>{{ workspace.name }}</strong><small>{{ workspace.role }}</small></span>
@@ -640,6 +667,7 @@ const deleteWorkspace = async () => {
 }
 
 .workspace-preview img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.workspace-preview img.is-unavailable { visibility: hidden; }
 .workspace-preview.has-1 img { grid-column: 1 / -1; grid-row: 1 / -1; }
 .workspace-preview.has-2 img { grid-row: 1 / -1; }
 .workspace-preview.has-3 img:first-child { grid-row: 1 / -1; }

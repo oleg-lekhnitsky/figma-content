@@ -2,7 +2,8 @@ import { publicCollectionFiltersSchema, updatePublicCollectionSchema } from '@co
 import { getRouterParam, readBody } from 'h3'
 import { appError, databaseError } from '../../utils/app-error'
 import { addCollectionMatches, replaceCollectionSnapshot } from '../../utils/public-collections'
-import { requireBoardRole } from '../../utils/boards'
+import { slugify } from '../../utils/assets'
+import { projectBoardLocksAction, requireBoardRole } from '../../utils/boards'
 import { requireTrustedMutation } from '../../utils/request-security'
 import { requireAuth } from '../../utils/session'
 
@@ -15,12 +16,25 @@ export default defineEventHandler(async (event) => {
   const db = useSupabaseAdmin()
   const { collection } = await requireBoardRole(id, session.user.organization_id, session.user.id, ['owner', 'editor'], session.user.role)
   if (parsed.data.action === 'rename') {
+    if (collection.source_project_id) {
+      if (!['editor', 'admin'].includes(session.user.role)) throw appError(403, 'PROJECT_FORBIDDEN', 'Only workspace editors and admins can rename projects.')
+      const { error: projectRenameError } = await db.from('projects').update({
+        name: parsed.data.title,
+        slug: slugify(parsed.data.title)
+      }).eq('id', collection.source_project_id).eq('organization_id', session.user.organization_id)
+      if (projectRenameError) throw databaseError('rename linked project', projectRenameError)
+      const { data, error: linkedRenameError } = await db.from('public_collections')
+        .select('id,title,updated_at').eq('id', id).eq('organization_id', session.user.organization_id).single()
+      if (linkedRenameError) throw databaseError('read renamed project board', linkedRenameError)
+      return { data: { collection: data } }
+    }
     const { data, error: renameError } = await db.from('public_collections').update({ title: parsed.data.title })
       .eq('id', id).eq('organization_id', session.user.organization_id).select('id,title,updated_at').single()
     if (renameError) throw databaseError('rename board', renameError)
     return { data: { collection: data } }
   }
   if (parsed.data.action === 'settings') {
+    if (projectBoardLocksAction(collection.source_project_id, 'settings')) throw appError(409, 'PROJECT_BOARD_FILTERS', 'Project board filters are managed by the linked project.')
     const filters = session.user.role === 'contributor'
       ? { ...parsed.data.filters, uploadedBy: session.user.id }
       : parsed.data.filters
@@ -30,6 +44,7 @@ export default defineEventHandler(async (event) => {
     return { data: { collection: data } }
   }
   if (parsed.data.action === 'apply-filters') {
+    if (projectBoardLocksAction(collection.source_project_id, 'apply-filters')) throw appError(409, 'PROJECT_BOARD_FILTERS', 'Project board filters are managed by the linked project.')
     if (collection.purpose !== 'showcase') throw appError(409, 'BOARD_FILTERS_UNAVAILABLE', 'Filters can only populate a standard board.')
     if (parsed.data.behavior === 'automatic') {
       const { data, error: automaticError } = await db.from('public_collections').update({

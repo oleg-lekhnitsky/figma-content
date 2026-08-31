@@ -12,6 +12,7 @@ const props = defineProps<{
   portfolioKind?: 'main' | 'client' | null
   portfolioClient?: string | null
   mode: 'dynamic' | 'static'
+  projectBacked?: boolean
   layout: BoardLayout
   publicationEnabled: boolean
   canEdit?: boolean
@@ -92,7 +93,7 @@ const toggleFilterOption = (values: string[], id: string) => values.includes(id)
   ? values.filter(value => value !== id)
   : [...values, id]
 const editingFilters = ref(false)
-watch(() => props.title, () => { editingFilters.value = false })
+watch(() => [props.title, props.projectBacked], () => { editingFilters.value = false })
 const boardFilterCount = computed(() => [
   props.filterSearch,
   props.filterProjectIds.length,
@@ -153,13 +154,13 @@ onBeforeUnmount(() => {
     <div class="filter-sheet-content">
     <div class="board-settings-intro">
       <h2 class="filter-overlay-title">{{ title }}</h2>
-      <p class="board-type-summary"><strong>{{ mode === 'dynamic' ? 'Smart board.' : 'Board.' }}</strong> {{ mode === 'dynamic' ? 'Matching assets appear automatically based on rules.' : 'Add and arrange assets yourself.' }}</p>
+      <p class="board-type-summary"><template v-if="projectBacked"><strong>Smart board.</strong> Approved assets from this project appear automatically.</template><template v-else-if="mode === 'dynamic'"><strong>Smart board.</strong> Matching assets appear automatically based on rules.</template><template v-else>Add and arrange assets yourself.</template></p>
     </div>
 
     <section v-if="mode === 'dynamic'" class="filter-option-group board-filter-settings" role="group" aria-labelledby="board-saved-filters">
       <div class="board-filter-settings-heading">
         <h3 id="board-saved-filters">Board filters</h3>
-        <button v-if="canEdit && !editingFilters" class="board-filter-change" type="button" :disabled="busy" @click="editingFilters = true">Change filters</button>
+        <button v-if="canEdit && !projectBacked && !editingFilters" class="board-filter-change" type="button" :disabled="busy" @click="editingFilters = true">Change filters</button>
       </div>
       <p class="board-filter-summary">{{ boardFilterSummary }}</p>
       <Transition name="board-filter-editor">
@@ -291,7 +292,7 @@ onBeforeUnmount(() => {
       <button v-if="canManageMembers && availableWorkspaceMembers.length" class="panel-secondary-action" type="button" :aria-expanded="addingMember" @click="toggleMemberForm">{{ addingMember ? 'Cancel' : purpose === 'review' ? 'Add review member' : 'Assign board role' }}</button>
     </section>
 
-    <section v-if="canManageMembers" class="board-setting-group danger-zone">
+    <section v-if="canManageMembers && !projectBacked" class="board-setting-group danger-zone">
       <h3>Delete board</h3>
       <p>This permanently removes the board, member access, and its public link.</p>
       <button class="panel-secondary-action" type="button" :disabled="busy" @click="$emit('deleteBoard')">Delete board</button>

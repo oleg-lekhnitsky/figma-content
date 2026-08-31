@@ -22,6 +22,9 @@ interface Project { id: string; name: string; slug: string }
 interface Tag { id: string; name: string; slug: string }
 interface AssetList { data: { assets: AssetCard[]; submitters: Submitter[]; total: number; page: number; pageSize: number } }
 interface SessionResponse { data: { authenticated: boolean; user?: { id?: string; role: string; email?: string; figmaHandle?: string | null; avatarUrl?: string | null; hasPassword?: boolean; workspace?: { name: string } | null } } }
+const { data: session } = useNuxtData<SessionResponse>('auth-session')
+const isAdmin = computed(() => session.value?.data?.user?.role === 'admin')
+const canManageProjects = computed(() => ['editor', 'admin'].includes(session.value?.data?.user?.role ?? ''))
 interface BoardSummary {
   id: string
   slug: string
@@ -35,6 +38,7 @@ interface BoardSummary {
   previewAssets: AssetCard[]
   role: string
   mode: 'dynamic' | 'static'
+  source_project_id?: string | null
   layout: BoardLayout
   filters: { search: string; projectId: string | null; tagId: string | null; projectIds: string[]; tagIds: string[]; uploadedBy: string | null; dateFrom: string | null; dateTo: string | null }
   view_settings?: BoardViewSettings | null
@@ -162,8 +166,15 @@ const selectedCollection = computed(() => collections.value.find(board => board.
 const selectedBoard = computed(() => boards.value.find(board => board.id === selectedBoardId.value))
 const selectedDynamicBoard = computed(() => selectedBoard.value?.mode === 'dynamic' ? selectedBoard.value : null)
 const selectedStaticBoard = computed(() => selectedBoard.value?.mode === 'static' ? selectedBoard.value : null)
+const selectedBoardHasAssets = computed(() => Boolean(
+  !selectedBoard.value || selectedBoard.value.itemCount > 0 || selectedBoard.value.assetIds.length > 0
+))
 const canArrangeSelectedBoard = computed(() => Boolean(selectedStaticBoard.value && ['owner', 'editor', 'admin'].includes(selectedStaticBoard.value.role)))
-const canRenameSelectedBoard = computed(() => Boolean(selectedBoard.value && ['owner', 'editor', 'admin'].includes(selectedBoard.value.role)))
+const canRenameSelectedBoard = computed(() => Boolean(
+  selectedBoard.value
+  && ['owner', 'editor', 'admin'].includes(selectedBoard.value.role)
+  && (!selectedBoard.value.source_project_id || canManageProjects.value)
+))
 const selectedBoardPublicUrl = computed(() => selectedBoard.value ? `/s/${selectedBoard.value.slug}` : '')
 const canManageSelectedBoardMembers = computed(() => Boolean(selectedBoard.value && ['owner', 'admin'].includes(selectedBoard.value.role)))
 const boardRenameBusy = ref(false)
@@ -309,7 +320,7 @@ const removeSelectedBoardMember = async (userId: string) => {
 }
 const deleteSelectedBoard = async () => {
   const board = selectedBoard.value
-  if (!board || !canManageSelectedBoardMembers.value || boardSettingsBusy.value) return
+  if (!board || board.source_project_id || !canManageSelectedBoardMembers.value || boardSettingsBusy.value) return
   boardSettingsBusy.value = true
   try {
     await $fetch(`/api/shares/${board.id}`, { method: 'DELETE' })
@@ -846,12 +857,14 @@ const closeFilters = () => {
   filtersExpanded.value = false
 }
 const openView = () => {
+  if (!selectedBoardHasAssets.value) return
   compactFiltersVisible.value = false; searchExpanded.value = false; filtersExpanded.value = false; videoExpanded.value = false; boardSettingsExpanded.value = false; viewExpanded.value = true
 }
 const closeView = () => {
   viewExpanded.value = false
 }
 const openVideo = () => {
+  if (!selectedBoardHasAssets.value) return
   const update = () => { videoAssets.value = [...displayedAssets.value]; compactFiltersVisible.value = false; searchExpanded.value = false; filtersExpanded.value = false; viewExpanded.value = false; boardSettingsExpanded.value = false; videoExpanded.value = true }
   update()
 }
@@ -952,11 +965,11 @@ const toggleSearch = async () => {
 const isoBoardDate = (value: string, end = false) => value ? new Date(`${value}T${end ? '23:59:59.999' : '00:00:00.000'}`).toISOString() : null
 let dynamicBoardSaveTimer: ReturnType<typeof setTimeout> | undefined
 watch(() => [dynamicBoardFilters.search, dynamicBoardFilters.projectIds.join(','), dynamicBoardFilters.tagIds.join(','), dynamicBoardFilters.uploadedBy, dynamicBoardFilters.dateFrom, dynamicBoardFilters.dateTo], () => {
-  if (!selectedDynamicBoard.value || hydratingDynamicBoard) return
+  if (!selectedDynamicBoard.value || selectedDynamicBoard.value.source_project_id || hydratingDynamicBoard) return
   clearTimeout(dynamicBoardSaveTimer)
   dynamicBoardSaveTimer = setTimeout(async () => {
     const board = selectedDynamicBoard.value
-    if (!board) return
+    if (!board || board.source_project_id) return
     const filters = {
       search: dynamicBoardFilters.search, projectId: null, tagId: null,
       projectIds: dynamicBoardFilters.projectIds, tagIds: dynamicBoardFilters.tagIds,
@@ -1038,9 +1051,6 @@ const resultMessage = computed(() => {
   if (selectedBoardId.value) return selectedBoardStatus.value === 'success' ? `${displayedAssets.value.length} ${displayedAssets.value.length === 1 ? 'asset' : 'assets'} in ${selectedBoard.value?.title ?? 'board'}` : ''
   return loadStatus.value === 'success' ? `${total.value} ${total.value === 1 ? 'asset' : 'assets'}` : ''
 })
-const { data: session } = useNuxtData<SessionResponse>('auth-session')
-const isAdmin = computed(() => session.value?.data?.user?.role === 'admin')
-const canManageProjects = computed(() => ['editor', 'admin'].includes(session.value?.data?.user?.role ?? ''))
 const canApprove = computed(() => ['editor', 'admin'].includes(session.value?.data?.user?.role ?? ''))
 const canShare = computed(() => ['contributor', 'editor', 'admin'].includes(session.value?.data?.user?.role ?? ''))
 const canAddAssetToBoard = (asset: AssetCard) => {
@@ -1233,6 +1243,13 @@ watch([selectedBoardId, arrangeExpanded], ([, arranging]) => {
     flushArrangeSave()
   }
 })
+watch(selectedBoardHasAssets, hasAssets => {
+  if (hasAssets) return
+  viewExpanded.value = false
+  videoExpanded.value = false
+  arrangeExpanded.value = false
+  arrangeSelectedIds.value = []
+})
 onMounted(() => {
   try {
     const savedView = JSON.parse(localStorage.getItem(libraryViewStorageKey) ?? 'null') as Partial<BoardViewSettings> | null
@@ -1328,11 +1345,10 @@ onBeforeUnmount(() => {
           <nav class="board-tabs" aria-label="Browse boards">
             <button type="button" :aria-pressed="!selectedBoardId" @click="selectBoard('')">All</button>
             <button v-for="board in boards" :key="board.id" type="button"
-              :title="`${board.title} · ${board.mode === 'dynamic' ? 'Smart board' : 'Board'} · ${board.publication_enabled ? 'Published' : 'Public link off'}`"
+              :title="`${board.title}${board.mode === 'dynamic' ? ' · Smart board' : ''} · ${board.publication_enabled ? 'Published' : 'Public link off'}`"
               :aria-label="`Show ${board.title}, ${board.mode === 'dynamic' ? 'smart board' : 'board'}, ${board.publication_enabled ? 'published' : 'public link off'}`"
               :aria-pressed="selectedBoardId === board.id" @click="selectBoard(board.id)"><span
                 v-if="board.publication_enabled" class="board-tab-status" aria-hidden="true" /><span
-                v-if="board.mode === 'dynamic'" class="board-tab-smart" aria-hidden="true">✦</span><span
                 class="board-tab-title">{{ board.title }}</span></button>
           </nav>
         </div>
@@ -1361,6 +1377,7 @@ onBeforeUnmount(() => {
         <BoardSettingsControls v-if="selectedBoard" :title="selectedBoard.title" :purpose="selectedBoard.purpose"
           :portfolio-kind="selectedBoard.portfolio_kind" :portfolio-client="selectedBoard.portfolio_client"
           :mode="selectedBoard.mode" :layout="selectedBoard.layout"
+          :project-backed="Boolean(selectedBoard.source_project_id)"
           :publication-enabled="selectedBoard.publication_enabled" :can-edit="canRenameSelectedBoard"
           :can-manage-members="canManageSelectedBoardMembers" :busy="boardSettingsBusy"
           :public-url="selectedBoardPublicUrl" :full-settings-url="`/boards/${selectedBoard.id}`"
@@ -1433,7 +1450,7 @@ onBeforeUnmount(() => {
                 aria-expanded="false" @click="openFilters"><span>Filters</span><span v-if="activeFilterCount"
                   class="filter-count">{{
                   activeFilterCount }}</span></button></div>
-          <div class="mobile-control-blur compact-search-placeholder"
+          <div v-if="selectedBoardHasAssets" class="mobile-control-blur compact-search-placeholder"
             :class="{ 'is-search-hidden': searchExpanded }" :aria-hidden="searchExpanded || undefined"
             :inert="searchExpanded || undefined"><button class="filter-panel-toggle" type="button"
               aria-label="Change library view" :aria-expanded="viewExpanded" @click="openView">View</button></div>
@@ -1477,18 +1494,18 @@ onBeforeUnmount(() => {
                     boardTitleWords.length - 1 ? ' ' : '' }}</template></span>
           </h1>
           <div class="selected-board-subhead">
-            <div class="selected-board-meta"><span>{{ selectedBoard.mode === 'dynamic' ? 'Smart board' : 'Board' }} ·
-                {{ selectedBoard.publication_enabled ? 'Published' : 'Public link off' }}</span><span
+            <div class="selected-board-meta"><span><template v-if="selectedBoard.mode === 'dynamic'">Smart board · </template>{{
+                selectedBoard.publication_enabled ? 'Published' : 'Public link off' }}</span><span
                 id="selected-board-title-feedback" class="selected-board-title-feedback"
                 :class="{ error: boardRenameFeedback.error }" role="status" aria-live="polite">{{
                 boardRenameFeedback.text }}</span></div>
             <div class="selected-board-actions">
-              <button class="button-secondary selected-board-action-button" type="button" aria-label="Change library view"
+              <button v-if="selectedBoardHasAssets" class="button-secondary selected-board-action-button" type="button" aria-label="Change library view"
                 :aria-expanded="viewExpanded" @click="openView">View</button>
-              <button class="button-secondary selected-board-action-button" type="button"
+              <button v-if="selectedBoardHasAssets" class="button-secondary selected-board-action-button" type="button"
                 aria-label="Create a video from this board" :aria-expanded="videoExpanded"
                 @click="openVideo">Video</button>
-              <button v-if="canArrangeSelectedBoard" class="button-secondary selected-board-action-button" type="button"
+              <button v-if="selectedBoardHasAssets && canArrangeSelectedBoard" class="button-secondary selected-board-action-button" type="button"
                 :aria-pressed="arrangeExpanded" @click="arrangeExpanded = !arrangeExpanded">{{ arrangeExpanded ? 'Done'
                 :
                 'Arrange' }}</button>
@@ -1529,9 +1546,9 @@ onBeforeUnmount(() => {
               </div>
               <div v-else-if="displayedAssets.length === 0" class="state">
                 <template v-if="selectedStaticBoard">
-                  <strong>Add assets manually or with filters</strong>
+                  <h2>Add assets manually<br>or with filters</h2>
                   <div v-if="canRenameSelectedBoard" class="state-actions">
-                    <button type="button" @click="selectBoard('')">Add assets</button>
+                    <button type="button" @click="selectBoard('')">Add manually</button>
                     <button type="button" class="state-secondary-action" @click="openBoardPopulate">Add with filters</button>
                   </div>
                 </template>
@@ -1987,12 +2004,6 @@ button {
   background: #06f90e;
   border-radius: 50%;
   opacity: 1
-}
-
-.board-tab-smart {
-  flex: 0 0 auto;
-  font-size: .82em;
-  line-height: 1;
 }
 
 .board-tab-title {
