@@ -505,7 +505,8 @@ body:has(> .selection-panel.selection-panel--filter-overlay) > .selection-panel.
   .selection-panel--filter-overlay .asset-filter-controls--expanded .filter-sheet-content {
     gap: calc(var(--space) / 2);
     border-radius: var(--filter-scroll-radius);
-    clip-path: inset(0 round var(--filter-overlay-radius));
+    clip-path: inset(1 round var(--filter-overlay-radius));
+
   }
 
   .selection-panel--filter-overlay .asset-filter-controls--expanded .filter-sheet-content > :is(.filter-overlay-title, .filter-option-group, .submitter-stack, .board-settings-intro, .board-settings-actions, .board-setting-group),
