@@ -1,6 +1,6 @@
 import type { AssetMasonryItem } from '~/types/asset-masonry'
 import type { VideoComposerSettings } from '~/types/video-composer'
-import { videoFormatDimensions } from '~/types/video-composer'
+import { MIN_VIDEO_DURATION_SECONDS, normalizeVideoDuration, videoFormatDimensions } from '~/types/video-composer'
 import { defaultVideoBackground } from '~/utils/video-background'
 import { videoTemplates } from '~/utils/video-templates'
 
@@ -34,6 +34,7 @@ interface VideoComposerRuntimeOptions {
 export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Ref<string>, initialTemplateId='flicker-01', runtimeOptions:VideoComposerRuntimeOptions={}) => {
   const settings = ref<VideoComposerSettings>({ templateId:initialTemplateId,format:'portrait',fit:'contain',transition:'fade',secondsPerSlide:6,showTitles:false,direction:'up',gap:40,tilt:0,scaleCenter:false,tiltMode:'off',easing:'glide',cornerRadius:0,distance:100,centerScale:1.4,fade:0,offsetX:0,offsetY:0,scaleFocus:'center',solo:false,visibleCount:6,planeSize:100,planeRotation:0,cycles:1,loop:true,staggerFrames:2,delayFrames:0,cycleDegrees:360,orbitRadius:280,perspective:140,rotationX:0,rotationY:0,rotationZ:0,reverse:false,spin:0,spread:0,staggerSeconds:.4,scaleStyle:'bloom',growFrom:'center',imageFit:'fit',flickerEffect:'off',flipMaterial:'lit',flipLightIntensity:100,flipRoughness:72,flipGridColumns:1,flipGridRows:1,flipGridGap:4,flipStagger:0,flickerPacing:'equal',scaleDirection:'forward',driftDirection:'up',scaleAmount:30,driftAmount:30,gridMoveDistance:300,gridStaggerCurve:'linear',gridLayout:'flat',gridTubeBend:'outside',gridTubeMotion:'continuous',gridTubeStepRotation:20,gridTubeEmphasisStyle:'stable',gridCameraZoom:100,gridTubeStagger:0,gridScatter:0,gridRotationVariance:0,gridScaleVariance:0,gridEmphasis:'none',gridEmphasisAmount:0,gridEmphasisCurve:'smooth',delaySeconds:0,fps:30,safeArea:false,exportMotionBlur:false,...defaultVideoBackground,globeMinScale:10,globeMaxScale:20,globeAxis:'y',globeMotion:'continuous',globeStops:8,globeShuffle:false,globeFaceCamera:true,globeShowBackfaces:true,globeFlipImage:false,storiesBigScale:115,storiesBigDrift:40,storiesThumbSize:85,storiesThumbAspect:'1:1',storiesContainerOpacity:40,storiesContainerBlur:60,storiesSelectorPad:5,storiesSelectorStroke:2,storiesDimAmount:20,swipeAlternating:true })
   Object.assign(settings.value,videoTemplates.find(item=>item.id===initialTemplateId)?.preset)
+  settings.value.secondsPerSlide=normalizeVideoDuration(settings.value.secondsPerSlide)
   const canvas = shallowRef<HTMLCanvasElement>()
   const playing = ref(false)
   const exporting = ref(false)
@@ -1305,6 +1306,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
       backgroundGradientAngle: settings.value.backgroundGradientAngle
     }
     if(template.value.preset)Object.assign(settings.value,template.value.preset)
+    settings.value.secondsPerSlide=normalizeVideoDuration(settings.value.secondsPerSlide)
     Object.assign(settings.value,background)
     if(template.value.collection!=='grid')settings.value.visibleCount=countForAssets()
     void nextTick(async()=>{
@@ -1319,6 +1321,9 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
       if(changeRevision!==templateChangeRevision)return
       startPlayback()
     })
+  })
+  watch(()=>settings.value.secondsPerSlide,value=>{
+    if(!Number.isFinite(value)||value<MIN_VIDEO_DURATION_SECONDS)settings.value.secondsPerSlide=MIN_VIDEO_DURATION_SECONDS
   })
   watch(
     ()=>[settings.value.format,settings.value.fit,settings.value.transition,settings.value.secondsPerSlide,settings.value.showTitles,settings.value.direction,settings.value.gap,settings.value.tilt,settings.value.scaleCenter,settings.value.tiltMode,settings.value.easing,settings.value.cornerRadius,settings.value.distance,settings.value.centerScale,settings.value.fade,settings.value.offsetX,settings.value.offsetY,settings.value.scaleFocus,settings.value.solo,settings.value.visibleCount,settings.value.planeSize,settings.value.planeRotation,settings.value.cycles,settings.value.loop,settings.value.staggerFrames,settings.value.delayFrames,settings.value.cycleDegrees,settings.value.orbitRadius,settings.value.perspective,settings.value.rotationX,settings.value.rotationY,settings.value.rotationZ,settings.value.reverse,settings.value.spin,settings.value.spread,settings.value.staggerSeconds,settings.value.scaleStyle,settings.value.growFrom,settings.value.imageFit,settings.value.flickerEffect,settings.value.flipMaterial,settings.value.flipLightIntensity,settings.value.flipRoughness,settings.value.flickerPacing,settings.value.scaleDirection,settings.value.driftDirection,settings.value.scaleAmount,settings.value.driftAmount,settings.value.gridMoveDistance,settings.value.gridStaggerCurve,settings.value.gridLayout,settings.value.gridTubeBend,settings.value.gridTubeMotion,settings.value.gridTubeStepRotation,settings.value.gridTubeEmphasisStyle,settings.value.gridCameraZoom,settings.value.gridTubeStagger,settings.value.gridScatter,settings.value.gridRotationVariance,settings.value.gridScaleVariance,settings.value.gridEmphasis,settings.value.gridEmphasisAmount,settings.value.delaySeconds,settings.value.backgroundType,settings.value.backgroundColor,settings.value.backgroundGradientColor,settings.value.backgroundGradientAngle,settings.value.globeMinScale,settings.value.globeMaxScale,settings.value.globeAxis,settings.value.globeMotion,settings.value.globeStops,settings.value.globeShuffle,settings.value.globeFaceCamera,settings.value.globeShowBackfaces,settings.value.globeFlipImage,settings.value.storiesBigScale,settings.value.storiesBigDrift,settings.value.storiesThumbSize,settings.value.storiesThumbAspect,settings.value.storiesContainerOpacity,settings.value.storiesContainerBlur,settings.value.storiesSelectorPad,settings.value.storiesSelectorStroke,settings.value.storiesDimAmount,settings.value.swipeAlternating],

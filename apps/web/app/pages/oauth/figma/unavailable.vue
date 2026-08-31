@@ -1,44 +1,33 @@
 <script setup lang="ts">
-import { useRoute } from '#imports'
-import { $fetch } from 'ofetch'
-import { onMounted, ref } from 'vue'
-
 const route = useRoute()
-const errorMessage = ref('')
-
-onMounted(async () => {
-  const flow = route.query.flow === 'plugin' ? 'plugin' : 'web'
-  const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/library'
-  try {
-    const response = await $fetch<{ data: { authorizationUrl: string } }>('/api/auth/figma/start', {
-      query: { flow, redirect, response: 'json' }
-    })
-    window.location.assign(response.data.authorizationUrl)
-  } catch (error: unknown) {
-    const failure = error as {
-      data?: { error?: { code?: string }, data?: { error?: { code?: string } } }
-    }
-    const reason = failure.data?.error?.code === 'AUTH_NOT_CONFIGURED'
-      || failure.data?.data?.error?.code === 'AUTH_NOT_CONFIGURED'
-      ? 'configuration'
-      : 'incomplete'
-    await navigateTo({
-      path: '/oauth/figma/unavailable',
-      query: { reason, flow, redirect }
-    }, { replace: true })
-  }
+const redirectPath = computed(() => {
+  const value = route.query.redirect
+  return typeof value === 'string' && value.startsWith('/') && !value.startsWith('//') ? value : '/library'
+})
+const loginDestination = computed(() => ({
+  path: '/login',
+  query: redirectPath.value === '/library' ? {} : { redirect: redirectPath.value }
+}))
+const retryDestination = computed(() => {
+  const query = new URLSearchParams({
+    flow: route.query.flow === 'plugin' ? 'plugin' : 'web',
+    redirect: redirectPath.value
+  })
+  return `/api/auth/figma/start?${query.toString()}`
 })
 </script>
 
 <template>
   <main class="oauth-shell">
-    <section class="oauth-panel" aria-labelledby="oauth-title">
-      <div class="oauth-copy">
-        <!-- <h1 id="oauth-title">Connecting to Figma</h1> -->
-        <h1 v-if="!errorMessage" role="status">Opening Figma…</h1>
-        <p v-else class="oauth-error" role="alert">{{ errorMessage }}</p>
+    <section class="oauth-panel" aria-labelledby="oauth-unavailable-title">
+      <header class="oauth-copy">
+        <h1 id="oauth-unavailable-title">Figma sign-in is unavailable</h1>
+        <p>We couldn’t connect your Figma account. Try again or use email instead.</p>
+      </header>
+      <div class="oauth-actions">
+        <a class="oauth-return" :href="retryDestination">Try again</a>
+        <NuxtLink class="oauth-return oauth-return--secondary" :to="loginDestination">Sign in with email</NuxtLink>
       </div>
-      <NuxtLink v-if="errorMessage" class="oauth-return" to="/login">Return to sign in</NuxtLink>
     </section>
   </main>
 </template>
@@ -62,12 +51,11 @@ onMounted(async () => {
 
 .oauth-copy {
   display: grid;
-  gap: var(--filter-action-gap);
+  gap: var(--filter-date-label-gap);
 }
 
 .oauth-copy h1,
-.oauth-copy p,
-.oauth-error {
+.oauth-copy p {
   margin: 0;
 }
 
@@ -78,10 +66,16 @@ onMounted(async () => {
   line-height: 1;
 }
 
-.oauth-copy p,
-.oauth-error {
+.oauth-copy p {
   color: var(--filter-overlay-muted-color);
-  font-size: var(--font-size-body-compact);
+  font-size: var(--font-size-label);
+  line-height: 1.35;
+}
+
+.oauth-actions {
+  display: grid;
+  gap: var(--filter-date-label-gap);
+  margin-top: var(--filter-overlay-group-gap);
 }
 
 .oauth-return.oauth-return {
@@ -90,7 +84,6 @@ onMounted(async () => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  margin-top: var(--filter-overlay-group-gap);
   padding: 0 var(--filter-action-padding);
   border-radius: calc(var(--radius) * 1.5);
   color: var(--filter-overlay-primary-color);
@@ -104,9 +97,19 @@ onMounted(async () => {
   transition-timing-function: ease-out;
 }
 
+.oauth-return--secondary.oauth-return--secondary {
+  color: var(--filter-overlay-panel-color);
+  background: var(--filter-overlay-nested-background);
+}
+
 .oauth-return.oauth-return:hover {
   color: var(--filter-overlay-primary-color);
   background: #fff;
+}
+
+.oauth-return--secondary.oauth-return--secondary:hover {
+  color: var(--filter-overlay-panel-color);
+  background: var(--filter-overlay-control-hover-background);
 }
 
 .oauth-return.oauth-return:active {
@@ -119,23 +122,22 @@ onMounted(async () => {
 }
 
 @media (max-width: 520px) {
-  .oauth-shell {
-    place-items: center;
-  }
-
   .oauth-panel {
-    height: max-content;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
     padding: var(--filter-sheet-content-padding-mobile);
-    border-radius: var(--radius-mobile);
+    border-radius: calc(var(--radius-mobile) * 1.5);
     background: var(--filter-overlay-panel-background-mobile);
   }
 
   .oauth-return.oauth-return {
     min-height: calc(var(--range-control-height-mobile) + .25rem);
+  }
+}
+
+@supports (-webkit-touch-callout: none) {
+  @media (display-mode: standalone) {
+    .oauth-shell {
+      min-height: 100vh;
+    }
   }
 }
 

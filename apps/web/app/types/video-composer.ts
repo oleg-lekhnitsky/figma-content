@@ -9,6 +9,11 @@ export type VideoTemplateCollection = 'carousel' | 'carousel-3d' | 'grid' | 'orb
 export type VideoScaleStyle = 'bloom' | 'recede'
 export type VideoGrowFrom = 'center' | 'top' | 'bottom' | 'left' | 'right'
 
+export const MIN_VIDEO_DURATION_SECONDS = 1
+export const normalizeVideoDuration = (value: number) => Number.isFinite(value)
+  ? Math.max(MIN_VIDEO_DURATION_SECONDS, value)
+  : MIN_VIDEO_DURATION_SECONDS
+
 export interface VideoTemplate {
   id: string
   name: string

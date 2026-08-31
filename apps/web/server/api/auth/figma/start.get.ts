@@ -16,13 +16,19 @@ export default defineEventHandler(async (event) => {
   const parsed = querySchema.safeParse(getQuery(event))
   if (!parsed.success) throw appError(400, 'INVALID_REQUEST', 'Invalid OAuth request.', parsed.error.flatten())
 
-  const config = useRuntimeConfig()
-  if (!config.figmaClientId || !config.figmaRedirectUri || !config.sessionSecret) {
-    throw appError(503, 'AUTH_NOT_CONFIGURED', 'Figma authentication is not configured.')
-  }
   const redirect = parsed.data.redirect
   if (redirect && (!redirect.startsWith('/') || redirect.startsWith('//'))) {
     throw appError(400, 'INVALID_REDIRECT', 'The redirect path is not allowed.')
+  }
+
+  const config = useRuntimeConfig()
+  if (!config.figmaClientId || !config.figmaRedirectUri || !config.sessionSecret) {
+    if (parsed.data.response === 'redirect') {
+      const query = new URLSearchParams({ reason: 'configuration', flow: parsed.data.flow })
+      if (redirect) query.set('redirect', redirect)
+      return sendRedirect(event, `/oauth/figma/unavailable?${query.toString()}`)
+    }
+    throw appError(503, 'AUTH_NOT_CONFIGURED', 'Figma authentication is not configured.')
   }
 
   const state = randomToken()

@@ -12,7 +12,12 @@ const redirectPath = computed(() => typeof route.query.redirect === 'string' && 
 const authenticatedDestination = (session: AuthSessionResponse) => session.data.user?.mustChangePassword ? '/change-password' : redirectPath.value
 const redirectAuthenticatedSession = async () => {
   const session = await $fetch<AuthSessionResponse>('/api/auth/session').catch(() => undefined)
-  if (session?.data.authenticated) await navigateTo(authenticatedDestination(session), { replace: true })
+  if (session?.data.authenticated) {
+    sessionStorage.removeItem('figma-oauth-pending')
+    await navigateTo(authenticatedDestination(session), { replace: true })
+    return true
+  }
+  return false
 }
 
 const { data: initialSession } = await useFetch<AuthSessionResponse>('/api/auth/session', { key: 'auth-session' })
@@ -20,8 +25,19 @@ if (initialSession.value?.data.authenticated) {
   await navigateTo(authenticatedDestination(initialSession.value), { replace: true })
 }
 
-const handlePageShow = (event: PageTransitionEvent) => {
-  if (event.persisted) void redirectAuthenticatedSession()
+const handlePageShow = async (event: PageTransitionEvent) => {
+  const navigation = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined
+  if (!event.persisted && navigation?.type !== 'back_forward') return
+  if (await redirectAuthenticatedSession()) return
+
+  const pending = Number(sessionStorage.getItem('figma-oauth-pending'))
+  sessionStorage.removeItem('figma-oauth-pending')
+  if (Number.isFinite(pending) && Date.now() - pending < 10 * 60_000) {
+    await navigateTo({
+      path: '/oauth/figma/unavailable',
+      query: { reason: 'incomplete', redirect: redirectPath.value }
+    }, { replace: true })
+  }
 }
 onMounted(() => window.addEventListener('pageshow', handlePageShow))
 onBeforeUnmount(() => window.removeEventListener('pageshow', handlePageShow))
@@ -59,8 +75,20 @@ const startFigmaLogin = async () => {
     const response = await $fetch<{ data: { authorizationUrl: string } }>('/api/auth/figma/start', {
       query: { flow: 'web', redirect: redirectPath.value, response: 'json' }
     })
+    sessionStorage.setItem('figma-oauth-pending', String(Date.now()))
     window.location.assign(response.data.authorizationUrl)
-  } catch {
+  } catch (error: unknown) {
+    const failure = error as {
+      data?: { error?: { code?: string }, data?: { error?: { code?: string } } }
+    }
+    const code = failure.data?.error?.code ?? failure.data?.data?.error?.code
+    if (code === 'AUTH_NOT_CONFIGURED') {
+      await navigateTo({
+        path: '/oauth/figma/unavailable',
+        query: { reason: 'configuration', redirect: redirectPath.value }
+      })
+      return
+    }
     figmaErrorMessage.value = 'Unable to open Figma. Check your connection and try again.'
     figmaSubmitting.value = false
   }
