@@ -43,6 +43,7 @@ interface BoardMember { user_id: string; role: string; allowed_users: { email: s
 interface BoardWorkspaceMember { id: string; email: string | null; figma_handle: string | null; avatar_url: string | null; role: string }
 interface BoardList { data: { collections: BoardSummary[] } }
 interface BoardContent { data: { assets: AssetCard[] } }
+interface BoardPopulateFilters { search: string; projectId: null; tagId: null; projectIds: string[]; tagIds: string[]; uploadedBy: null; dateFrom: string | null; dateTo: string | null }
 
 type DateRange = 'all' | 'today' | 'week' | 'two-weeks' | 'month' | 'custom'
 const dateRanges: DateRange[] = ['all', 'today', 'week', 'two-weeks', 'month', 'custom']
@@ -79,6 +80,9 @@ const filtersExpanded = ref(false)
 const viewExpanded = ref(false)
 const videoExpanded = ref(false)
 const boardSettingsExpanded = ref(false)
+const boardPopulateExpanded = ref(false)
+const boardPopulateBusy = ref(false)
+const boardPopulateError = ref('')
 const arrangeExpanded = ref(false)
 const arrangeSelectedIds = ref<string[]>([])
 const arrangeRemoving = ref(false)
@@ -864,6 +868,41 @@ const closeBoardSettings = () => {
   boardSettingsExpanded.value = false
   if (route.query.panel === 'settings') void replaceLibraryQuery({ panel: undefined })
 }
+const openBoardPopulate = () => {
+  if (!selectedStaticBoard.value || !canRenameSelectedBoard.value) return
+  boardPopulateError.value = ''
+  compactFiltersVisible.value = false
+  searchExpanded.value = false
+  filtersExpanded.value = false
+  viewExpanded.value = false
+  videoExpanded.value = false
+  boardSettingsExpanded.value = false
+  boardPopulateExpanded.value = true
+}
+const closeBoardPopulate = () => {
+  if (boardPopulateBusy.value) return
+  boardPopulateExpanded.value = false
+  finishExpandedPanelClose()
+}
+const applyBoardPopulateFilters = async (behavior: 'add' | 'automatic', filters: BoardPopulateFilters) => {
+  const board = selectedStaticBoard.value
+  if (!board || boardPopulateBusy.value) return
+  boardPopulateBusy.value = true
+  boardPopulateError.value = ''
+  try {
+    await $fetch(`/api/shares/${board.id}`, { method: 'PATCH', body: { action: 'apply-filters', behavior, filters } })
+    boardPopulateExpanded.value = false
+    await refreshBoards()
+    await refreshSelectedBoard()
+  } catch {
+    boardPopulateError.value = behavior === 'automatic'
+      ? 'Unable to keep this board updated.'
+      : 'Unable to add the matching assets.'
+  } finally {
+    boardPopulateBusy.value = false
+    if (!boardPopulateExpanded.value) finishExpandedPanelClose()
+  }
+}
 const boardCreatorExpanded = ref(false)
 const headerActionsOpen = ref(false)
 const accountMenu = ref<{ openMenu: () => void }>()
@@ -874,6 +913,7 @@ const openBoardCreator = (fromCurrentView = false, staticOnly = false) => {
   viewExpanded.value = false
   videoExpanded.value = false
   boardSettingsExpanded.value = false
+  boardPopulateExpanded.value = false
   boardCreatorExpanded.value = true
   if (staticOnly) void boardCreator.value?.openCreateStatic()
   else if (fromCurrentView) void boardCreator.value?.openCreateFromCurrentView()
@@ -888,7 +928,7 @@ watch([selectedBoard, () => route.query.panel], ([board, panel]) => {
   if (board && panel === 'settings' && !boardSettingsExpanded.value) openBoardSettings()
 }, { immediate: true })
 const finishExpandedPanelClose = () => {
-  if (!filtersExpanded.value && !viewExpanded.value && !videoExpanded.value && !boardSettingsExpanded.value && !boardCreatorExpanded.value) compactFiltersVisible.value = true
+  if (!filtersExpanded.value && !viewExpanded.value && !videoExpanded.value && !boardSettingsExpanded.value && !boardPopulateExpanded.value && !boardCreatorExpanded.value) compactFiltersVisible.value = true
 }
 const setBoardCreatorExpanded = (expanded: boolean) => {
   boardCreatorExpanded.value = expanded
@@ -1288,10 +1328,11 @@ onBeforeUnmount(() => {
           <nav class="board-tabs" aria-label="Browse boards">
             <button type="button" :aria-pressed="!selectedBoardId" @click="selectBoard('')">All</button>
             <button v-for="board in boards" :key="board.id" type="button"
-              :title="`${board.title} · ${board.publication_enabled ? 'Published' : 'Public link off'}`"
-              :aria-label="`Show ${board.title}, ${board.publication_enabled ? 'published' : 'public link off'}`"
+              :title="`${board.title} · ${board.mode === 'dynamic' ? 'Smart board' : 'Board'} · ${board.publication_enabled ? 'Published' : 'Public link off'}`"
+              :aria-label="`Show ${board.title}, ${board.mode === 'dynamic' ? 'smart board' : 'board'}, ${board.publication_enabled ? 'published' : 'public link off'}`"
               :aria-pressed="selectedBoardId === board.id" @click="selectBoard(board.id)"><span
                 v-if="board.publication_enabled" class="board-tab-status" aria-hidden="true" /><span
+                v-if="board.mode === 'dynamic'" class="board-tab-smart" aria-hidden="true">✦</span><span
                 class="board-tab-title">{{ board.title }}</span></button>
           </nav>
         </div>
@@ -1341,6 +1382,19 @@ onBeforeUnmount(() => {
         </button>
       </SelectionPanel>
 
+      <BoardPopulateControls
+        v-if="selectedStaticBoard"
+        :visible="boardPopulateExpanded"
+        :board-id="selectedStaticBoard.id"
+        :board-title="selectedStaticBoard.title"
+        :projects="projects"
+        :tags="tags"
+        :busy="boardPopulateBusy"
+        :error="boardPopulateError"
+        @close="closeBoardPopulate"
+        @apply="applyBoardPopulateFilters"
+      />
+
       <template v-if="!selectedBoardId">
         <SelectionPanel :visible="filtersExpanded" label="Asset filters" wide overlay raised
           @close="closeFilters" @after-leave="finishExpandedPanelClose">
@@ -1350,7 +1404,7 @@ onBeforeUnmount(() => {
             show-sort expanded :actions-visible="hasFilters">
             <template #actions><button class="clear-filters-button" type="button" @click="clearFilters">Clear
                 filters</button><button v-if="canShare" class="filter-create-board" type="button"
-                @click="openBoardCreator(true)">Create board</button></template>
+                @click="openBoardCreator(true)">Create smart board</button></template>
             <section v-if="submitters.length" class="filter-option-group submitter-filter-group">
               <h2 class="filter-overlay-title" id="asset-filter-submitters">Submitters</h2>
               <div class="submitter-stack" role="group" aria-labelledby="asset-filter-submitters"><button
@@ -1370,7 +1424,7 @@ onBeforeUnmount(() => {
           </button>
         </SelectionPanel>
         <SelectionPanel
-          :visible="compactFiltersVisible && !filtersExpanded && !viewExpanded && !videoExpanded && !boardSettingsExpanded && !boardCreatorExpanded"
+          :visible="compactFiltersVisible && !filtersExpanded && !viewExpanded && !videoExpanded && !boardSettingsExpanded && !boardPopulateExpanded && !boardCreatorExpanded"
           :scroll-hidden="!toolbarVisible && !searchExpanded" label="Asset filters" bare raised>
           <div class="mobile-control-blur compact-search-placeholder"
             :class="{ 'is-search-hidden': searchExpanded }" :aria-hidden="searchExpanded || undefined"
@@ -1423,7 +1477,7 @@ onBeforeUnmount(() => {
                     boardTitleWords.length - 1 ? ' ' : '' }}</template></span>
           </h1>
           <div class="selected-board-subhead">
-            <div class="selected-board-meta"><span>{{ selectedBoard.mode === 'dynamic' ? 'Dynamic board' : 'Static board' }} ·
+            <div class="selected-board-meta"><span>{{ selectedBoard.mode === 'dynamic' ? 'Smart board' : 'Board' }} ·
                 {{ selectedBoard.publication_enabled ? 'Published' : 'Public link off' }}</span><span
                 id="selected-board-title-feedback" class="selected-board-title-feedback"
                 :class="{ error: boardRenameFeedback.error }" role="status" aria-live="polite">{{
@@ -1475,9 +1529,11 @@ onBeforeUnmount(() => {
               </div>
               <div v-else-if="displayedAssets.length === 0" class="state">
                 <template v-if="selectedStaticBoard">
-                  <strong>This board is empty</strong>
-                  <span>Browse your library, open an asset, and add it to this board.</span>
-                  <button type="button" @click="selectBoard('')">Browse assets</button>
+                  <strong>Add assets manually or with filters</strong>
+                  <div v-if="canRenameSelectedBoard" class="state-actions">
+                    <button type="button" @click="selectBoard('')">Add assets</button>
+                    <button type="button" class="state-secondary-action" @click="openBoardPopulate">Add with filters</button>
+                  </div>
                 </template>
                 <template v-else-if="selectedDynamicBoard">
                   <strong>No assets match this board’s filters</strong>
@@ -1510,7 +1566,7 @@ onBeforeUnmount(() => {
                 v-if="boardGestureUsesSkeleton" label="Loading board"
                 :view-settings="libraryView" :ratios="boardGestureSkeletonRatios"
                 :count="boardGestureSkeletonCount" />
-              <div v-else-if="boardGestureAssets.length === 0" class="state"><strong>This board is empty</strong></div>
+              <div v-else-if="boardGestureAssets.length === 0" class="state"><strong>No assets yet</strong></div>
               <AssetMasonry
                 v-else :assets="boardGestureAssets" :play-videos="false" instant-open instant-cards
                 :stable-columns="false" :animate-changes="false" :can-approve="canApprove"
@@ -1742,6 +1798,21 @@ main {
   line-height: 1
 }
 
+.state-actions {
+  margin-top: var(--cluster-gap);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--cluster-gap);
+}
+
+.state-actions button { margin-top: 0; }
+
+.state-actions .state-secondary-action {
+  color: var(--color-fg);
+  background: var(--color-surface);
+}
+
 button {
   min-height: var(--control-height);
   padding: 0 var(--button-padding-inline);
@@ -1916,6 +1987,12 @@ button {
   background: #06f90e;
   border-radius: 50%;
   opacity: 1
+}
+
+.board-tab-smart {
+  flex: 0 0 auto;
+  font-size: .82em;
+  line-height: 1;
 }
 
 .board-tab-title {

@@ -400,7 +400,7 @@ const deleteWorkspace = async () => {
         <div class="filter-sheet-content">
           <section class="filter-option-group">
             <h2 class="filter-overlay-title">Your workspaces</h2>
-            <div class="workspace-option-list">
+            <div class="workspace-option-list panel-choice-list">
               <button
                 v-for="workspace in workspaces" :key="workspace.id" type="button"
                 :aria-pressed="workspace.id === currentId" :disabled="Boolean(switchingId)"
@@ -616,44 +616,15 @@ const deleteWorkspace = async () => {
 
 .workspace-panel { min-width: min(30rem, calc(100vw - var(--space) * 2)); }
 .workspace-option-list {
-  --workspace-option-radius: calc(var(--radius) * 1.5);
-  display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--filter-option-gap);
 }
 
 .workspace-option-list > button {
-  width: 100%;
   min-height: 0;
-  display: grid;
   align-content: start;
   align-items: stretch;
   gap: 0;
   padding: var(--filter-option-gap);
-  border: var(--filter-hairline) solid transparent;
-  border-radius: var(--workspace-option-radius);
-  color: var(--filter-overlay-panel-color);
-  background: color-mix(in srgb, var(--filter-overlay-panel-color) 7%, transparent);
-  text-align: left;
-  opacity: 1;
-  transition: background-color 150ms ease-out, border-color 150ms ease-out, scale 150ms ease-out;
-}
-
-.workspace-option-list > button[aria-pressed="true"] {
-  border-color: rgb(255 255 255 / .62);
-  color: var(--filter-overlay-panel-color);
-  background: color-mix(in srgb, var(--filter-overlay-panel-color) 14%, transparent);
-}
-
-.workspace-option-list > button:hover,
-.workspace-option-list > button:focus-visible {
-  background: color-mix(in srgb, var(--filter-overlay-panel-color) 11%, transparent);
-  opacity: 1;
-}
-
-.workspace-option-list > button:active {
-  scale: .96;
-  opacity: 1;
 }
 
 .workspace-preview {
@@ -664,7 +635,7 @@ const deleteWorkspace = async () => {
   grid-template-rows: repeat(2, minmax(0, 1fr));
   gap: 2px;
   overflow: hidden;
-  border-radius: calc(var(--workspace-option-radius) - var(--filter-option-gap));
+  border-radius: calc(var(--panel-choice-radius) - var(--filter-option-gap));
   background: color-mix(in srgb, currentColor 10%, transparent);
 }
 

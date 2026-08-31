@@ -108,8 +108,7 @@ const sortOptions = [
       <h2 v-else-if="heading" class="filter-overlay-title">{{ heading }}</h2>
       <slot name="before" />
       <section v-if="showSearch" class="filter-option-group filter-search-group">
-        <h3>Search</h3>
-        <label class="filter-visible-search"><span class="sr-only">Search assets</span><input :value="search" type="search" placeholder="Type to search" @input="emit('update:search', ($event.target as HTMLInputElement).value)"></label>
+        <label><span class="sr-only">Search assets</span><input class="panel-field" :value="search" type="search" placeholder="Type to search" @input="emit('update:search', ($event.target as HTMLInputElement).value)"></label>
       </section>
       <section v-if="showStatus" class="filter-option-group">
         <h2 class="filter-overlay-title">Status</h2>

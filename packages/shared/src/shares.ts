@@ -70,6 +70,11 @@ export const updatePublicCollectionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('rename'), title: z.string().trim().min(1).max(120) }),
   z.object({ action: z.literal('settings'), filters: publicCollectionFiltersSchema }),
   z.object({
+    action: z.literal('apply-filters'),
+    behavior: z.enum(['add', 'automatic']),
+    filters: publicCollectionFiltersSchema
+  }),
+  z.object({
     action: z.literal('portfolio-settings'),
     portfolioKind: z.enum(['main', 'client']),
     portfolioClient: z.string().trim().max(120).nullable(),

@@ -51,15 +51,19 @@ const createPanelTitle = computed(() => props.portfolioOnly
   : purpose.value === 'review'
     ? 'Create review board'
     : staticOnly.value
-      ? 'Create static board'
-      : 'Create board')
+      ? 'Create board'
+      : usingCurrentFilters.value && mode.value === 'dynamic'
+        ? 'Create smart board'
+        : 'Create board')
 const createPanelDescription = computed(() => props.portfolioOnly
   ? 'Start with the details, then add and arrange work.'
   : purpose.value === 'review'
     ? 'Invite contributors after creating it. Submissions arrive from the Figma plugin.'
     : staticOnly.value
       ? 'Its public link starts off. Publish it when it is ready.'
-      : 'Name the board and choose what should appear in it.')
+      : usingCurrentFilters.value && mode.value === 'dynamic'
+        ? 'Assets matching the current rules appear automatically.'
+        : 'Add and arrange assets yourself.')
 let previousBodyOverflow = ''
 let previousRootOverflow = ''
 let scrollLocked = false
@@ -181,7 +185,7 @@ const showCreate = async (fromCurrentView = false, forceStatic = false) => {
   portfolioKind.value = 'main'
   portfolioClient.value = ''
   introduction.value = ''
-  mode.value = 'static'
+  mode.value = fromCurrentView ? 'dynamic' : 'static'
   searchFilter.value = fromCurrentView ? props.currentFilters?.search ?? '' : ''
   projectIds.value = fromCurrentView ? [...(props.currentFilters?.projectIds ?? [])] : []
   tagIds.value = fromCurrentView ? [...(props.currentFilters?.tagIds ?? [])] : []
@@ -252,7 +256,7 @@ const createCollection = async () => {
         contentStrategy: review || portfolio || staticOnly.value ? 'manual' : resolvedMode === 'dynamic' ? 'dynamic' : usingCurrentFilters.value ? 'snapshot' : 'manual',
         filters: review
           ? { search: '', projectId: null, tagId: null, projectIds: [], tagIds: [], uploadedBy: null, dateFrom: reviewStart?.toISOString(), dateTo: reviewEnd?.toISOString() }
-          : { search: resolvedMode === 'dynamic' ? '' : searchFilter.value, projectId: null, tagId: null, projectIds: projectIds.value, tagIds: tagIds.value, uploadedBy: usingCurrentFilters.value ? props.currentFilters?.uploadedBy ?? null : null, ...datesForRange() },
+          : { search: searchFilter.value, projectId: null, tagId: null, projectIds: projectIds.value, tagIds: tagIds.value, uploadedBy: usingCurrentFilters.value ? props.currentFilters?.uploadedBy ?? null : null, ...datesForRange() },
         expiresAt: null,
         reviewMonth: review ? `${reviewMonth.value}-01` : null,
         submissionDeadline: review ? isoAt(submissionDeadline.value, true) : null,
@@ -273,7 +277,7 @@ const createCollection = async () => {
       ? 'Board created. Add contributors so they can submit their work.'
       : response.data.collection.mode === 'static'
       ? `Board created with ${response.data.collection.itemCount ?? 0} approved items.`
-      : 'Board created. New approved items matching these filters will appear automatically.'
+      : 'Smart board created. New approved assets matching these rules will appear automatically.'
     close()
   } catch { errorMessage.value = 'Unable to create the board. Check the settings and try again.' }
   finally { busy.value = false }
@@ -333,7 +337,7 @@ type="button"
       </header>
       <Transition name="panel-view" @after-enter="focusCurrentView">
         <section v-if="view === 'list'" key="list" class="boards-view">
-          <div class="boards-intro"><p>Create collections, share them, or invite people to submit work.</p><div class="boards-intro-actions"><button v-if="hasCurrentFilters" ref="createButton" type="button" @click="showCreate(true)">Create from this view</button><button v-else ref="createButton" type="button" @click="showCreate(false)">Create board</button><button v-if="hasCurrentFilters" type="button" class="button-secondary" @click="showCreate(false)">Create board</button></div></div>
+          <div class="boards-intro"><p>Create collections, share them, or invite people to submit work.</p><div class="boards-intro-actions"><button v-if="hasCurrentFilters" ref="createButton" type="button" @click="showCreate(true)">Create smart board</button><button v-else ref="createButton" type="button" @click="showCreate(false)">Create board</button><button v-if="hasCurrentFilters" type="button" class="button-secondary" @click="showCreate(false)">Create board</button></div></div>
           <p class="feedback" role="status" aria-live="polite">{{ message }}</p>
           <p v-if="errorMessage" class="feedback error" role="alert">{{ errorMessage }}</p>
           <ul v-if="collections.length" class="board-grid">
@@ -342,7 +346,7 @@ type="button"
               <div class="board-info"><div><label v-if="['owner', 'editor', 'admin'].includes(collection.role)" class="board-title"><span class="sr-only">Board name</span><textarea
 :value="collection.title" rows="1" maxlength="120" :aria-describedby="`board-feedback-${collection.id}`"
                     :aria-invalid="boardFeedback[collection.id]?.error || undefined" @change="renameBoard(collection, $event)" /><span
-:id="`board-feedback-${collection.id}`" class="field-message" :class="{ error: boardFeedback[collection.id]?.error }" role="status" aria-live="polite">{{ boardFeedback[collection.id]?.text }}</span></label><template v-else><strong>{{ collection.title }}</strong></template><span class="board-meta">{{ collection.role }} · {{ collection.purpose === 'review' ? 'submissions on' : collection.purpose === 'portfolio' ? 'portfolio' : collection.mode }} · {{ collection.publication_enabled ? 'published' : 'public link off' }}<template v-if="collection.expires_at"> · expires {{ new Date(collection.expires_at).toLocaleDateString() }}</template></span></div>
+:id="`board-feedback-${collection.id}`" class="field-message" :class="{ error: boardFeedback[collection.id]?.error }" role="status" aria-live="polite">{{ boardFeedback[collection.id]?.text }}</span></label><template v-else><strong>{{ collection.title }}</strong></template><span class="board-meta">{{ collection.role }} · {{ collection.purpose === 'review' ? 'submissions on' : collection.purpose === 'portfolio' ? 'portfolio' : collection.mode === 'dynamic' ? 'smart board' : 'board' }} · {{ collection.publication_enabled ? 'published' : 'public link off' }}<template v-if="collection.expires_at"> · expires {{ new Date(collection.expires_at).toLocaleDateString() }}</template></span></div>
                 <details class="action-menu board-menu" @keydown.esc.prevent="closeActionMenu"><summary aria-label="More board actions">•••</summary><div><a v-if="collection.publication_enabled" :href="collectionUrl(collection.slug)" target="_blank" rel="noopener noreferrer">View public page</a><button v-if="collection.publication_enabled" type="button" @click="copyLink(collection); closeActionMenu($event)">Copy public link</button><button v-if="['owner', 'editor', 'admin'].includes(collection.role)" type="button" :disabled="busy" @click="collection.publication_enabled ? revoke(collection) : publish(collection); closeActionMenu($event)">{{ collection.publication_enabled ? 'Disable public link' :'Enable public link' }}</button></div></details></div>
             </li>
           </ul>
@@ -380,7 +384,6 @@ type="button"
         <section v-if="purpose === 'portfolio' && portfolioKind === 'client'" class="filter-option-group"><h3 id="create-client-label">Client or recipient</h3><input v-model="portfolioClient" class="panel-field" name="portfolio-client" required maxlength="120" placeholder="Acme Studio" aria-labelledby="create-client-label"></section>
         <section v-if="purpose === 'portfolio'" class="filter-option-group"><h3 id="create-introduction-label">Introduction</h3><textarea v-model="introduction" class="panel-field" name="introduction" rows="3" maxlength="2000" placeholder="A short note about this selection" aria-labelledby="create-introduction-label" /></section>
         <section v-if="usingCurrentFilters && purpose === 'showcase'" class="board-setting-group"><p class="board-type-summary"><strong>Starting with current filters</strong><br>{{ currentFilterLabels.join(' · ') || 'All dates' }}<br>{{ props.currentFilters?.status === 'draft' ? 'Draft status is not included because boards contain approved assets only.' : 'Boards contain approved assets only.' }}</p></section>
-        <section v-if="purpose === 'showcase' && !staticOnly" class="filter-option-group" aria-labelledby="create-board-updates"><h2 class="filter-overlay-title"id="create-board-updates">Updates</h2><div class="filter-option-list filter-option-list--segmented"><button type="button" :aria-pressed="mode === 'static'" @click="mode = 'static'">Manual</button><button type="button" :aria-pressed="mode === 'dynamic'" @click="mode = 'dynamic'">Automatic</button></div><p class="board-type-summary">{{ mode === 'dynamic' ? 'Choose filters below. New approved items that match them appear automatically.' : usingCurrentFilters ? 'Create a fixed snapshot from the current view.' : 'Start with an empty board and add work manually.' }}</p></section>
       </template>
       <section v-if="purpose === 'review'" class="filter-option-group" aria-labelledby="create-review-month"><h3 id="create-review-month">Submission month</h3><AppDatePicker v-model="reviewMonth" label="Submission month" precision="month" :clearable="false" :show-label="false" surface="field" /></section>
       <section v-if="purpose === 'review'" class="filter-option-group" aria-labelledby="create-review-deadline"><h3 id="create-review-deadline">Submission deadline (optional)</h3><AppDatePicker v-model="submissionDeadline" label="Submission deadline (optional)" :show-label="false" surface="field" /></section>

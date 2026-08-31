@@ -58,6 +58,28 @@ export const replaceCollectionSnapshot = async (collectionId: string, organizati
   return ids.length
 }
 
+export const addCollectionMatches = async (collectionId: string, organizationId: string, filters: PublicCollectionFilters, addedBy?: string) => {
+  const ids: string[] = await matchingApprovedAssetIds(organizationId, filters)
+  const db = useSupabaseAdmin()
+  const { data: existing, error: existingError } = await db.from('public_collection_assets')
+    .select('asset_id,position').eq('collection_id', collectionId).limit(500)
+  if (existingError) throw databaseError('read existing board assets', existingError)
+  const existingIds = new Set(existing.map((item: { asset_id: string }) => item.asset_id))
+  const newIds = ids.filter((id: string) => !existingIds.has(id))
+  const lastPosition = existing.reduce((maximum: number, item: { position: number | null }) => Math.max(maximum, item.position ?? -1), -1)
+  if (newIds.length) {
+    const { error } = await db.from('public_collection_assets').upsert(newIds.map((assetId: string, index: number) => ({
+      collection_id: collectionId,
+      asset_id: assetId,
+      added_by: addedBy ?? null,
+      source: 'snapshot',
+      position: lastPosition + index + 1
+    })), { onConflict: 'collection_id,asset_id', ignoreDuplicates: true })
+    if (error) throw databaseError('add matching assets to board', error)
+  }
+  return { matched: ids.length, added: newIds.length }
+}
+
 export const boardPreviewForCollection = async (collection: {
   id: string
   organization_id: string
@@ -67,7 +89,7 @@ export const boardPreviewForCollection = async (collection: {
 }, options: { includePreviews?: boolean } = {}) => {
   let ids: string[]
   if (collection.mode === 'dynamic') {
-    ids = await applyDynamicBoardOrder(collection.id, await matchingApprovedAssetIds(collection.organization_id, { ...collection.filters, search: '' }))
+    ids = await applyDynamicBoardOrder(collection.id, await matchingApprovedAssetIds(collection.organization_id, collection.filters))
   } else {
     const { data, error } = await useSupabaseAdmin().from('public_collection_assets')
       .select('asset_id').eq('collection_id', collection.id).order('position', { ascending: true, nullsFirst: false }).limit(500)
@@ -103,7 +125,7 @@ export const publicAssetsForCollection = async (
 ) => {
   let ids: string[]
   if (collection.mode === 'dynamic') {
-    ids = await applyDynamicBoardOrder(collection.id, await matchingApprovedAssetIds(collection.organization_id, { ...collection.filters, search: '' }))
+    ids = await applyDynamicBoardOrder(collection.id, await matchingApprovedAssetIds(collection.organization_id, collection.filters))
   } else {
     const { data, error } = await useSupabaseAdmin().from('public_collection_assets')
       .select('asset_id').eq('collection_id', collection.id).order('position', { ascending: true, nullsFirst: false }).limit(500)

@@ -98,6 +98,13 @@ describe('shared authorization contracts', () => {
     expect(assetListQuerySchema.safeParse({ dateFrom: '2026-08-10T00:00:00.000Z', dateTo: '2026-08-01T00:00:00.000Z' }).success).toBe(false)
   })
 
+  it('distinguishes one-time board matches from automatic rules', () => {
+    const filters = { search: '', projectId: null, tagId: null, projectIds: [], tagIds: [], uploadedBy: null, dateFrom: null, dateTo: null }
+    expect(updatePublicCollectionSchema.safeParse({ action: 'apply-filters', behavior: 'add', filters }).success).toBe(true)
+    expect(updatePublicCollectionSchema.safeParse({ action: 'apply-filters', behavior: 'automatic', filters }).success).toBe(true)
+    expect(updatePublicCollectionSchema.safeParse({ action: 'apply-filters', behavior: 'replace', filters }).success).toBe(false)
+  })
+
   it('keeps board ownership out of member invitations', () => {
     expect(boardMemberSchema.safeParse({ email: 'friend@example.com', role: 'contributor' }).success).toBe(true)
     expect(boardMemberSchema.safeParse({ email: 'friend@example.com', role: 'owner' }).success).toBe(false)

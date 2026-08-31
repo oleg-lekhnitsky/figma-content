@@ -1,7 +1,7 @@
 import { publicCollectionFiltersSchema, updatePublicCollectionSchema } from '@content-library/shared'
 import { getRouterParam, readBody } from 'h3'
 import { appError, databaseError } from '../../utils/app-error'
-import { replaceCollectionSnapshot } from '../../utils/public-collections'
+import { addCollectionMatches, replaceCollectionSnapshot } from '../../utils/public-collections'
 import { requireBoardRole } from '../../utils/boards'
 import { requireTrustedMutation } from '../../utils/request-security'
 import { requireAuth } from '../../utils/session'
@@ -28,6 +28,28 @@ export default defineEventHandler(async (event) => {
       .eq('id', id).eq('organization_id', session.user.organization_id).select('id,filters,updated_at').single()
     if (settingsError) throw databaseError('update board settings', settingsError)
     return { data: { collection: data } }
+  }
+  if (parsed.data.action === 'apply-filters') {
+    if (collection.purpose !== 'showcase') throw appError(409, 'BOARD_FILTERS_UNAVAILABLE', 'Filters can only populate a standard board.')
+    if (parsed.data.behavior === 'automatic') {
+      const { data, error: automaticError } = await db.from('public_collections').update({
+        mode: 'dynamic',
+        content_strategy: 'dynamic',
+        filters: parsed.data.filters
+      }).eq('id', id).eq('organization_id', session.user.organization_id)
+        .select('id,mode,content_strategy,filters,updated_at').single()
+      if (automaticError) throw databaseError('make board automatic', automaticError)
+      return { data: { collection: data, behavior: 'automatic' } }
+    }
+    if (collection.mode !== 'static') throw appError(409, 'SMART_BOARD_MEMBERSHIP', 'Automatic board membership is controlled by rules.')
+    const result = await addCollectionMatches(id, session.user.organization_id, parsed.data.filters, session.user.id)
+    const { data, error: addError } = await db.from('public_collections').update({
+      filters: parsed.data.filters,
+      content_strategy: 'manual'
+    }).eq('id', id).eq('organization_id', session.user.organization_id)
+      .select('id,mode,content_strategy,filters,updated_at').single()
+    if (addError) throw databaseError('save board match filters', addError)
+    return { data: { collection: data, behavior: 'add', ...result } }
   }
   if (parsed.data.action === 'portfolio-settings') {
     if (collection.purpose !== 'portfolio') throw appError(409, 'NOT_PORTFOLIO', 'This board is not a portfolio edition.')

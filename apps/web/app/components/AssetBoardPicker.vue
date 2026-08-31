@@ -62,11 +62,11 @@ onMounted(() => requestAnimationFrame(() => requestAnimationFrame(() => searchIn
 </script>
 
 <template>
-  <SelectionPanel :visible="visible" label="Add to static board" wide overlay raised @close="emit('close')" @after-leave="emit('afterLeave')">
+  <SelectionPanel :visible="visible" label="Add to board" wide overlay raised @close="emit('close')" @after-leave="emit('afterLeave')">
     <form class="asset-filter-controls asset-filter-controls--expanded asset-board-picker" aria-label="Choose a board" @submit.prevent>
       <button class="filter-sheet-handle" type="button" aria-label="Close board picker"><span aria-hidden="true" /></button>
       <div class="filter-sheet-content">
-        <h2 class="filter-overlay-title">Add to static board or create&nbsp;one</h2>
+        <h2 class="filter-overlay-title">Add to board or create&nbsp;one</h2>
         <div class="filter-option-group">
           <label><span class="sr-only">Search boards</span><input ref="searchInput" v-model="search" class="panel-field" type="search" placeholder="Search boards"></label>
         </div>
@@ -92,7 +92,7 @@ onMounted(() => requestAnimationFrame(() => requestAnimationFrame(() => searchIn
         </div>
       </div>
       <div class="filter-actions is-visible">
-        <button class="panel-primary-action" type="button" @click="emit('createBoard')">New static board</button>
+        <button class="panel-primary-action" type="button" @click="emit('createBoard')">New board</button>
       </div>
     </form>
     <button class="filter-panel-toggle is-expanded" type="button" aria-label="Close board picker" aria-expanded="true" @click="emit('close')">

@@ -787,7 +787,7 @@ watch(() => props.assetId, id => {
       <section v-if="boardPickerOpen" class="board-picker" role="dialog" aria-modal="true"
         aria-labelledby="board-picker-title">
         <header>
-          <h2 id="board-picker-title">Add to static board</h2>
+          <h2 id="board-picker-title">Add to board</h2>
         </header>
         <label class="board-picker-search">
           <Search :size="22" aria-hidden="true" /><span class="sr-only">Search boards</span><input ref="boardSearchInput" v-model="boardSearch"

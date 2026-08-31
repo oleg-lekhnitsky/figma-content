@@ -153,7 +153,7 @@ onBeforeUnmount(() => {
     <div class="filter-sheet-content">
     <div class="board-settings-intro">
       <h2 class="filter-overlay-title">{{ title }}</h2>
-      <p class="board-type-summary"><strong>{{ mode === 'dynamic' ? 'Dynamic board.' : 'Static board.' }}</strong> {{ mode === 'dynamic' ? 'Matching assets update automatically from filters.' : 'Assets are selected and arranged manually.' }}</p>
+      <p class="board-type-summary"><strong>{{ mode === 'dynamic' ? 'Smart board.' : 'Board.' }}</strong> {{ mode === 'dynamic' ? 'Matching assets appear automatically based on rules.' : 'Add and arrange assets yourself.' }}</p>
     </div>
 
     <section v-if="mode === 'dynamic'" class="filter-option-group board-filter-settings" role="group" aria-labelledby="board-saved-filters">
