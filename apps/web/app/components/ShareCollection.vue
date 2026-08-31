@@ -60,7 +60,7 @@ const createPanelDescription = computed(() => props.portfolioOnly
   : purpose.value === 'review'
     ? 'Invite contributors after creating it. Submissions arrive from the Figma plugin.'
     : staticOnly.value
-      ? 'Its public link starts off. Publish it when it is ready.'
+      ? ''
       : usingCurrentFilters.value && mode.value === 'dynamic'
         ? 'Assets matching the current rules appear automatically.'
         : 'Add and arrange assets yourself.')
@@ -385,11 +385,10 @@ type="button"
         <section v-if="purpose === 'portfolio'" class="filter-option-group"><h3 id="create-introduction-label">Introduction</h3><textarea v-model="introduction" class="panel-field" name="introduction" rows="3" maxlength="2000" placeholder="A short note about this selection" aria-labelledby="create-introduction-label" /></section>
         <section v-if="usingCurrentFilters && purpose === 'showcase'" class="board-setting-group"><p class="board-type-summary"><strong>Starting with current filters</strong><br>{{ currentFilterLabels.join(' · ') || 'All dates' }}<br>{{ props.currentFilters?.status === 'draft' ? 'Draft status is not included because boards contain approved assets only.' : 'Boards contain approved assets only.' }}</p></section>
       </template>
-      <section v-if="purpose === 'review'" class="filter-option-group" aria-labelledby="create-review-month"><h3 id="create-review-month">Submission month</h3><AppDatePicker v-model="reviewMonth" label="Submission month" precision="month" :clearable="false" :show-label="false" surface="field" /></section>
-      <section v-if="purpose === 'review'" class="filter-option-group" aria-labelledby="create-review-deadline"><h3 id="create-review-deadline">Submission deadline (optional)</h3><AppDatePicker v-model="submissionDeadline" label="Submission deadline (optional)" :show-label="false" surface="field" /></section>
-      <section v-if="!staticOnly" class="board-setting-group"><p class="board-type-summary">{{ purpose === 'review' ? 'Only invited contributors can access this review board. Its public link starts off.' : purpose === 'portfolio' ? 'Its public link starts off. Add work and publish when it is ready.' : 'Its public link starts off. Publish it when it is ready.' }}</p></section>
+      <section v-if="purpose === 'review'" class="filter-option-group" aria-labelledby="create-review-month"><h2 class="filter-overlay-title" id="create-review-month">Submission month</h2><AppDatePicker v-model="reviewMonth" label="Submission month" precision="month" :clearable="false" :show-label="false" surface="field" /></section>
+      <section v-if="purpose === 'review'" class="filter-option-group" aria-labelledby="create-review-deadline"><h2 class="filter-overlay-title" id="create-review-deadline">Submission deadline (optional)</h2><AppDatePicker v-model="submissionDeadline" label="Submission deadline (optional)" :show-label="false" surface="field" /></section>
       <section v-if="errorMessage" class="board-setting-group"><p class="board-type-summary error" role="alert">{{ errorMessage }}</p></section>
-      <template #actions><button class="panel-primary-action" type="submit" :disabled="busy">{{ busy ? 'Creating…' : staticOnly ? 'Create' : createPanelTitle }}</button><button type="button" class="panel-secondary-action" @click="close">Cancel</button></template>
+      <template #actions><button type="button" class="panel-secondary-action" @click="close">Cancel</button><button class="panel-primary-action" type="submit" :disabled="busy">{{ busy ? 'Creating…' : staticOnly ? 'Create' : createPanelTitle }}</button></template>
     </AssetFilterControls>
     <button class="filter-panel-toggle is-expanded" type="button" :aria-label="`Close ${createPanelTitle.toLocaleLowerCase()}`" aria-expanded="true" @click="close">
       <Xmark :size="20" :stroke-width="2" aria-hidden="true" />

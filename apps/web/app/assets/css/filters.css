@@ -505,7 +505,7 @@ body:has(> .selection-panel.selection-panel--filter-overlay) > .selection-panel.
   .selection-panel--filter-overlay .asset-filter-controls--expanded .filter-sheet-content {
     gap: calc(var(--space) / 2);
     border-radius: var(--filter-scroll-radius);
-    clip-path: inset(0 round var(--filter-scroll-radius));
+    clip-path: inset(0 round var(--filter-overlay-radius));
   }
 
   .selection-panel--filter-overlay .asset-filter-controls--expanded .filter-sheet-content > :is(.filter-overlay-title, .filter-option-group, .submitter-stack, .board-settings-intro, .board-settings-actions, .board-setting-group),
@@ -548,7 +548,7 @@ margin-top: calc(var(--filter-overlay-padding) * -.15);
   color: var(--filter-overlay-muted-color);
   font-size: var(--filter-option-font-size);
   line-height: 1.35;
-  padding: calc(var(--filter-option-padding) / 2) ;
+  padding:0  calc(var(--filter-option-padding) / 2) ;
 }
 
 .selection-panel--filter-overlay .board-type-summary strong {
@@ -702,19 +702,19 @@ margin-top: calc(var(--filter-overlay-padding) * -.15);
   color: color-mix(in srgb, var(--filter-overlay-panel-color) 58%, transparent);
   background: transparent;
   box-shadow: none;
-  transition-property: color, background-color, transform;
-  transition-duration: 120ms;
-  transition-timing-function: ease-out;
+  transition-property: color, transform;
+  transition-duration: var(--segmented-pill-duration), 120ms;
+  transition-timing-function: var(--segmented-pill-ease), ease-out;
 }
 
-.selection-panel--filter-overlay .filter-option-list--segmented > button:is(:hover, :focus-visible) {
+.selection-panel--filter-overlay .filter-option-list--segmented > button:not([aria-pressed='true']):is(:hover, :focus-visible) {
   color: var(--filter-overlay-panel-color);
   background: color-mix(in srgb, var(--filter-overlay-panel-color) 7%, transparent);
 }
 
 .selection-panel--filter-overlay .filter-option-list--segmented > button[aria-pressed='true'] {
   color: var(--filter-overlay-primary-color);
-  background: var(--filter-overlay-primary-background);
+  background: transparent;
 }
 
 .selection-panel--filter-overlay .filter-option-list--segmented > button:active {
@@ -1124,6 +1124,11 @@ button.panel-dropdown-trigger:focus-visible {
 .selection-panel--filter-overlay .filter-actions > button:not(.panel-secondary-action, .button-secondary) {
   color: var(--filter-overlay-primary-color);
   background: var(--filter-overlay-primary-background);
+}
+
+.selection-panel--filter-overlay .filter-actions > .panel-secondary-action {
+  color: var(--filter-overlay-panel-color);
+  background: color-mix(in srgb, var(--filter-overlay-panel-color) 7%, transparent);
 }
 
 :is(.selection-panel--filter-overlay .filter-actions > button, .filter-action-button) {

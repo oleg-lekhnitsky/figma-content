@@ -359,7 +359,7 @@ const deleteBoard = async () => {
         <div><p class="section-label">Content</p><h2 id="content-title">Choose what appears</h2></div>
         <div class="content-settings">
           <p class="muted content-explanation">Approved items matching these filters appear automatically. Drag to arrange them; newly matching items appear first.</p>
-          <template v-if="canEdit"><SelectionPanel :visible="filtersExpanded" label="Board asset filters" wide overlay @close="closeFilters" @after-leave="finishFiltersClose"><AssetFilterControls v-model:search="filters.search" v-model:project-ids="filters.projectIds" v-model:tag-ids="filters.tagIds" v-model:date-from="filters.dateFrom" v-model:date-to="filters.dateTo" :projects="projects" :tags="tags" :heading="collection.title" show-search expanded :actions-visible="Boolean(activeFilterCount)"><template #actions><button class="clear-filters-button" type="button" @click="clearFilters">Clear filters</button></template></AssetFilterControls><button class="filter-panel-toggle is-expanded" type="button" aria-label="Hide filters" aria-expanded="true" @click="closeFilters"><Xmark :size="20" :stroke-width="2" aria-hidden="true" /></button></SelectionPanel><SelectionPanel :visible="compactFiltersVisible && !filtersExpanded" label="Board controls" bare><button class="filter-panel-toggle" type="button" aria-label="Show filters" aria-expanded="false" @click="openFilters"><span>Filters</span><span v-if="activeFilterCount" class="filter-count">{{ activeFilterCount }}</span></button><button v-if="activeFilterCount" class="filter-clear-compact" type="button" aria-label="Clear filters" title="Clear filters" @click="clearFilters"><Xmark :size="20" :stroke-width="2" aria-hidden="true" /></button></SelectionPanel></template>
+          <template v-if="canEdit"><SelectionPanel :visible="filtersExpanded" label="Board asset filters" wide overlay @close="closeFilters" @after-leave="finishFiltersClose"><AssetFilterControls v-model:search="filters.search" v-model:project-ids="filters.projectIds" v-model:tag-ids="filters.tagIds" v-model:date-from="filters.dateFrom" v-model:date-to="filters.dateTo" :projects="projects" :tags="tags" :heading="collection.title" show-search expanded :actions-visible="Boolean(activeFilterCount)"><template #actions><button class="panel-secondary-action" type="button" @click="clearFilters">Clear filters</button></template></AssetFilterControls><button class="filter-panel-toggle is-expanded" type="button" aria-label="Hide filters" aria-expanded="true" @click="closeFilters"><Xmark :size="20" :stroke-width="2" aria-hidden="true" /></button></SelectionPanel><SelectionPanel :visible="compactFiltersVisible && !filtersExpanded" label="Board controls" bare><button class="filter-panel-toggle" type="button" aria-label="Show filters" aria-expanded="false" @click="openFilters"><span>Filters</span><span v-if="activeFilterCount" class="filter-count">{{ activeFilterCount }}</span></button><button v-if="activeFilterCount" class="filter-clear-compact" type="button" aria-label="Clear filters" title="Clear filters" @click="clearFilters"><Xmark :size="20" :stroke-width="2" aria-hidden="true" /></button></SelectionPanel></template>
           <div class="content-heading"><strong>{{ boardAssets.length }} {{ boardAssets.length===1 ? 'item' : 'items' }} on this board</strong></div>
           <AssetMasonry v-if="boardAssets.length" :assets="boardAssets" label="Board content" heading-tag="h3" :reorderable="canEdit&&!contentBusy" @reorder="reorderBoardAssets"><template #details="{asset}"><p>{{ asset.projects?.name ?? 'No project' }}</p></template><template #previewActions="{asset}"><div v-if="canEdit" class="asset-order-actions" role="group" :aria-label="`Reorder ${asset.title}`"><button class="button-secondary order-button" type="button" :disabled="contentBusy||boardAssetIndex(asset.id)===0" :aria-label="`Move ${asset.title} up`" title="Move up" @click="moveBoardAsset(asset.id,-1)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 14 6-6 6 6" /></svg></button><button class="button-secondary order-button" type="button" :disabled="contentBusy||boardAssetIndex(asset.id)===boardAssets.length-1" :aria-label="`Move ${asset.title} down`" title="Move down" @click="moveBoardAsset(asset.id,1)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 10 6 6 6-6" /></svg></button></div></template></AssetMasonry>
           <p v-else class="muted">No content matches this board yet.</p>
@@ -725,15 +725,6 @@ const deleteBoard = async () => {
 
 .button-secondary.button-secondary.destructive-button {
   color: var(--color-danger);
-}
-
-.clear-filters-button {
-  width: max-content;
-  min-width: 0;
-  padding-inline: var(--space);
-  color: var(--color-fg);
-  background: var(--color-surface);
-  white-space: nowrap;
 }
 
 .filter-controls-enter-active,

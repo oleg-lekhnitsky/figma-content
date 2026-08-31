@@ -1419,7 +1419,7 @@ onBeforeUnmount(() => {
             v-model:date-range="dateRange" v-model:date-from="customDateFrom" v-model:date-to="customDateTo"
             v-model:sort="sort" :projects="projects" :tags="tags" show-status use-date-presets
             show-sort expanded :actions-visible="hasFilters">
-            <template #actions><button class="clear-filters-button" type="button" @click="clearFilters">Clear
+            <template #actions><button class="panel-secondary-action" type="button" @click="clearFilters">Clear
                 filters</button><button v-if="canShare" class="filter-create-board" type="button"
                 @click="openBoardCreator(true)">Create smart board</button></template>
             <section v-if="submitters.length" class="filter-option-group submitter-filter-group">
@@ -2646,20 +2646,6 @@ button {
   white-space: nowrap
 }
 
-.clear-filters-button {
-  width: max-content;
-  height: 36px;
-  min-width: 0;
-  min-height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding-inline: var(--space);
-  color: var(--color-fg);
-  background: var(--color-surface);
-  white-space: nowrap
-}
-
 @media(max-width:900px) {
   .index-toolbar nav {
     grid-column: 3
@@ -2762,13 +2748,6 @@ button {
 
   .filter-create-board {
     height: 44px;
-    min-height: 44px
-  }
-
-  .clear-filters-button {
-    width: max-content;
-    height: 44px;
-    min-width: 0;
     min-height: 44px
   }
 

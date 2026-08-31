@@ -895,19 +895,19 @@ const showAllAssets = () => {
   color: var(--video-text-muted);
   background: transparent;
   box-shadow: none;
-  transition-property: color, background-color, transform;
-  transition-duration: 120ms;
-  transition-timing-function: ease-out
+  transition-property: color, transform;
+  transition-duration: var(--segmented-pill-duration), 120ms;
+  transition-timing-function: var(--segmented-pill-ease), ease-out
 }
 
-:deep(.video-choice-row:not(:has(button:nth-child(6))) button:hover) {
+:deep(.video-choice-row:not(:has(button:nth-child(6))) button:not([aria-pressed=true]):hover) {
   color: var(--filter-overlay-panel-color);
   background: color-mix(in srgb, var(--filter-overlay-panel-color) 7%, transparent)
 }
 
 :deep(.video-choice-row:not(:has(button:nth-child(6))) button[aria-pressed=true]) {
   color: var(--filter-overlay-primary-color);
-  background: var(--filter-overlay-primary-background)
+  background: transparent
 }
 
 :deep(.video-choice-row:not(:has(button:nth-child(6))) button:active) {
