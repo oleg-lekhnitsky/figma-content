@@ -3,7 +3,10 @@ import { Gear2, MoreH, Plus, Search, Xmark } from 'reicon-vue'
 import type { BoardAssetScope, BoardLayout, BoardViewSettings } from '@content-library/shared'
 import BrandWordmark from '~/components/BrandWordmark.vue'
 
-definePageMeta({ middleware: 'auth' })
+definePageMeta({
+  middleware: 'auth',
+  keepalive: true
+})
 const route = useRoute()
 const router = useRouter()
 const routedBoardId = computed(() => typeof route.query.board === 'string' ? route.query.board : '')
@@ -144,6 +147,10 @@ const { data, status: loadStatus, error, refresh } = await useLazyFetch<AssetLis
 const { data: projectData, refresh: refreshProjects } = await useLazyFetch<{ data: { projects: Project[] } }>('/api/projects', { cache: false, server: false })
 const { data: tagData, refresh: refreshTags } = await useLazyFetch<{ data: { tags: Tag[] } }>('/api/tags', { cache: false, server: false })
 const { data: boardData, status: boardStatus, refresh: refreshBoards } = await useLazyFetch<BoardList>('/api/shares', { cache: false, server: false })
+const portfolioCollectionsCache = useState<BoardList | null>('portfolio-collections-cache', () => null)
+watch(boardData, (value) => {
+  if (value) portfolioCollectionsCache.value = value
+}, { immediate: true })
 const boardCreator = ref<{ openCreate: () => Promise<void>; openCreateFromCurrentView: () => Promise<void>; openCreateStatic: () => Promise<void> }>()
 const boardPickerAsset = ref<AssetCard | null>(null)
 const boardPickerVisible = ref(false)

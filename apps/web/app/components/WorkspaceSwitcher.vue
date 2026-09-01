@@ -106,14 +106,6 @@ const canInviteMember = computed(() => {
   const email = inviteEmail.value.trim()
   return !managementBusy.value && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 })
-const measureInlineAction = (element: Element) => {
-  const action = element as HTMLElement
-  const width = Math.max(action.scrollWidth, action.getBoundingClientRect().width)
-  action.parentElement?.style.setProperty('--workspace-inline-action-width', `${Math.ceil(width)}px`)
-}
-const clearInlineActionMeasure = (element: Element) => {
-  element.parentElement?.style.removeProperty('--workspace-inline-action-width')
-}
 const refreshWorkspaceData = async () => {
   if (workspaceDataRefreshing.value) return
   workspaceDataRefreshing.value = true
@@ -337,7 +329,7 @@ const showMemberFeedback = (memberId: string, message: string) => {
   memberFeedback.value = { ...memberFeedback.value, [memberId]: message }
   memberFeedbackTimers.set(memberId, setTimeout(() => {
     const next = { ...memberFeedback.value }
-    delete next[memberId]
+    Reflect.deleteProperty(next, memberId)
     memberFeedback.value = next
     memberFeedbackTimers.delete(memberId)
   }, 4000))
@@ -448,20 +440,19 @@ const deleteWorkspace = async () => {
           <section v-if="current?.role === 'admin'" class="filter-option-group workspace-rename-section">
             <h2 class="filter-overlay-title">Rename {{ current.name }} workspace</h2>
             <form class="workspace-name-form" @submit.prevent="renameWorkspace">
-              <label>
-                <span class="sr-only">Workspace name</span>
-                <input v-model="workspaceName" class="panel-field" required maxlength="120" placeholder="Workspace name">
-              </label>
-              <Transition
-                name="workspace-inline-action"
-                @enter="measureInlineAction"
-                @before-leave="measureInlineAction"
-                @after-leave="clearInlineActionMeasure"
-              >
-                <button v-if="canRenameWorkspace || renameWorkspaceBusy" class="panel-primary-action workspace-inline-action" type="submit" :disabled="renameWorkspaceBusy">
-                  {{ renameWorkspaceBusy ? 'Saving…' : 'Save' }}
-                </button>
-              </Transition>
+              <AppInlineActionField
+                v-model="workspaceName"
+                label="Workspace name"
+                placeholder="Workspace name"
+                action-label="Save"
+                busy-label="Saving…"
+                input-type="text"
+                autocomplete="off"
+                :max-length="120"
+                :show-action="canRenameWorkspace || renameWorkspaceBusy"
+                :busy="renameWorkspaceBusy"
+                :disabled="renameWorkspaceBusy"
+              />
             </form>
             <p v-if="renameWorkspaceMessage" class="workspace-management-message" role="status" aria-live="polite">{{ renameWorkspaceMessage }}</p>
           </section>
@@ -696,42 +687,7 @@ const deleteWorkspace = async () => {
 }
 
 .workspace-management-grid { display: grid; gap: var(--space); }
-.workspace-name-form {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 0;
-  align-items: center;
-  gap: 0;
-  transition:
-    grid-template-columns var(--filter-action-transition-duration) var(--filter-overlay-enter-easing),
-    column-gap var(--filter-action-transition-duration) var(--filter-overlay-enter-easing);
-}
-.workspace-name-form:has(.workspace-inline-action) {
-  grid-template-columns: minmax(0, 1fr) var(--workspace-inline-action-width, 0px);
-  column-gap: var(--filter-action-gap);
-}
-.workspace-name-form:has(.workspace-inline-action-enter-from),
-.workspace-name-form:has(.workspace-inline-action-leave-to) {
-  grid-template-columns: minmax(0, 1fr) 0;
-  column-gap: 0;
-}
-.workspace-name-form > label { min-width: 0; }
-.workspace-inline-action.panel-primary-action {
-  justify-self: end;
-  width: max-content;
-  min-width: max-content;
-  white-space: nowrap;
-}
-
-.workspace-inline-action.panel-primary-action:is(.workspace-inline-action-enter-active, .workspace-inline-action-leave-active) {
-  transition:
-    opacity var(--filter-action-transition-duration) var(--filter-overlay-enter-easing),
-    translate var(--filter-action-transition-duration) var(--filter-overlay-enter-easing);
-}
-.workspace-inline-action.panel-primary-action:is(.workspace-inline-action-enter-from, .workspace-inline-action-leave-to) {
-  opacity: 0;
-  translate: var(--filter-action-transition-distance) 0;
-}
+.workspace-name-form { min-width: 0; }
 
 .workspace-setting-card {
   min-width: 0;
@@ -789,9 +745,4 @@ const deleteWorkspace = async () => {
   .workspace-panel { min-width: 0; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .workspace-name-form,
-  .workspace-inline-action-enter-active,
-  .workspace-inline-action-leave-active { transition: none; }
-}
 </style>

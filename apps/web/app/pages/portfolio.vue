@@ -49,9 +49,20 @@ interface CreatePortfolioResponse {
 
 const apiFetch = useRequestFetch()
 const route = useRoute()
-const { data, error, refresh } = await useFetch<{ data: { collections: Board[] } }>('/api/shares', {
-  query: { previews: 'false' }
+const portfolioCollectionsCache = useState<{ data: { collections: Board[] } } | null>('portfolio-collections-cache', () => null)
+const { data: fetchedData, error, refresh: refreshCollections, status: collectionsStatus } = await useLazyFetch<{ data: { collections: Board[] } }>('/api/shares', {
+  query: { previews: 'false' },
+  server: false,
+  immediate: !portfolioCollectionsCache.value
 })
+watch(fetchedData, (value) => {
+  if (value) portfolioCollectionsCache.value = value
+}, { immediate: true })
+const data = computed(() => portfolioCollectionsCache.value ?? fetchedData.value)
+const refresh = async () => {
+  await refreshCollections()
+  if (fetchedData.value) portfolioCollectionsCache.value = fetchedData.value
+}
 const requestedPortfolioId = String(route.query.portfolio ?? '')
 const activePortfolioId = ref(requestedPortfolioId || null)
 const portfolios = computed(() => (data.value?.data.collections.filter(board => board.purpose === 'portfolio') ?? [])
@@ -84,6 +95,8 @@ const publicationEnabled = ref(false)
 const deleteVersionDialogOpen = ref(false)
 const deleteVersionBusy = ref(false)
 const deleteVersionError = ref('')
+const panelVisible = ref(false)
+let panelOpenFrame = 0
 
 let feedbackTimer: ReturnType<typeof setTimeout> | undefined
 watch([feedback, feedbackError], ([message, isError]) => {
@@ -91,7 +104,13 @@ watch([feedback, feedbackError], ([message, isError]) => {
   if (!message || isError) return
   feedbackTimer = setTimeout(() => { feedback.value = '' }, 2500)
 })
-onBeforeUnmount(() => clearTimeout(feedbackTimer))
+onMounted(() => {
+  panelOpenFrame = requestAnimationFrame(() => { panelVisible.value = true })
+})
+onBeforeUnmount(() => {
+  clearTimeout(feedbackTimer)
+  cancelAnimationFrame(panelOpenFrame)
+})
 
 watch(activePortfolio, (portfolio) => {
   if (portfolio) activePortfolioId.value = portfolio.id
@@ -133,7 +152,7 @@ const loadPortfolioBoards = async () => {
   }
 }
 
-await loadPortfolioBoards()
+watch(() => activePortfolio.value?.id, () => { void loadPortfolioBoards() }, { immediate: true })
 
 const ensureActivePortfolio = async () => {
   if (activePortfolio.value) return activePortfolio.value.id
@@ -194,7 +213,8 @@ const saveBoardDetails = (board: Board & { portfolioTitle: string; portfolioDesc
   void saveBoards(next, `${board.portfolioTitle.trim() || board.title} updated.`)
 }
 
-const close = () => navigateTo('/library')
+const close = () => { panelVisible.value = false }
+const finishClose = () => navigateTo('/library')
 const openDetails = () => { panelStep.value = 'details' }
 const closeDetails = () => { panelStep.value = 'boards' }
 const refreshDetails = async () => { await refresh() }
@@ -204,15 +224,13 @@ const selectPortfolio = async (portfolio: Board) => {
   panelStep.value = 'boards'
   publicationEnabled.value = portfolio.publication_enabled
   await navigateTo({ path: '/portfolio', query: { portfolio: portfolio.id } }, { replace: true })
-  await loadPortfolioBoards()
 }
 
-watch(() => String(route.query.portfolio ?? ''), async (portfolioId) => {
+watch(() => String(route.query.portfolio ?? ''), (portfolioId) => {
   const nextId = portfolioId || workspaceMainPortfolio.value?.id || portfolios.value[0]?.id || null
   if (nextId === activePortfolioId.value) return
   activePortfolioId.value = nextId
   panelStep.value = String(route.query.view ?? '') === 'details' ? 'details' : 'boards'
-  await loadPortfolioBoards()
 })
 const updatePublication = (enabled: boolean) => {
   publicationEnabled.value = enabled
@@ -237,7 +255,6 @@ const deleteActiveVersion = async () => {
     await navigateTo(nextPortfolio
       ? { path: '/portfolio', query: { portfolio: nextPortfolio.id } }
       : { path: '/portfolio' }, { replace: true })
-    await loadPortfolioBoards()
   } catch {
     deleteVersionError.value = 'Unable to delete this client version. Check your connection and try again.'
   } finally {
@@ -249,14 +266,15 @@ const deleteActiveVersion = async () => {
 
 <template>
   <div class="portfolio-page">
-    <SelectionPanel visible label="Portfolio" wide overlay @close="close">
+    <SelectionPanel :visible="panelVisible" label="Portfolio" wide overlay @close="close" @after-leave="finishClose">
       <div class="asset-filter-controls asset-filter-controls--filters asset-filter-controls--expanded portfolio-controls">
         <Transition name="panel-step" mode="out-in">
         <div :key="panelStep" class="filter-sheet-content">
           <template v-if="panelStep === 'boards'">
           <section class="filter-option-group">
             <h1 class="filter-overlay-title">Portfolio</h1>
-            <p class="board-type-summary">{{ activePortfolio?.portfolio_kind === 'client' ? activePortfolio.portfolio_client ? `Client version for ${activePortfolio.portfolio_client}.` : 'Client version.' : 'Main portfolio.' }}</p>
+            <p v-if="collectionsStatus === 'pending' && !activePortfolio" class="board-type-summary">Loading portfolio…</p>
+            <p v-else class="board-type-summary">{{ activePortfolio?.portfolio_kind === 'client' ? activePortfolio.portfolio_client ? `Client version for ${activePortfolio.portfolio_client}.` : 'Client version.' : 'Main portfolio.' }}</p>
           </section>
 
           <section v-if="portfolios.length" class="filter-option-group" aria-labelledby="portfolio-versions-title">
@@ -280,8 +298,9 @@ const deleteActiveVersion = async () => {
         <section class="filter-option-group" aria-labelledby="portfolio-selected-title">
           <h2 id="portfolio-selected-title" class="filter-overlay-title">Included boards</h2>
           <p class="board-type-summary">Boards remain available in the library when they are added here.</p>
-          <p v-if="error || boardsError" class="board-type-summary error" role="alert">Unable to load boards.</p>
-          <ol v-else-if="selectedBoards.length" class="portfolio-board-list">
+            <p v-if="error || boardsError" class="board-type-summary error" role="alert">Unable to load boards.</p>
+            <p v-else-if="collectionsStatus === 'pending' && !data" class="board-type-summary">Loading boards…</p>
+            <ol v-else-if="selectedBoards.length" class="portfolio-board-list">
             <AppPanelRow
               v-for="(board, index) in selectedBoards"
               :key="board.id"
@@ -330,10 +349,10 @@ const deleteActiveVersion = async () => {
           </div>
         </section>
 
-        <section v-else-if="!regularBoards.length" class="filter-option-group" aria-labelledby="portfolio-no-boards-title">
+          <section v-else-if="collectionsStatus !== 'pending' && !regularBoards.length" class="filter-option-group" aria-labelledby="portfolio-no-boards-title">
           <h2 id="portfolio-no-boards-title" class="filter-overlay-title">No boards available</h2>
           <p class="board-type-summary">Create and arrange a board in the library, then add it here.</p>
-          <NuxtLink class="panel-secondary-action" to="/library">Go to library</NuxtLink>
+          <button class="panel-secondary-action" type="button" @click="close">Go to library</button>
         </section>
 
           <AppStatusToast :message="feedback" :error="feedbackError" />

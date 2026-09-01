@@ -15,6 +15,10 @@ export default defineNuxtRouteMiddleware(async (to) => {
 
   const nuxtApp = useNuxtApp()
   const { data: session } = useNuxtData<AuthSessionResponse>('auth-session')
+  if (session.value?.data.authenticated) {
+    if (session.value.data.user?.mustChangePassword && to.path !== '/change-password') return navigateTo('/change-password')
+    return
+  }
   const sessionRequest = $fetch<AuthSessionResponse>('/api/auth/session').catch(() => undefined)
   const finishValidation = async () => {
     session.value = await sessionRequest

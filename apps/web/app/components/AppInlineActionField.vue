@@ -1,5 +1,5 @@
 <script setup lang="ts">
-const props = withDefaults(defineProps<{
+withDefaults(defineProps<{
   modelValue: string
   label?: string
   placeholder?: string
@@ -10,6 +10,7 @@ const props = withDefaults(defineProps<{
   disabled?: boolean
   autocomplete?: string
   inputType?: string
+  maxLength?: number
 }>(), {
   label: 'Email',
   placeholder: 'Email',
@@ -18,7 +19,8 @@ const props = withDefaults(defineProps<{
   busy: false,
   disabled: false,
   autocomplete: 'email',
-  inputType: 'email'
+  inputType: 'email',
+  maxLength: 0
 })
 
 const emit = defineEmits<{
@@ -51,6 +53,7 @@ defineExpose({ focus })
         required
         :type="inputType"
         :autocomplete="autocomplete"
+        :maxlength="maxLength || undefined"
         :placeholder="placeholder"
         :value="modelValue"
         :disabled="disabled"
@@ -98,6 +101,10 @@ defineExpose({ focus })
   column-gap: 0;
 }
 
+.app-inline-action-field:has(.app-inline-action-leave-active) {
+  transition-delay: 200ms;
+}
+
 .app-inline-action-field > label { min-width: 0; }
 .app-inline-action-field .panel-field { width: 100%; min-width: 0; }
 
@@ -114,8 +121,17 @@ defineExpose({ focus })
     translate var(--filter-action-transition-duration) var(--filter-overlay-enter-easing);
 }
 
-.app-inline-action-button.panel-primary-action:is(.app-inline-action-enter-from, .app-inline-action-leave-to) {
+.app-inline-action-button.panel-primary-action.app-inline-action-enter-active {
+  transition-delay: 200ms;
+}
+
+.app-inline-action-button.panel-primary-action.app-inline-action-enter-from {
   max-width: 0;
+  opacity: 0;
+  translate: -.375rem 0;
+}
+
+.app-inline-action-button.panel-primary-action.app-inline-action-leave-to {
   opacity: 0;
   translate: -.375rem 0;
 }
