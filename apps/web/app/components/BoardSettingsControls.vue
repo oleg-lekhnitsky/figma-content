@@ -388,9 +388,7 @@ onBeforeUnmount(() => {
         </div>
       </section>
     </template>
-      <Transition name="board-settings-toast">
-        <p v-if="feedback" class="board-settings-feedback" :class="{ error }" role="status" aria-live="polite">{{ feedback }}</p>
-      </Transition>
+      <AppStatusToast :message="feedback" :error="error" />
     </div>
     </Transition>
     <AppPanelActions :visible="editingFilters">
@@ -540,45 +538,8 @@ onBeforeUnmount(() => {
 
 .board-member-list { display: grid; gap: var(--filter-option-gap); }
 
-.board-settings-feedback {
-  position: fixed;
-  z-index: 2;
-  left: 50%;
-  bottom: max(1rem, env(safe-area-inset-bottom));
-  width: max-content;
-  max-width: calc(100vw - 2rem);
-  margin: 0;
-  padding: .625rem .875rem;
-  border-radius: var(--filter-pill-radius);
-  color: #fff;
-  background: rgb(40 40 40 / .78);
-  box-shadow: 0 .5rem 2rem rgb(0 0 0 / .16);
-  font-size: var(--filter-option-font-size);
-  line-height: 1.2;
-  text-align: center;
-  transform: translateX(-50%);
-  pointer-events: none;
-  -webkit-backdrop-filter: blur(1rem);
-  backdrop-filter: blur(1rem);
-}
-
-.board-settings-feedback.error { background: rgb(150 24 20 / .88); }
-
-.board-settings-toast-enter-active,
-.board-settings-toast-leave-active {
-  transition: opacity 180ms ease, transform 240ms cubic-bezier(.2, .8, .2, 1);
-}
-
-.board-settings-toast-enter-from,
-.board-settings-toast-leave-to {
-  opacity: 0;
-  transform: translate(-50%, .5rem);
-}
-
 @media (prefers-reduced-motion: reduce) {
   .member-form-enter-active,
-  .member-form-leave-active,
-  .board-settings-toast-enter-active,
-  .board-settings-toast-leave-active { transition: none; }
+  .member-form-leave-active { transition: none; }
 }
 </style>

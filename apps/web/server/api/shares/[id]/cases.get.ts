@@ -15,10 +15,15 @@ export default defineEventHandler(async (event) => {
   if (collection.purpose !== 'portfolio') throw createError({ statusCode: 409, statusMessage: 'This board is not a portfolio edition.' })
   const db = useSupabaseAdmin()
   const { data: links, error: linkError } = await db.from('portfolio_edition_cases')
-    .select('case_id,position').eq('edition_id', id).eq('organization_id', session.user.organization_id).order('position')
+    .select('case_id,position,display_title,description').eq('edition_id', id).eq('organization_id', session.user.organization_id).order('position')
   if (linkError) throw databaseError('read portfolio case order', linkError)
   const selectedIds = links.map((link: { case_id: string }) => link.case_id)
-  if (linksOnly) return { data: { selectedIds } }
+  const selectedCaseDetails = links.map((link: { case_id: string; display_title: string | null; description: string | null }) => ({
+    caseId: link.case_id,
+    title: link.display_title,
+    description: link.description
+  }))
+  if (linksOnly) return { data: { selectedIds, selectedCases: selectedCaseDetails } }
 
   const { data: cases, error } = await db.from('public_collections')
     .select('id,title,purpose,mode,filters,asset_scope,organization_id')
@@ -33,5 +38,6 @@ export default defineEventHandler(async (event) => {
     ...await boardPreviewForCollection({ ...item, filters: publicCollectionFiltersSchema.parse(item.filters) }, { includePreviews })
   })))
   const order = new Map<string, number>(selectedIds.map((caseId: string, index: number) => [caseId, index]))
-  return { data: { cases: enriched, selectedIds, selectedCases: enriched.filter(item => order.has(item.id)).sort((a, b) => order.get(a.id)! - order.get(b.id)!) } }
+  const details = new Map<string, { caseId: string; title: string | null; description: string | null }>(selectedCaseDetails.map((item: { caseId: string; title: string | null; description: string | null }) => [item.caseId, item]))
+  return { data: { cases: enriched, selectedIds, selectedCases: enriched.filter(item => order.has(item.id)).sort((a, b) => order.get(a.id)! - order.get(b.id)!).map(item => ({ ...item, ...(details.get(item.id) ?? {}) })) } }
 })

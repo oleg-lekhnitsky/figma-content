@@ -71,9 +71,14 @@ export default defineEventHandler(async (event) => {
   }
   if (parsed.data.action === 'portfolio-settings') {
     if (collection.purpose !== 'portfolio') throw appError(409, 'NOT_PORTFOLIO', 'This board is not a portfolio edition.')
+    const portfolioKind = collection.portfolio_kind as 'main' | 'client' | null
+    if (portfolioKind && parsed.data.portfolioKind !== portfolioKind) {
+      throw appError(409, 'PORTFOLIO_KIND_LOCKED', 'Create a separate portfolio version instead of changing this one.')
+    }
+    const persistedKind = portfolioKind ?? parsed.data.portfolioKind
     const { data, error: settingsError } = await db.from('public_collections').update({
-      portfolio_kind: parsed.data.portfolioKind,
-      portfolio_client: parsed.data.portfolioKind === 'client' ? parsed.data.portfolioClient : null,
+      portfolio_kind: persistedKind,
+      portfolio_client: persistedKind === 'client' ? parsed.data.portfolioClient : null,
       introduction: parsed.data.introduction,
       contact_heading: parsed.data.contactHeading,
       contact_links: parsed.data.contactLinks

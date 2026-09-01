@@ -15,6 +15,17 @@ export default defineEventHandler(async (event) => {
   const contentStrategy = input.contentStrategy
     ?? (['review', 'portfolio', 'case'].includes(input.purpose) ? 'manual' : input.mode === 'dynamic' ? 'dynamic' : 'snapshot')
   const db = useSupabaseAdmin()
+  if (input.purpose === 'portfolio' && input.portfolioKind === 'main') {
+    const { data: existingMain, error: mainError } = await db.from('public_collections')
+      .select('id')
+      .eq('organization_id', session.user.organization_id)
+      .eq('purpose', 'portfolio')
+      .eq('portfolio_kind', 'main')
+      .limit(1)
+      .maybeSingle()
+    if (mainError) throw databaseError('check main portfolio', mainError)
+    if (existingMain) throw appError(409, 'MAIN_PORTFOLIO_EXISTS', 'This workspace already has a main portfolio. Create a client version instead.')
+  }
   const { data, error } = await db.from('public_collections').insert({
     organization_id: session.user.organization_id,
     created_by: session.user.id,
@@ -34,6 +45,9 @@ export default defineEventHandler(async (event) => {
     filters,
     expires_at: null
   }).select('id,slug,title,purpose,portfolio_kind,portfolio_client,introduction,contact_heading,contact_links,review_month,submission_deadline,mode,filters,expires_at,publication_enabled,content_strategy,asset_scope,layout,created_at,updated_at').single()
+  if (error?.code === '23505' && input.purpose === 'portfolio' && input.portfolioKind === 'main') {
+    throw appError(409, 'MAIN_PORTFOLIO_EXISTS', 'This workspace already has a main portfolio. Create a client version instead.')
+  }
   if (error) throw databaseError('create public collection', error)
   const { error: ownerError } = await db.from('public_collection_members').insert({
     collection_id: data.id, organization_id: session.user.organization_id,

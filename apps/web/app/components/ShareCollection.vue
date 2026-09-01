@@ -3,7 +3,16 @@ import type { BoardLayout } from '@content-library/shared'
 import { Xmark } from 'reicon-vue'
 
 interface CurrentFilters { search?: string; projectIds?: string[]; projectNames?: string[]; tagIds?: string[]; tagNames?: string[]; uploadedBy?: string|null; dateFrom?: string; dateTo?: string; dateLabel?: string; status?: string }
-const props = withDefaults(defineProps<{ currentFilters?: CurrentFilters; portfolioOnly?: boolean; hideTrigger?: boolean }>(), { portfolioOnly: false, hideTrigger: false })
+const props = withDefaults(defineProps<{
+  currentFilters?: CurrentFilters
+  portfolioOnly?: boolean
+  hideTrigger?: boolean
+  defaultPortfolioKind?: 'main' | 'client'
+}>(), {
+  portfolioOnly: false,
+  hideTrigger: false,
+  defaultPortfolioKind: 'main'
+})
 const emit = defineEmits<{ created: [collectionId: string]; openChange: [open: boolean] }>()
 
 interface Option { id: string; name: string }
@@ -47,7 +56,7 @@ const boardFeedback = reactive<Record<string, { text: string; error: boolean }>>
 const usingCurrentFilters = ref(false)
 const staticOnly = ref(false)
 const createPanelTitle = computed(() => props.portfolioOnly
-  ? 'Create portfolio'
+  ? props.defaultPortfolioKind === 'client' ? 'Create client version' : 'Create main portfolio'
   : purpose.value === 'review'
     ? 'Create review board'
     : staticOnly.value
@@ -56,7 +65,9 @@ const createPanelTitle = computed(() => props.portfolioOnly
         ? 'Create smart board'
         : 'Create board')
 const createPanelDescription = computed(() => props.portfolioOnly
-  ? 'Start with the details, then add and arrange work.'
+  ? props.defaultPortfolioKind === 'client'
+    ? 'Create a tailored version without changing your main portfolio.'
+    : 'Create the permanent home for your selected work.'
   : purpose.value === 'review'
     ? 'Invite contributors after creating it. Submissions arrive from the Figma plugin.'
     : staticOnly.value
@@ -182,7 +193,7 @@ const showCreate = async (fromCurrentView = false, forceStatic = false) => {
   staticOnly.value = forceStatic
   usingCurrentFilters.value = fromCurrentView
   purpose.value = props.portfolioOnly ? 'portfolio' : 'showcase'
-  portfolioKind.value = 'main'
+  portfolioKind.value = props.defaultPortfolioKind
   portfolioClient.value = ''
   introduction.value = ''
   mode.value = fromCurrentView ? 'dynamic' : 'static'
@@ -380,7 +391,7 @@ type="button"
           </div>
           <p id="create-board-submissions-summary" class="board-type-summary">{{ collectsSubmissions ? 'Invited contributors can add work to this board.' : 'Build the board from approved work in your library.' }}</p>
         </section>
-        <section v-if="purpose === 'portfolio'" class="filter-option-group" aria-labelledby="create-portfolio-type"><h3 id="create-portfolio-type">Portfolio type</h3><div class="filter-option-list filter-option-list--segmented"><button type="button" :aria-pressed="portfolioKind === 'main'" @click="portfolioKind = 'main'">Main portfolio</button><button type="button" :aria-pressed="portfolioKind === 'client'" @click="portfolioKind = 'client'">Client version</button></div><p class="board-type-summary">{{ portfolioKind === 'main' ? 'Your main selection of work.' : 'A tailored selection for one recipient.' }}</p></section>
+        <section v-if="purpose === 'portfolio' && !props.portfolioOnly" class="filter-option-group" aria-labelledby="create-portfolio-type"><h3 id="create-portfolio-type">Portfolio type</h3><div class="filter-option-list filter-option-list--segmented"><button type="button" :aria-pressed="portfolioKind === 'main'" @click="portfolioKind = 'main'">Main portfolio</button><button type="button" :aria-pressed="portfolioKind === 'client'" @click="portfolioKind = 'client'">Client version</button></div><p class="board-type-summary">{{ portfolioKind === 'main' ? 'Your main selection of work.' : 'A tailored selection for one recipient.' }}</p></section>
         <section v-if="purpose === 'portfolio' && portfolioKind === 'client'" class="filter-option-group"><h3 id="create-client-label">Client or recipient</h3><input v-model="portfolioClient" class="panel-field" name="portfolio-client" required maxlength="120" placeholder="Acme Studio" aria-labelledby="create-client-label"></section>
         <section v-if="purpose === 'portfolio'" class="filter-option-group"><h3 id="create-introduction-label">Introduction</h3><textarea v-model="introduction" class="panel-field" name="introduction" rows="3" maxlength="2000" placeholder="A short note about this selection" aria-labelledby="create-introduction-label" /></section>
         <section v-if="usingCurrentFilters && purpose === 'showcase'" class="board-setting-group"><p class="board-type-summary"><strong>Starting with current filters</strong><br>{{ currentFilterLabels.join(' · ') || 'All dates' }}<br>{{ props.currentFilters?.status === 'draft' ? 'Draft status is not included because boards contain approved assets only.' : 'Boards contain approved assets only.' }}</p></section>

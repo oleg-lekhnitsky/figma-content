@@ -457,7 +457,7 @@ const refreshLibraryData = async () => {
 }
 usePullRefreshHandler(refreshLibraryData)
 watch(selectedCollection, collection => {
-  if (collection?.purpose === 'portfolio') void navigateTo('/portfolio', { replace: true })
+  if (collection?.purpose === 'portfolio') void navigateTo({ path: '/portfolio', query: { portfolio: collection.id } }, { replace: true })
 }, { immediate: true })
 watch(selectedBoardId, boardId => {
   if (!boardId && !data.value && loadStatus.value !== 'pending') void refresh()

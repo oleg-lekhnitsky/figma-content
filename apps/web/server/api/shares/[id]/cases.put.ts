@@ -5,7 +5,14 @@ import { requireBoardRole } from '../../../utils/boards'
 import { requireTrustedMutation } from '../../../utils/request-security'
 import { requireAuth } from '../../../utils/session'
 
-const schema = z.object({ caseIds: z.array(z.uuid()).max(100).refine(ids => new Set(ids).size === ids.length) })
+const portfolioCaseSchema = z.object({
+  caseId: z.uuid(),
+  title: z.string().trim().max(120).nullable().default(null),
+  description: z.string().trim().max(1000).nullable().default(null)
+})
+const schema = z.object({
+  cases: z.array(portfolioCaseSchema).max(100).refine(items => new Set(items.map(item => item.caseId)).size === items.length)
+})
 
 export default defineEventHandler(async (event) => {
   requireTrustedMutation(event)
@@ -16,16 +23,24 @@ export default defineEventHandler(async (event) => {
   const { collection } = await requireBoardRole(id, session.user.organization_id, session.user.id, ['owner', 'editor'], session.user.role)
   if (collection.purpose !== 'portfolio') throw appError(409, 'NOT_PORTFOLIO', 'This board is not a portfolio edition.')
   const db = useSupabaseAdmin()
-  if (parsed.data.caseIds.length) {
-    const { data: cases, error } = await db.from('public_collections').select('id').eq('organization_id', session.user.organization_id).neq('purpose', 'portfolio').in('id', parsed.data.caseIds)
+  const caseIds = parsed.data.cases.map(item => item.caseId)
+  if (caseIds.length) {
+    const { data: cases, error } = await db.from('public_collections').select('id').eq('organization_id', session.user.organization_id).neq('purpose', 'portfolio').in('id', caseIds)
     if (error) throw databaseError('validate portfolio cases', error)
-    if (cases.length !== parsed.data.caseIds.length) throw appError(400, 'INVALID_CASE', 'One or more cases are unavailable.')
+    if (cases.length !== caseIds.length) throw appError(400, 'INVALID_CASE', 'One or more cases are unavailable.')
   }
   const { error: clearError } = await db.from('portfolio_edition_cases').delete().eq('edition_id', id).eq('organization_id', session.user.organization_id)
   if (clearError) throw databaseError('clear portfolio case order', clearError)
-  if (parsed.data.caseIds.length) {
-    const { error } = await db.from('portfolio_edition_cases').insert(parsed.data.caseIds.map((caseId, position) => ({ edition_id:id, case_id:caseId, organization_id:session.user.organization_id, position })))
+  if (parsed.data.cases.length) {
+    const { error } = await db.from('portfolio_edition_cases').insert(parsed.data.cases.map((item, position) => ({
+      edition_id: id,
+      case_id: item.caseId,
+      organization_id: session.user.organization_id,
+      position,
+      display_title: item.title || null,
+      description: item.description || null
+    })))
     if (error) throw databaseError('save portfolio case order', error)
   }
-  return { data: { caseIds: parsed.data.caseIds } }
+  return { data: { cases: parsed.data.cases } }
 })

@@ -897,6 +897,13 @@ margin-top: calc(var(--filter-overlay-padding) * -.15);
   opacity: 1;
 }
 
+textarea.panel-field {
+  min-height: calc(var(--filter-action-height) * 2.5);
+  padding-block: var(--filter-option-padding);
+  line-height: 1.25;
+  resize: none;
+}
+
 .panel-dropdown-trigger {
   position: relative;
   display: flex;
@@ -909,6 +916,7 @@ margin-top: calc(var(--filter-overlay-padding) * -.15);
 .panel-dropdown-trigger .filter-dropdown-chevron { right: var(--filter-option-padding); }
 
 input.panel-field:focus-visible,
+textarea.panel-field:focus-visible,
 button.panel-dropdown-trigger:focus-visible {
   border: 0 !important;
   box-shadow: none;

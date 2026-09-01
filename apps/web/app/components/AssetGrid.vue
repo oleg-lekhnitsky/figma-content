@@ -19,7 +19,8 @@ const props = withDefaults(defineProps<{
   label: 'Asset grid',
   headingTag: 'h3',
   selectable: false,
-  selectedIds: () => []
+  selectedIds: () => [],
+  viewSettings: undefined
 })
 
 const emit = defineEmits<{ toggleSelection: [asset: T] }>()
@@ -37,7 +38,6 @@ const viewStyle = computed(() => props.viewSettings ? {
     <article v-for="(asset, index) in assets" :key="asset.id" class="grid-card">
       <div class="grid-preview" :class="{ 'is-loading': !loadedImages.has(asset.id) }">
         <AssetMedia
-          :class="{ 'is-loaded': loadedImages.has(asset.id) }"
           :src="asset.previewUrl" :srcset="asset.preview2xUrl ? `${asset.previewUrl} 1x, ${asset.preview2xUrl} 2x` : undefined"
           :mime-type="asset.mime_type"
           :width="asset.width" :height="asset.height" :alt="asset.title" :loading="index < 10 ? 'eager' : 'lazy'"
@@ -94,11 +94,6 @@ const viewStyle = computed(() => props.viewSettings ? {
   display: block;
   margin: auto;
   object-fit: contain;
-  opacity: 0;
-  transition: opacity 150ms ease-out;
-}
-
-.grid-preview :is(img,video).is-loaded {
   opacity: 1;
 }
 
@@ -222,8 +217,7 @@ const viewStyle = computed(() => props.viewSettings ? {
 @media(max-width:900px){.asset-grid-view.custom-view{grid-template-columns:repeat(clamp(1,calc(3 + var(--board-column-offset,0)),5),minmax(0,1fr))}}
 @media(max-width:600px){.asset-grid-view.custom-view{grid-template-columns:repeat(clamp(1,calc(2 + var(--board-column-offset,0)),4),minmax(0,1fr))}}
 @media (prefers-reduced-motion: reduce) {
-  .preview-actions,
-  .grid-preview :is(img,video) {
+  .preview-actions {
     transition: none;
   }
 }
