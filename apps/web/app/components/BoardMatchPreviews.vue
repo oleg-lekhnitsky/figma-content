@@ -1,30 +1,61 @@
 <script setup lang="ts">
-withDefaults(defineProps<{
-  assets: Array<{
-    id: string
-    title: string
-    previewUrl: string
-    mime_type?: string | null
-    width: number
-    height: number
-  }>
+interface PreviewAsset {
+  id: string
+  title: string
+  previewUrl: string
+  mime_type?: string | null
+  width: number
+  height: number
+}
+
+const props = withDefaults(defineProps<{
+  assets: PreviewAsset[]
   loading?: boolean
   label?: string
+  total?: number
+  loadMore?: (offset: number) => Promise<PreviewAsset[]>
 }>(), {
   loading: false,
-  label: 'Asset previews'
+  label: 'Asset previews',
+  total: 0,
+  loadMore: undefined
 })
+
+const scroller = ref<HTMLElement | null>(null)
+const displayedAssets = ref<PreviewAsset[]>(props.assets)
+const loadingMore = ref(false)
+const hasMore = computed(() => Boolean(props.loadMore) && displayedAssets.value.length < props.total)
+
+watch(() => props.assets, assets => { displayedAssets.value = assets })
+
+const requestMoreNearEnd = async () => {
+  const element = scroller.value
+  if (!element || props.loading || loadingMore.value || !hasMore.value || !props.loadMore) return
+  const threshold = element.clientWidth / 2
+  if (element.scrollWidth - element.scrollLeft - element.clientWidth > threshold) return
+  loadingMore.value = true
+  try {
+    const additions = await props.loadMore(displayedAssets.value.length).catch(() => [])
+    const existing = new Set(displayedAssets.value.map(asset => asset.id))
+    displayedAssets.value = [...displayedAssets.value, ...additions.filter(asset => !existing.has(asset.id))]
+  } finally {
+    loadingMore.value = false
+  }
+}
+
+watch(() => [displayedAssets.value.length, hasMore.value], () => nextTick(requestMoreNearEnd), { immediate: true })
 </script>
 
 <template>
-  <div class="board-match-previews" :class="{ 'is-empty': !loading && !assets.length }" role="region" :aria-label="label" :aria-busy="loading" :tabindex="assets.length ? 0 : -1">
-    <span v-for="asset in assets" :key="asset.id" class="board-match-preview">
+  <div ref="scroller" class="board-match-previews" :class="{ 'is-empty': !loading && !displayedAssets.length }" role="region" :aria-label="label" :aria-busy="loading || loadingMore" :tabindex="displayedAssets.length ? 0 : -1" @scroll.passive="requestMoreNearEnd">
+    <span v-for="asset in displayedAssets" :key="asset.id" class="board-match-preview">
       <AssetMedia :src="asset.previewUrl" :mime-type="asset.mime_type ?? ''" :width="asset.width" :height="asset.height" :alt="asset.title" loading="lazy" />
     </span>
-    <template v-if="loading && !assets.length">
+    <template v-if="loading && !displayedAssets.length">
       <span v-for="index in 5" :key="`placeholder-${index}`" class="board-match-preview board-match-preview--placeholder" aria-hidden="true" />
     </template>
-    <p class="board-match-previews-empty" role="status" aria-live="polite">{{ !loading && !assets.length ? 'No matching assets' : '' }}</p>
+    <span v-if="loadingMore" class="board-match-preview board-match-preview--placeholder" aria-hidden="true" />
+    <p class="board-match-previews-empty" role="status" aria-live="polite">{{ !loading && !displayedAssets.length ? 'No matching assets' : '' }}</p>
   </div>
 </template>
 

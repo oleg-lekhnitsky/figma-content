@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { definePageMeta, navigateTo, useLazyFetch, useNuxtData, useRoute, useState } from '#imports'
 import { $fetch } from 'ofetch'
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 
 definePageMeta({ middleware: 'auth' })
 
@@ -66,8 +66,6 @@ const auditData = computed(() => auditCache.value ?? auditRequest.data.value)
 const projectsStatus = projectsRequest.status
 const auditStatus = auditRequest.status
 const role = computed(() => session.value?.data.user?.role)
-const panelVisible = ref(false)
-let panelOpenFrame = 0
 
 const loadProjects = async () => {
   await projectsRequest.execute()
@@ -109,14 +107,9 @@ watch(role, (value) => {
 }, { immediate: true })
 
 onMounted(() => {
-  panelOpenFrame = requestAnimationFrame(() => { panelVisible.value = true })
   if (activeSection.value === 'projects') ensureAudit()
   else ensureProjects()
 })
-onBeforeUnmount(() => cancelAnimationFrame(panelOpenFrame))
-
-const close = () => { panelVisible.value = false }
-const finishClose = () => navigateTo('/library')
 
 const projects = computed(() => projectData.value?.data.projects ?? [])
 const activeProjectCount = computed(() => projects.value.filter(project => !project.archived_at).length)
@@ -191,14 +184,11 @@ const auditMeta = (log: AuditLog) => {
 
 <template>
   <div class="admin-page">
-    <AppAdminPanel
-      :active="activeSection"
-      :visible="panelVisible"
-      :show-audit-log="role === 'admin'"
-      :label="activeSection === 'projects' ? 'Projects administration' : 'Audit log administration'"
-      @close="close"
-      @after-leave="finishClose"
-    >
+    <AppRoutedPanelPage :label="activeSection === 'projects' ? 'Projects administration' : 'Audit log administration'" close-label="Close administration" panel-class="app-admin-panel">
+      <AppAdminPanel
+        :active="activeSection"
+        :show-audit-log="role === 'admin'"
+      >
       <template v-if="activeSection === 'projects'">
         <section class="filter-option-group projects-heading" aria-label="Create project">
           <form @submit.prevent="createProject">
@@ -271,7 +261,8 @@ const auditMeta = (log: AuditLog) => {
         </ol>
         <p v-else class="board-type-summary">No activity yet.</p>
       </section>
-    </AppAdminPanel>
+      </AppAdminPanel>
+    </AppRoutedPanelPage>
   </div>
 </template>
 

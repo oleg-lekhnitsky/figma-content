@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { BoardLayout, BoardViewSettings } from '@content-library/shared'
-import { MoreH, Xmark } from 'reicon-vue'
+import { MoreH } from 'reicon-vue'
 
 definePageMeta({ middleware: 'auth' })
 
@@ -42,6 +42,12 @@ interface PortfolioBoardsResponse {
   data: {
     selectedIds: string[]
     selectedCases: PortfolioCaseSelection[]
+  }
+}
+
+interface PortfolioBoardPreviewsResponse {
+  data: {
+    previewAssets: PreviewAsset[]
   }
 }
 
@@ -125,8 +131,7 @@ const openBoardActionsId = ref<string | null>(null)
 const editingBoardId = ref<string | null>(null)
 const boardTitleDraft = ref('')
 const boardDescriptionDraft = ref('')
-const panelVisible = ref(false)
-let panelOpenFrame = 0
+const routedPanel = ref<{ close: () => void } | null>(null)
 
 let feedbackTimer: ReturnType<typeof setTimeout> | undefined
 watch([feedback, feedbackError], ([message, isError]) => {
@@ -134,13 +139,7 @@ watch([feedback, feedbackError], ([message, isError]) => {
   if (!message || isError) return
   feedbackTimer = setTimeout(() => { feedback.value = '' }, 2500)
 })
-onMounted(() => {
-  panelOpenFrame = requestAnimationFrame(() => { panelVisible.value = true })
-})
-onBeforeUnmount(() => {
-  clearTimeout(feedbackTimer)
-  cancelAnimationFrame(panelOpenFrame)
-})
+onBeforeUnmount(() => clearTimeout(feedbackTimer))
 
 watch(activePortfolio, (portfolio) => {
   if (portfolio) activePortfolioId.value = portfolio.id
@@ -178,13 +177,26 @@ const loadPortfolioBoards = async () => {
   }
   try {
     const response = await apiFetch<PortfolioBoardsResponse>(`/api/shares/${portfolio.id}/cases`, {
-      query: { linksOnly: 'true', previews: 'true' }
+      query: { linksOnly: 'true', previews: 'true', previewLimit: 8 }
     })
     if (activePortfolio.value?.id !== portfolio.id) return
     selectedCases.value = response.data.selectedCases
   } catch {
     selectedCases.value = []
     boardsError.value = true
+  }
+}
+
+const loadBoardPreviewPage = async (boardId: string, offset: number) => {
+  const portfolio = activePortfolio.value
+  if (!portfolio) return []
+  try {
+    const response = await apiFetch<PortfolioBoardPreviewsResponse>(`/api/shares/${portfolio.id}/cases`, {
+      query: { previewCaseId: boardId, previewOffset: offset, previewLimit: 8 }
+    })
+    return activePortfolio.value?.id === portfolio.id ? response.data.previewAssets : []
+  } catch {
+    return []
   }
 }
 
@@ -266,8 +278,7 @@ const saveBoardDetails = async (board: Board & { portfolioTitle: string; portfol
   if (await saveBoards(next, `${title} updated.`)) cancelBoardDetails()
 }
 
-const close = () => { panelVisible.value = false }
-const finishClose = () => navigateTo('/library')
+const close = () => routedPanel.value?.close()
 const openDetails = () => { panelStep.value = 'details' }
 const closeDetails = () => { panelStep.value = 'boards' }
 const refreshDetails = async () => { await refresh() }
@@ -319,8 +330,7 @@ const deleteActiveVersion = async () => {
 
 <template>
   <div class="portfolio-page">
-    <SelectionPanel :visible="panelVisible" label="Portfolio" wide overlay @close="close" @after-leave="finishClose">
-      <div class="asset-filter-controls asset-filter-controls--filters asset-filter-controls--expanded portfolio-controls">
+    <AppRoutedPanelPage ref="routedPanel" label="Portfolio" close-label="Close portfolio" panel-class="portfolio-controls">
         <Transition name="panel-step" mode="out-in">
         <div :key="panelStep" class="filter-sheet-content">
           <template v-if="panelStep === 'boards'">
@@ -373,7 +383,13 @@ const deleteActiveVersion = async () => {
                 <textarea v-model="boardDescriptionDraft" class="portfolio-case-description" rows="1" maxlength="1000" placeholder="Add a short description (optional)" :disabled="busy" @keydown.esc.prevent="cancelBoardDetails" />
               </label>
               <p v-else-if="board.portfolioDescription" class="portfolio-case-description-static">{{ board.portfolioDescription }}</p>
-              <BoardMatchPreviews v-if="board.previewAssets.length" :assets="board.previewAssets" :label="`Assets in ${board.title}`" />
+              <BoardMatchPreviews
+                v-if="board.previewAssets.length"
+                :assets="board.previewAssets"
+                :label="`Assets in ${board.title}`"
+                :total="board.itemCount"
+                :load-more="offset => loadBoardPreviewPage(board.id, offset)"
+              />
               <template #actions>
                 <span class="portfolio-case-count">{{ board.itemCount }} {{ board.itemCount === 1 ? 'asset' : 'assets' }}</span>
                 <template v-if="editingBoardId === board.id">
@@ -469,10 +485,7 @@ const deleteActiveVersion = async () => {
             <button class="panel-primary-action" type="button" :disabled="detailsRef?.busy" @click="detailsRef?.save()">Save details</button>
           </template>
         </AppPanelActions>
-        <button class="filter-sheet-handle" type="button" aria-label="Close portfolio" @click="close"><span /></button>
-      </div>
-      <button class="filter-panel-toggle is-expanded" type="button" aria-label="Close portfolio" aria-expanded="true" @click="close"><Xmark :size="20" :stroke-width="2" aria-hidden="true" /></button>
-    </SelectionPanel>
+    </AppRoutedPanelPage>
     <ShareCollection ref="mainPortfolioCreator" portfolio-only hide-trigger default-portfolio-kind="main" />
     <ShareCollection ref="clientPortfolioCreator" portfolio-only hide-trigger default-portfolio-kind="client" />
     <AppDialog

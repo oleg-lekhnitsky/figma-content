@@ -125,7 +125,7 @@ export const boardPreviewForCollection = async (collection: {
   mode: 'dynamic' | 'static'
   filters: PublicCollectionFilters
   asset_scope?: BoardAssetScope
-}, options: { includePreviews?: boolean; previewLimit?: number | 'all' } = {}) => {
+}, options: { includePreviews?: boolean; previewLimit?: number | 'all'; previewOffset?: number } = {}) => {
   const ids = await assetIdsForCollection({
     ...collection,
     asset_scope: collection.purpose === 'review' ? 'all' : collection.asset_scope
@@ -134,7 +134,9 @@ export const boardPreviewForCollection = async (collection: {
   if (options.includePreviews === false) return { itemCount: ids.length, assetIds: ids, previewAssets: [] }
 
   const previewLimit = options.previewLimit === 'all' ? ids.length : options.previewLimit ?? 4
-  const previewIds: string[] = ids.slice(0, previewLimit)
+  const previewOffset = Math.max(0, options.previewOffset ?? 0)
+  const previewIds: string[] = ids.slice(previewOffset, previewOffset + previewLimit)
+  if (!previewIds.length) return { itemCount: ids.length, assetIds: ids, previewAssets: [] }
   let query = useSupabaseAdmin().from('assets')
     .select('id,title,thumbnail_path,image_path,mime_type,width,height', { count: 'exact' })
     .eq('organization_id', collection.organization_id).in('id', previewIds)

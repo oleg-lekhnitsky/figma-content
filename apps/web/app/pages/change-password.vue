@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { Xmark } from 'reicon-vue'
-
 definePageMeta({ middleware: 'auth' })
 
 interface SessionResponse {
@@ -12,14 +10,8 @@ const currentPassword = ref('')
 const newPassword = ref('')
 const submitting = ref(false)
 const errorMessage = ref('')
-const panelVisible = ref(false)
+const routedPanel = ref<{ close: () => void } | null>(null)
 const canSubmit = computed(() => Boolean(currentPassword.value && newPassword.value.length >= 12))
-let panelOpenFrame = 0
-
-onMounted(() => {
-  panelOpenFrame = requestAnimationFrame(() => { panelVisible.value = true })
-})
-onBeforeUnmount(() => cancelAnimationFrame(panelOpenFrame))
 
 const changePassword = async () => {
   if (!canSubmit.value || submitting.value) return
@@ -31,7 +23,7 @@ const changePassword = async () => {
       body: { currentPassword: currentPassword.value, newPassword: newPassword.value }
     })
     if (session.value?.data.user) session.value.data.user.mustChangePassword = false
-    panelVisible.value = false
+    routedPanel.value?.close()
   } catch {
     errorMessage.value = 'Unable to change the password. Check your temporary password and use at least 12 characters for the new one.'
   } finally {
@@ -39,26 +31,18 @@ const changePassword = async () => {
   }
 }
 
-const close = () => {
-  if (!submitting.value) panelVisible.value = false
-}
-const finishClose = () => navigateTo('/library')
 </script>
 
 <template>
   <main class="change-password-page">
-    <SelectionPanel
-      :visible="panelVisible"
+    <AppRoutedPanelPage
+      ref="routedPanel"
       label="Set a new password"
-      wide
-      overlay
+      close-label="Close password settings"
+      panel-class="password-panel"
       :close-disabled="submitting"
-      @close="close"
-      @after-leave="finishClose"
     >
-      <div class="asset-filter-controls asset-filter-controls--filters asset-filter-controls--expanded password-panel">
-        <button class="filter-sheet-handle" type="button" aria-label="Close password settings" :disabled="submitting" @click="close"><span aria-hidden="true" /></button>
-        <div class="filter-sheet-content">
+      <div class="filter-sheet-content">
           <section class="filter-option-group">
             <h1 class="filter-overlay-title">Set a new password</h1>
             <form class="password-form" @submit.prevent="changePassword">
@@ -90,21 +74,17 @@ const finishClose = () => navigateTo('/library')
             <p class="board-type-summary">12 characters minimum.</p>
           </section>
           <AppStatusToast :message="errorMessage" error />
-        </div>
       </div>
-      <button class="filter-panel-toggle is-expanded" type="button" aria-label="Close password settings" aria-expanded="true" :disabled="submitting" @click="close">
-        <Xmark :size="20" :stroke-width="2" aria-hidden="true" />
-      </button>
-    </SelectionPanel>
+    </AppRoutedPanelPage>
   </main>
 </template>
 
 <style scoped>
 .change-password-page { min-height: 100vh; }
-.password-panel { min-width: min(30rem, calc(100vw - var(--space) * 2)); }
+:global(.password-panel) { min-width: min(30rem, calc(100vw - var(--space) * 2)); }
 .password-form { min-width: 0; display: grid; gap: var(--filter-option-gap); }
 
 @media (max-width: 520px) {
-  .password-panel { min-width: 0; }
+  :global(.password-panel) { min-width: 0; }
 }
 </style>
