@@ -10,6 +10,7 @@ withDefaults(defineProps<{
   disabled?: boolean
   autocomplete?: string
   inputType?: string
+  minLength?: number
   maxLength?: number
 }>(), {
   label: 'Email',
@@ -20,6 +21,7 @@ withDefaults(defineProps<{
   disabled: false,
   autocomplete: 'email',
   inputType: 'email',
+  minLength: 0,
   maxLength: 0
 })
 
@@ -53,6 +55,7 @@ defineExpose({ focus })
         required
         :type="inputType"
         :autocomplete="autocomplete"
+        :minlength="minLength || undefined"
         :maxlength="maxLength || undefined"
         :placeholder="placeholder"
         :value="modelValue"

@@ -715,7 +715,7 @@ const deleteWorkspace = async () => {
   color: var(--filter-overlay-muted-color);
   font-size: var(--font-size-label);
   line-height: 1.25;
-  padding: 0 calc(var(--filter-option-padding) / 2) ;
+  padding: 0 calc(var(--filter-option-padding) / 1) ;
 }
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
 

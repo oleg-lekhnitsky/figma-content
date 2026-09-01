@@ -1,20 +1,110 @@
 <script setup lang="ts">
+import { Xmark } from 'reicon-vue'
+
 definePageMeta({ middleware: 'auth' })
+
+interface SessionResponse {
+  data: { authenticated: boolean; user?: { mustChangePassword?: boolean } }
+}
+
+const { data: session } = useNuxtData<SessionResponse>('auth-session')
 const currentPassword = ref('')
 const newPassword = ref('')
 const submitting = ref(false)
 const errorMessage = ref('')
+const panelVisible = ref(false)
+const canSubmit = computed(() => Boolean(currentPassword.value && newPassword.value.length >= 12))
+let panelOpenFrame = 0
+
+onMounted(() => {
+  panelOpenFrame = requestAnimationFrame(() => { panelVisible.value = true })
+})
+onBeforeUnmount(() => cancelAnimationFrame(panelOpenFrame))
+
 const changePassword = async () => {
+  if (!canSubmit.value || submitting.value) return
   submitting.value = true
   errorMessage.value = ''
   try {
-    await $fetch('/api/auth/password/change', { method: 'POST', body: { currentPassword: currentPassword.value, newPassword: newPassword.value } })
-    await navigateTo('/library', { replace: true })
-  } catch { errorMessage.value = 'Unable to change the password. Check your current password and use at least 12 characters for the new one.' }
-  finally { submitting.value = false }
+    await $fetch('/api/auth/password/change', {
+      method: 'POST',
+      body: { currentPassword: currentPassword.value, newPassword: newPassword.value }
+    })
+    if (session.value?.data.user) session.value.data.user.mustChangePassword = false
+    panelVisible.value = false
+  } catch {
+    errorMessage.value = 'Unable to change the password. Check your temporary password and use at least 12 characters for the new one.'
+  } finally {
+    submitting.value = false
+  }
 }
+
+const close = () => {
+  if (!submitting.value) panelVisible.value = false
+}
+const finishClose = () => navigateTo('/library')
 </script>
 
-<template><main class="page-shell"><section class="message-panel" aria-labelledby="password-title"><h1 id="password-title" class="display-title">Choose a new<br>password.</h1><p class="muted">Replace the temporary password before opening the library.</p><form @submit.prevent="changePassword"><label for="current-password">Temporary password</label><input id="current-password" v-model="currentPassword" type="password" name="currentPassword" autocomplete="current-password" required><label for="new-password">New password</label><input id="new-password" v-model="newPassword" type="password" name="newPassword" autocomplete="new-password" minlength="12" maxlength="128" required><small>Use at least 12 characters.</small><button type="submit" :disabled="submitting">{{ submitting ? 'Saving password…' : 'Save password' }}</button></form><p class="form-error" role="alert">{{ errorMessage }}</p></section></main></template>
+<template>
+  <main class="change-password-page">
+    <SelectionPanel
+      :visible="panelVisible"
+      label="Set a new password"
+      wide
+      overlay
+      :close-disabled="submitting"
+      @close="close"
+      @after-leave="finishClose"
+    >
+      <div class="asset-filter-controls asset-filter-controls--filters asset-filter-controls--expanded password-panel">
+        <button class="filter-sheet-handle" type="button" aria-label="Close password settings" :disabled="submitting" @click="close"><span aria-hidden="true" /></button>
+        <div class="filter-sheet-content">
+          <section class="filter-option-group">
+            <h1 class="filter-overlay-title">Set a new password</h1>
+            <form class="password-form" @submit.prevent="changePassword">
+              <AppInlineActionField
+                v-model="currentPassword"
+                label="Temporary password"
+                placeholder="Current temporary password"
+                action-label="Continue"
+                input-type="password"
+                autocomplete="current-password"
+                :max-length="128"
+                :disabled="submitting"
+              />
+              <AppInlineActionField
+                v-model="newPassword"
+                label="New password"
+                placeholder="New password"
+                action-label="Save"
+                busy-label="Saving…"
+                input-type="password"
+                autocomplete="new-password"
+                :min-length="12"
+                :max-length="128"
+                :show-action="canSubmit || submitting"
+                :busy="submitting"
+                :disabled="submitting"
+              />
+            </form>
+            <p class="board-type-summary">12 characters minimum.</p>
+          </section>
+          <AppStatusToast :message="errorMessage" error />
+        </div>
+      </div>
+      <button class="filter-panel-toggle is-expanded" type="button" aria-label="Close password settings" aria-expanded="true" :disabled="submitting" @click="close">
+        <Xmark :size="20" :stroke-width="2" aria-hidden="true" />
+      </button>
+    </SelectionPanel>
+  </main>
+</template>
 
-<style scoped>.message-panel form{display:grid;gap:8px;margin-top:var(--space)}label{margin-top:8px;color:var(--color-muted);font-size:12px}input{box-sizing:border-box;width:100%;min-height:44px;padding:0 8px;border:0;border-bottom:1px solid var(--color-line);border-radius:0;color:inherit;background:transparent;font:inherit}small{color:var(--color-muted)}button{justify-self:start;margin-top:8px}.form-error{min-height:1.25rem;color:#a20f0f}:is(button):focus-visible{outline:2px solid #06f90e;outline-offset:2px}</style>
+<style scoped>
+.change-password-page { min-height: 100vh; }
+.password-panel { min-width: min(30rem, calc(100vw - var(--space) * 2)); }
+.password-form { min-width: 0; display: grid; gap: var(--filter-option-gap); }
+
+@media (max-width: 520px) {
+  .password-panel { min-width: 0; }
+}
+</style>

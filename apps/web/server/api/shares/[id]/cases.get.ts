@@ -9,6 +9,7 @@ export default defineEventHandler(async (event) => {
   const session = await requireAuth(event)
   const requestQuery = getQuery(event)
   const includePreviews = requestQuery.previews !== 'false'
+  const includeLinkedPreviews = requestQuery.previews === 'true'
   const linksOnly = requestQuery.linksOnly === 'true'
   const id = getRouterParam(event, 'id') ?? ''
   const { collection } = await requireBoardRole(id, session.user.organization_id, session.user.id, ['owner', 'editor', 'viewer'], session.user.role)
@@ -23,7 +24,23 @@ export default defineEventHandler(async (event) => {
     title: link.display_title,
     description: link.description
   }))
-  if (linksOnly) return { data: { selectedIds, selectedCases: selectedCaseDetails } }
+  if (linksOnly) {
+    if (!includeLinkedPreviews || !selectedIds.length) return { data: { selectedIds, selectedCases: selectedCaseDetails } }
+    const { data: selectedCases, error: selectedCasesError } = await db.from('public_collections')
+      .select('id,title,purpose,mode,filters,asset_scope,organization_id')
+      .eq('organization_id', session.user.organization_id)
+      .in('id', selectedIds)
+    if (selectedCasesError) throw databaseError('load portfolio case previews', selectedCasesError)
+    const details = new Map<string, { caseId: string; title: string | null; description: string | null }>(selectedCaseDetails.map((item: { caseId: string; title: string | null; description: string | null }) => [item.caseId, item]))
+    const order = new Map<string, number>(selectedIds.map((caseId: string, index: number) => [caseId, index]))
+    const enriched = await Promise.all(selectedCases.map(async (item: { id:string; title:string; purpose:'showcase'|'review'|'case'; mode:'dynamic'|'static'; filters:unknown; asset_scope:'approved'|'all'; organization_id:string }) => ({
+      caseId: item.id,
+      ...details.get(item.id),
+      ...await boardPreviewForCollection({ ...item, filters: publicCollectionFiltersSchema.parse(item.filters) }, { includePreviews: true, previewLimit: 'all' })
+    })))
+    enriched.sort((first, second) => (order.get(first.caseId) ?? Number.MAX_SAFE_INTEGER) - (order.get(second.caseId) ?? Number.MAX_SAFE_INTEGER))
+    return { data: { selectedIds, selectedCases: enriched } }
+  }
 
   const { data: cases, error } = await db.from('public_collections')
     .select('id,title,purpose,mode,filters,asset_scope,organization_id')

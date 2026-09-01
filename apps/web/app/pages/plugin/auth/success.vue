@@ -56,7 +56,7 @@ const copyCode = async () => {
   margin: 0;
   font-size: var(--filter-title-size);
   font-weight: 500;
-  letter-spacing: -.04em;
+  letter-spacing: var(--letter-spacing-heading);
   line-height: 1;
 }
 

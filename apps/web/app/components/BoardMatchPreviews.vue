@@ -1,5 +1,5 @@
 <script setup lang="ts">
-defineProps<{
+withDefaults(defineProps<{
   assets: Array<{
     id: string
     title: string
@@ -9,11 +9,15 @@ defineProps<{
     height: number
   }>
   loading?: boolean
-}>()
+  label?: string
+}>(), {
+  loading: false,
+  label: 'Asset previews'
+})
 </script>
 
 <template>
-  <div class="board-match-previews" :class="{ 'is-empty': !loading && !assets.length }" role="region" aria-label="Matching asset previews" :aria-busy="loading" :tabindex="assets.length ? 0 : -1">
+  <div class="board-match-previews" :class="{ 'is-empty': !loading && !assets.length }" role="region" :aria-label="label" :aria-busy="loading" :tabindex="assets.length ? 0 : -1">
     <span v-for="asset in assets" :key="asset.id" class="board-match-preview">
       <AssetMedia :src="asset.previewUrl" :mime-type="asset.mime_type ?? ''" :width="asset.width" :height="asset.height" :alt="asset.title" loading="lazy" />
     </span>

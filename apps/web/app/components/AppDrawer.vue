@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { createAppDrawerScrollLock } from '~/utils/app-drawer-scroll-lock'
+import { lockAppDrawerBackground, unlockAppDrawerBackground } from '~/utils/app-drawer-inert'
 
 const props = withDefaults(defineProps<{
   open: boolean
@@ -32,8 +33,7 @@ const pageScrollLock = createAppDrawerScrollLock()
 const drawerExitDuration = 120
 let returnFocusTo: HTMLElement | null = null
 let closeTimer: ReturnType<typeof setTimeout> | undefined
-let appRoot: HTMLElement | null = null
-let appRootWasInert = false
+let backgroundInertLocked = false
 
 const sheetContent = () => drawerRoot.value?.querySelector<HTMLElement>('.asset-filter-controls, .video-mobile-panel') ?? null
 
@@ -42,15 +42,13 @@ const updateSheetHeight = () => {
 }
 
 const setBackgroundInert = (inert: boolean) => {
+  if (inert === backgroundInertLocked) return
+  backgroundInertLocked = inert
   if (inert) {
-    appRoot = document.getElementById('__nuxt')
-    if (!appRoot) return
-    appRootWasInert = appRoot.inert
-    appRoot.inert = true
+    lockAppDrawerBackground()
     return
   }
-  if (appRoot) appRoot.inert = appRootWasInert
-  appRoot = null
+  unlockAppDrawerBackground()
 }
 
 const resetGesture = () => {

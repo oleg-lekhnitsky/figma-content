@@ -755,8 +755,7 @@ const showAllAssets = () => {
   color: var(--video-text-muted);
   font-size: var(--video-type-caption);
   font-weight: var(--video-weight-strong);
-  text-transform: uppercase;
-  letter-spacing: .08em;
+  letter-spacing: var(--letter-spacing-label);
   opacity: 1
 }
 
@@ -776,7 +775,7 @@ const showAllAssets = () => {
   margin: 0;
   font-size: var(--filter-title-size);
   font-weight: 500;
-  letter-spacing: -.04em;
+  letter-spacing: var(--letter-spacing-heading);
   line-height: 1;
   text-align: left
 }

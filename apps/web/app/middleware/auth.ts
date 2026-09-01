@@ -5,7 +5,7 @@ type AuthSessionResponse = {
   }
 }
 
-export default defineNuxtRouteMiddleware(async (to) => {
+export default defineNuxtRouteMiddleware(async () => {
   if (import.meta.server) {
     const productionSession = useCookie('__Host-content_library_session')
     const developmentSession = useCookie('content_library_session')
@@ -16,14 +16,12 @@ export default defineNuxtRouteMiddleware(async (to) => {
   const nuxtApp = useNuxtApp()
   const { data: session } = useNuxtData<AuthSessionResponse>('auth-session')
   if (session.value?.data.authenticated) {
-    if (session.value.data.user?.mustChangePassword && to.path !== '/change-password') return navigateTo('/change-password')
     return
   }
   const sessionRequest = $fetch<AuthSessionResponse>('/api/auth/session').catch(() => undefined)
   const finishValidation = async () => {
     session.value = await sessionRequest
     if (!session.value?.data.authenticated) return navigateTo('/login')
-    if (session.value.data.user?.mustChangePassword && to.path !== '/change-password') return navigateTo('/change-password')
   }
 
   // On the initial client pass, mutating keyed data before Vue mounts makes the

@@ -23,7 +23,7 @@ withDefaults(defineProps<{
   position: fixed;
   z-index: 2;
   left: 50%;
-  bottom: max(1rem, env(safe-area-inset-bottom));
+  bottom: max(var(--space), env(safe-area-inset-bottom));
   width: max-content;
   max-width: calc(100vw - 2rem);
   margin: 0;

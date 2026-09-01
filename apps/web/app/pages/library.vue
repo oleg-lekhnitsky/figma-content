@@ -404,9 +404,15 @@ const hydrateDynamicBoardFilters = (board: BoardSummary | null | undefined) => {
 const defaultBoardView: BoardViewSettings = { showText: true, radius: 'small', gap: 'default', columns: 'auto' }
 const libraryViewStorageKey = 'content-library:view-settings'
 const libraryView = ref<BoardViewSettings>({ ...defaultBoardView })
+const viewToastMessage = ref('')
+let viewToastTimer: ReturnType<typeof setTimeout> | undefined
 const setLibraryView = (next: BoardViewSettings) => {
+  if (Object.entries(next).every(([key, value]) => libraryView.value[key as keyof BoardViewSettings] === value)) return
   libraryView.value = { ...next }
   if (import.meta.client) localStorage.setItem(libraryViewStorageKey, JSON.stringify(next))
+  viewToastMessage.value = 'View updated.'
+  clearTimeout(viewToastTimer)
+  viewToastTimer = setTimeout(() => { viewToastMessage.value = '' }, 2500)
 }
 const mediaResourceKey = (value: string | null | undefined) => {
   if (!value) return ''
@@ -898,6 +904,17 @@ const currentBoardFilters = computed(() => ({
 }))
 const hasFilters = computed(() => Boolean(search.value || status.value || projectIds.value.length || tagIds.value.length || uploadedBys.value.length || dateRange.value !== 'all'))
 const activeFilterCount = computed(() => [status.value, projectIds.value.length, tagIds.value.length, uploadedBys.value.length, dateRange.value !== 'all'].filter(Boolean).length)
+const filterSelectionKey = computed(() => [status.value, projectIds.value.join(','), tagIds.value.join(','), uploadedBys.value.join(','), dateRange.value, customDateFrom.value, customDateTo.value].join('|'))
+const filterToastMessage = ref('')
+const filterToastError = ref(false)
+let filterToastTimer: ReturnType<typeof setTimeout> | undefined
+let filterConfirmationPending = false
+watch(filterSelectionKey, () => {
+  filterConfirmationPending = true
+  filterToastMessage.value = ''
+  filterToastError.value = false
+  clearTimeout(filterToastTimer)
+})
 const clearFilters = () => {
   search.value = ''
   status.value = ''
@@ -1052,6 +1069,22 @@ const loadingNextPage = ref(false)
 let loadMoreObserver: IntersectionObserver | undefined
 let liveRefreshTimer: ReturnType<typeof setTimeout> | undefined
 let assetEvents: EventSource | undefined
+const libraryPageActive = ref(true)
+const openAssetEvents = () => {
+  if (assetEvents) return
+  assetEvents = new EventSource('/api/live/assets')
+  assetEvents.addEventListener('assets-changed', () => {
+    clearTimeout(liveRefreshTimer)
+    liveRefreshTimer = setTimeout(() => {
+      if (selectedBoardId.value) void refreshSelectedBoard()
+      else void refresh()
+    }, 400)
+  })
+}
+const closeAssetEvents = () => {
+  assetEvents?.close()
+  assetEvents = undefined
+}
 const refreshedMediaUrl = (value: string | null | undefined) => {
   if (!value || !assetMediaRefreshKey) return value
   try {
@@ -1101,6 +1134,18 @@ const toggleSubmitter = (submitterId: string) => {
     : [...uploadedBys.value, submitterId]
 }
 const total = computed(() => data.value?.data.total ?? 0)
+watch(loadStatus, (status) => {
+  if (!filterConfirmationPending || (status !== 'success' && status !== 'error')) return
+  filterConfirmationPending = false
+  filterToastError.value = status === 'error'
+  filterToastMessage.value = status === 'error'
+    ? 'Unable to apply filters.'
+    : hasFilters.value
+      ? `Filters applied · ${total.value} ${total.value === 1 ? 'asset' : 'assets'}`
+      : `Filters cleared · ${total.value} ${total.value === 1 ? 'asset' : 'assets'}`
+  clearTimeout(filterToastTimer)
+  filterToastTimer = setTimeout(() => { filterToastMessage.value = '' }, 2500)
+})
 const canLoadMore = computed(() => !selectedBoardId.value && loadStatus.value !== 'pending' && assets.value.length < total.value)
 const loadNextPage = () => {
   if (!canLoadMore.value || loadingNextPage.value) return
@@ -1334,23 +1379,27 @@ onMounted(() => {
     if (entries.some(entry => entry.isIntersecting)) loadNextPage()
   }, { rootMargin: '800px 0px' })
   if (loadMoreSentinel.value) loadMoreObserver.observe(loadMoreSentinel.value)
-  assetEvents = new EventSource('/api/live/assets')
-  assetEvents.addEventListener('assets-changed', () => {
-    clearTimeout(liveRefreshTimer)
-    liveRefreshTimer = setTimeout(() => {
-      if (selectedBoardId.value) void refreshSelectedBoard()
-      else void refresh()
-    }, 400)
-  })
+  openAssetEvents()
   window.addEventListener('focus', refreshWhenVisible)
   document.addEventListener('visibilitychange', refreshWhenVisible)
 })
+onBeforeRouteLeave(() => {
+  libraryPageActive.value = false
+  closeAssetEvents()
+})
+onActivated(() => {
+  libraryPageActive.value = true
+  openAssetEvents()
+})
+onDeactivated(closeAssetEvents)
 onBeforeUnmount(() => {
   clearTimeout(liveRefreshTimer)
+  clearTimeout(filterToastTimer)
+  clearTimeout(viewToastTimer)
   clearTimeout(dynamicBoardSaveTimer)
   clearTimeout(suppressBoardSwipeClickTimer)
   flushArrangeSave()
-  assetEvents?.close()
+  closeAssetEvents()
   loadMoreObserver?.disconnect()
   cancelAnimationFrame(appContentReadyFrame)
   cancelAnimationFrame(scrollFrame)
@@ -1382,14 +1431,14 @@ onBeforeUnmount(() => {
             <Plus :size="20" aria-hidden="true" />
           </button>
           <NuxtLink class="button-secondary header-direct-action" to="/portfolio">Portfolio</NuxtLink>
-          <ShareCollection ref="boardCreator" hide-trigger :current-filters="currentBoardFilters"
+          <ShareCollection v-if="libraryPageActive" ref="boardCreator" hide-trigger :current-filters="currentBoardFilters"
             @created="handleBoardCreated" @open-change="setBoardCreatorExpanded" />
           <NuxtLink v-if="!isAdmin && canManageProjects" class="button-secondary header-direct-action" to="/admin/projects">Projects</NuxtLink>
           <AccountMenu
-            v-if="session?.data.user" ref="accountMenu" class="header-direct-action"
+            v-if="libraryPageActive && session?.data.user" ref="accountMenu" class="header-direct-action"
             :email="session.data.user.email" :figma-handle="session.data.user.figmaHandle"
             :avatar-url="session.data.user.avatarUrl" :role="session.data.user.role" :has-password="session.data.user.hasPassword" />
-          <AppDropdownMenu v-model:open="headerActionsOpen" class="mobile-header-overflow" align="end">
+          <AppDropdownMenu v-if="libraryPageActive" v-model:open="headerActionsOpen" class="mobile-header-overflow" align="end">
             <template #trigger="{ triggerProps }">
               <button v-bind="triggerProps" class="button-secondary button-icon mobile-header-more" type="button"
                 aria-label="More library actions">
@@ -1419,16 +1468,17 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <SelectionPanel :visible="viewExpanded" label="Library view" wide overlay raised
+      <SelectionPanel :visible="libraryPageActive && viewExpanded" label="Library view" wide overlay raised
         @close="closeView" @after-leave="finishExpandedPanelClose">
         <BoardViewControls :model-value="libraryView" @update:model-value="setLibraryView" />
+        <AppStatusToast :message="viewToastMessage" />
         <button class="filter-panel-toggle is-expanded" type="button" aria-label="Hide view settings"
           aria-expanded="true" @click="closeView">
           <Xmark :size="20" :stroke-width="2" aria-hidden="true" />
         </button>
       </SelectionPanel>
 
-      <SelectionPanel :visible="Boolean(selectedBoard && videoExpanded)" label="Create video" wide overlay raised
+      <SelectionPanel :visible="Boolean(libraryPageActive && selectedBoard && videoExpanded)" label="Create video" wide overlay raised
         @close="closeVideo" @after-leave="finishExpandedPanelClose">
         <LazyBoardVideoComposer v-if="selectedBoard && videoExpanded" :assets="videoAssets" :board-title="selectedBoard.title" @close="closeVideo" />
         <button class="filter-panel-toggle is-expanded" type="button" aria-label="Close video creator"
@@ -1437,7 +1487,7 @@ onBeforeUnmount(() => {
         </button>
       </SelectionPanel>
 
-      <SelectionPanel :visible="Boolean(selectedBoard && boardSettingsExpanded)" label="Board settings" wide overlay
+      <SelectionPanel :visible="Boolean(libraryPageActive && selectedBoard && boardSettingsExpanded)" label="Board settings" wide overlay
         raised @close="closeBoardSettings" @after-leave="finishExpandedPanelClose">
         <BoardSettingsControls v-if="selectedBoard" :title="selectedBoard.title" :board-id="selectedBoard.id" :purpose="selectedBoard.purpose"
           :portfolio-kind="selectedBoard.portfolio_kind" :portfolio-client="selectedBoard.portfolio_client"
@@ -1467,7 +1517,7 @@ onBeforeUnmount(() => {
 
       <BoardPopulateControls
         v-if="selectedStaticBoard"
-        :visible="boardPopulateExpanded"
+        :visible="libraryPageActive && boardPopulateExpanded"
         :board-id="selectedStaticBoard.id"
         :board-title="selectedStaticBoard.title"
         :projects="projects"
@@ -1481,7 +1531,7 @@ onBeforeUnmount(() => {
       />
 
       <template v-if="!selectedBoardId">
-        <SelectionPanel :visible="filtersExpanded" label="Asset filters" wide overlay raised
+        <SelectionPanel :visible="libraryPageActive && filtersExpanded" label="Asset filters" wide overlay raised
           @close="closeFilters" @after-leave="finishExpandedPanelClose">
           <AssetFilterControls v-model:status="status" v-model:project-ids="projectIds" v-model:tag-ids="tagIds"
             v-model:date-range="dateRange" v-model:date-from="customDateFrom" v-model:date-to="customDateTo"
@@ -1490,26 +1540,29 @@ onBeforeUnmount(() => {
             <template #actions><button class="panel-secondary-action" type="button" @click="clearFilters">Clear
                 filters</button><button v-if="canShare" class="filter-create-board" type="button"
                 @click="openBoardCreator(true)">Create smart board</button></template>
-            <section v-if="submitters.length" class="filter-option-group submitter-filter-group">
-              <h2 class="filter-overlay-title" id="asset-filter-submitters">Submitters</h2>
-              <div class="submitter-stack" role="group" aria-labelledby="asset-filter-submitters"><button
-                  v-for="submitter in visibleSubmitters" :key="submitter.id" class="submitter-avatar" type="button"
-                  :aria-label="`Filter by ${submitterName(submitter)}`" :aria-pressed="uploadedBys.includes(submitter.id)"
-                  :title="submitterName(submitter)" @click="toggleSubmitter(submitter.id)"><img
-                    v-if="submitter.avatar_url" :src="submitter.avatar_url" alt=""><span v-else aria-hidden="true">{{
-                      submitterInitial(submitter)
-                    }}</span></button><span v-if="submitters.length > visibleSubmitters.length" class="submitter-more"
-                  :title="`${submitters.length - visibleSubmitters.length} more submitters`">+{{
-                    submitters.length -visibleSubmitters.length }}</span></div>
-            </section>
+            <template #after-tags>
+              <section v-if="submitters.length" class="filter-option-group submitter-filter-group">
+                <h2 id="asset-filter-submitters" class="filter-overlay-title">Submitters</h2>
+                <div class="submitter-stack" role="group" aria-labelledby="asset-filter-submitters"><button
+                    v-for="submitter in visibleSubmitters" :key="submitter.id" class="submitter-avatar" type="button"
+                    :aria-label="`Filter by ${submitterName(submitter)}`" :aria-pressed="uploadedBys.includes(submitter.id)"
+                    :title="submitterName(submitter)" @click="toggleSubmitter(submitter.id)"><img
+                      v-if="submitter.avatar_url" :src="submitter.avatar_url" alt=""><span v-else aria-hidden="true">{{
+                        submitterInitial(submitter)
+                      }}</span></button><span v-if="submitters.length > visibleSubmitters.length" class="submitter-more"
+                    :title="`${submitters.length - visibleSubmitters.length} more submitters`">+{{
+                      submitters.length -visibleSubmitters.length }}</span></div>
+              </section>
+            </template>
           </AssetFilterControls>
+          <AppStatusToast :message="filterToastMessage" :error="filterToastError" />
           <button class="filter-panel-toggle is-expanded" type="button" aria-label="Hide filters" aria-expanded="true"
             @click="closeFilters">
             <Xmark :size="20" :stroke-width="2" aria-hidden="true" />
           </button>
         </SelectionPanel>
         <SelectionPanel
-          :visible="compactFiltersVisible && !filtersExpanded && !viewExpanded && !videoExpanded && !boardSettingsExpanded && !boardPopulateExpanded && !boardCreatorExpanded"
+          :visible="libraryPageActive && compactFiltersVisible && !filtersExpanded && !viewExpanded && !videoExpanded && !boardSettingsExpanded && !boardPopulateExpanded && !boardCreatorExpanded"
           :scroll-hidden="!toolbarVisible && !searchExpanded" label="Asset filters" bare raised>
           <div class="mobile-control-blur compact-search-placeholder"
             :class="{ 'is-search-hidden': searchExpanded }" :aria-hidden="searchExpanded || undefined"
@@ -1667,22 +1720,24 @@ onBeforeUnmount(() => {
       </div>
     </main>
     <AppDialog
+      v-if="libraryPageActive"
       v-model:open="deleteBoardDialogOpen" :title="`Delete “${selectedBoard?.title ?? 'board'}”?`"
       description="This permanently deletes the board, removes member access, and disables its public link. This action cannot be undone."
       :confirm-label="boardSettingsBusy ? 'Deleting board…' : 'Delete board'" :busy="boardSettingsBusy"
       :error="boardSettingsFeedback.error ? boardSettingsFeedback.text : ''" @confirm="deleteSelectedBoard" />
     <AppDialog
+      v-if="libraryPageActive"
       v-model:open="removeArrangeDialogOpen"
       :title="`Remove ${arrangeSelectedIds.length} ${arrangeSelectedIds.length === 1 ? 'item' : 'items'}?`"
       :description="`Remove the selected ${arrangeSelectedIds.length === 1 ? 'item' : 'items'} from ${selectedBoard?.title ?? 'this board'}? The assets will remain in the library.`"
       :confirm-label="arrangeRemoving ? 'Removing…' : 'Remove from board'" :busy="arrangeRemoving"
       @confirm="removeArrangeSelection" />
-    <AssetOverlay v-if="selectedAssetId" :asset-id="selectedAssetId" :asset-ids="displayedAssets.map(asset => asset.id)"
+    <AssetOverlay v-if="libraryPageActive && selectedAssetId" :asset-id="selectedAssetId" :asset-ids="displayedAssets.map(asset => asset.id)"
       :boards="collections"
       :preview-url="selectedAssetPreviewUrl" :preview-urls="assetPreviewUrls" :mime-types="assetMimeTypes" @close="closeAsset"
       @deleted="handleAssetDeleted" @navigate="navigateAsset" @renamed="handleAssetRenamed" @added-to-board="handleAssetAddedToBoard"
       @refresh-boards="refreshBoards" />
-    <AssetBoardPicker v-if="boardPickerAsset" :visible="boardPickerVisible" :asset-id="boardPickerAsset.id"
+    <AssetBoardPicker v-if="libraryPageActive && boardPickerAsset" :visible="boardPickerVisible" :asset-id="boardPickerAsset.id"
       :asset-owner-id="boardPickerAsset.uploaded_by" :current-user-id="session?.data.user?.id" :boards="collections"
       @close="closeAssetBoardPicker" @after-leave="finishAssetBoardPickerClose" @create-board="createBoardFromAssetPicker"
       @added-to-board="handleAssetAddedToBoard" />
@@ -1699,7 +1754,7 @@ onBeforeUnmount(() => {
   background: var(--color-bg);
   font-size: 16px;
   font-weight: 700;
-  letter-spacing: -.015em;
+  letter-spacing: var(--letter-spacing-body);
   line-height: 1.15
 }
 
@@ -2198,7 +2253,7 @@ button {
   margin: 0;
   font-size: clamp(2rem, 4vw, 4rem);
   font-weight: 700;
-  letter-spacing: -.045em;
+  letter-spacing: var(--letter-spacing-display);
   line-height: 1;
   overflow-wrap: anywhere
 }
@@ -2278,7 +2333,7 @@ button {
   color: var(--color-muted);
   font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0;
+  letter-spacing: var(--letter-spacing-label);
   opacity: 1;
   transform: translateY(0);
   transition: opacity .18s ease-out, transform .22s cubic-bezier(.2, 0, 0, 1)

@@ -642,7 +642,7 @@ ul {
   background: var(--color-surface);
   cursor: pointer;
   list-style: none;
-  letter-spacing: .08em;
+  letter-spacing: var(--letter-spacing-overline);
 }
 
 .action-menu summary::-webkit-details-marker {
@@ -728,7 +728,7 @@ ul {
 .board-info>div>strong {
   font-size: clamp(18px, 1.25vw, 22px);
   line-height: 1.05;
-  letter-spacing: -.035em;
+  letter-spacing: var(--letter-spacing-heading);
 }
 
 .board-title textarea {

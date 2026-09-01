@@ -74,7 +74,7 @@ onMounted(async () => {
 .oauth-copy h1 {
   font-size: var(--filter-title-size);
   font-weight: 500;
-  letter-spacing: -0.04em;
+  letter-spacing: var(--letter-spacing-heading);
   line-height: 1;
 }
 

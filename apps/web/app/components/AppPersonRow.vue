@@ -197,7 +197,7 @@ const emit = defineEmits<{
   background: var(--filter-overlay-primary-background);
   font-size: .625rem;
   font-weight: 500;
-  letter-spacing: .01em;
+  letter-spacing: var(--letter-spacing-caption);
   line-height: 1;
 }
 

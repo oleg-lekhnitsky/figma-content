@@ -200,11 +200,7 @@ const auditMeta = (log: AuditLog) => {
       @after-leave="finishClose"
     >
       <template v-if="activeSection === 'projects'">
-        <section class="filter-option-group projects-heading" aria-labelledby="projects-title">
-          <div class="projects-title-row">
-            <h1 id="projects-title" class="filter-overlay-title">Projects</h1>
-            <span>{{ activeProjectCount }} active</span>
-          </div>
+        <section class="filter-option-group projects-heading" aria-label="Create project">
           <form @submit.prevent="createProject">
             <AppInlineActionField
               v-model="name"
@@ -223,7 +219,10 @@ const auditMeta = (log: AuditLog) => {
         </section>
 
         <section class="filter-option-group" aria-labelledby="projects-list-title">
-          <h2 id="projects-list-title" class="sr-only">Projects</h2>
+          <div class="projects-title-row">
+            <h1 id="projects-list-title" class="filter-overlay-title">Projects</h1>
+            <span>{{ activeProjectCount }} active</span>
+          </div>
           <p v-if="projectsStatus === 'pending' && !projects.length" class="board-type-summary">Loading projects…</p>
           <div v-else class="project-list">
             <AppPanelRow
@@ -295,6 +294,8 @@ const auditMeta = (log: AuditLog) => {
   font-size: var(--filter-action-font-size);
   font-weight: 500;
 }
+
+.projects-title-row > span { padding: 0 calc(var(--filter-option-padding) / 1); }
 
 .project-list,
 .audit-list {

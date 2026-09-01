@@ -125,7 +125,7 @@ export const boardPreviewForCollection = async (collection: {
   mode: 'dynamic' | 'static'
   filters: PublicCollectionFilters
   asset_scope?: BoardAssetScope
-}, options: { includePreviews?: boolean } = {}) => {
+}, options: { includePreviews?: boolean; previewLimit?: number | 'all' } = {}) => {
   const ids = await assetIdsForCollection({
     ...collection,
     asset_scope: collection.purpose === 'review' ? 'all' : collection.asset_scope
@@ -133,14 +133,15 @@ export const boardPreviewForCollection = async (collection: {
   if (!ids.length) return { itemCount: 0, assetIds: [], previewAssets: [] }
   if (options.includePreviews === false) return { itemCount: ids.length, assetIds: ids, previewAssets: [] }
 
-  const previewIds: string[] = ids.slice(0, 4)
+  const previewLimit = options.previewLimit === 'all' ? ids.length : options.previewLimit ?? 4
+  const previewIds: string[] = ids.slice(0, previewLimit)
   let query = useSupabaseAdmin().from('assets')
     .select('id,title,thumbnail_path,image_path,mime_type,width,height', { count: 'exact' })
     .eq('organization_id', collection.organization_id).in('id', previewIds)
   query = collection.purpose === 'review' || collection.asset_scope === 'all'
     ? query.neq('status', 'archived')
     : query.eq('status', 'approved')
-  const { data, count, error } = await query.order('created_at', { ascending: false }).limit(4)
+  const { data, count, error } = await query.order('created_at', { ascending: false }).limit(previewIds.length)
   if (error) throw databaseError('load board preview assets', error)
   const previewAssets = await Promise.all(data.map(async (asset: { id: string; title: string; thumbnail_path: string | null; image_path: string; mime_type: string; width: number; height: number }) => ({
     id: asset.id,
