@@ -1,18 +1,22 @@
 <script setup lang="ts">
-import type { BoardLayout } from '@content-library/shared'
+import type { BoardAssetScope, BoardLayout } from '@content-library/shared'
 import { ArrowUpRight, Copy } from 'reicon-vue'
 import { boardLayoutOptions } from '../utils/board-layouts'
 
 interface FilterOption { id: string; name: string }
-interface FilterSubmitter { id: string; figma_handle: string | null }
+interface FilterSubmitter { id: string; figma_handle: string | null; avatar_url: string | null }
+interface MatchPreview { id: string; title: string; previewUrl: string; mime_type?: string | null; width: number; height: number }
 
 const props = defineProps<{
   title: string
+  boardId: string
   purpose: 'showcase' | 'review' | 'portfolio' | 'case'
   portfolioKind?: 'main' | 'client' | null
   portfolioClient?: string | null
   mode: 'dynamic' | 'static'
+  assetScope: BoardAssetScope
   projectBacked?: boolean
+  editFiltersOnOpen?: boolean
   layout: BoardLayout
   publicationEnabled: boolean
   canEdit?: boolean
@@ -23,7 +27,7 @@ const props = defineProps<{
   filterSearch: string
   filterProjectIds: string[]
   filterTagIds: string[]
-  filterUploadedBy: string | null
+  filterUploadedBys: string[]
   filterDateFrom: string
   filterDateTo: string
   projects: FilterOption[]
@@ -63,14 +67,17 @@ watch(availableWorkspaceMembers, members => {
 const setMemberRole = (role: string) => { memberRole.value = role as BoardMemberRole }
 const memberName = (member: typeof props.members[number]) => member.allowed_users?.email ?? member.allowed_users?.figma_handle ?? 'Workspace member'
 const memberInitial = (member: typeof props.members[number]) => memberName(member).trim().charAt(0).toLocaleUpperCase() || '?'
+const submitterName = (submitter: FilterSubmitter) => submitter.figma_handle || 'Unknown submitter'
+const submitterInitial = (submitter: FilterSubmitter) => submitterName(submitter).trim().charAt(0).toLocaleUpperCase() || '?'
 const addingMember = ref(false)
 const emit = defineEmits<{
   setPublication: [enabled: boolean]
   setLayout: [layout: BoardLayout]
+  setAssetScope: [scope: BoardAssetScope]
   'update:filterSearch': [value: string]
   'update:filterProjectIds': [value: string[]]
   'update:filterTagIds': [value: string[]]
-  'update:filterUploadedBy': [value: string | null]
+  'update:filterUploadedBys': [value: string[]]
   'update:filterDateFrom': [value: string]
   'update:filterDateTo': [value: string]
   copyLink: []
@@ -93,38 +100,111 @@ const toggleFilterOption = (values: string[], id: string) => values.includes(id)
   ? values.filter(value => value !== id)
   : [...values, id]
 const editingFilters = ref(false)
-watch(() => [props.title, props.projectBacked], () => { editingFilters.value = false })
-const boardFilterCount = computed(() => [
-  props.filterSearch,
-  props.filterProjectIds.length,
-  props.filterTagIds.length,
-  props.filterUploadedBy,
-  props.filterDateFrom || props.filterDateTo
-].filter(Boolean).length)
-const formatFilterDate = (value: string) => value ? value.split('-').reverse().join('.') : ''
-const boardFilterSummary = computed(() => {
-  const parts: string[] = []
-  if (props.filterSearch) parts.push(`Search “${props.filterSearch}”`)
-  const projectNames = props.projects.filter(option => props.filterProjectIds.includes(option.id)).map(option => option.name)
-  if (projectNames.length) parts.push(`Projects: ${projectNames.join(', ')}`)
-  const tagNames = props.tags.filter(option => props.filterTagIds.includes(option.id)).map(option => option.name)
-  if (tagNames.length) parts.push(`Tags: ${tagNames.join(', ')}`)
-  if (props.filterUploadedBy) {
-    const submitter = props.submitters.find(option => option.id === props.filterUploadedBy)
-    parts.push(`Submitter: ${submitter?.figma_handle || 'Selected contributor'}`)
-  }
-  if (props.filterDateFrom && props.filterDateTo) parts.push(`${formatFilterDate(props.filterDateFrom)}–${formatFilterDate(props.filterDateTo)}`)
-  else if (props.filterDateFrom) parts.push(`From ${formatFilterDate(props.filterDateFrom)}`)
-  else if (props.filterDateTo) parts.push(`Until ${formatFilterDate(props.filterDateTo)}`)
-  return parts.join(' · ') || 'All approved assets'
+const filterDraft = reactive({
+  search: '',
+  projectIds: [] as string[],
+  tagIds: [] as string[],
+  uploadedBys: [] as string[],
+  dateFrom: '',
+  dateTo: '',
+  assetScope: 'approved' as BoardAssetScope
 })
-const clearBoardFilters = () => {
-  emit('update:filterSearch', '')
-  emit('update:filterProjectIds', [])
-  emit('update:filterTagIds', [])
-  emit('update:filterUploadedBy', null)
-  emit('update:filterDateFrom', '')
-  emit('update:filterDateTo', '')
+const draftMatchPreviews = ref<MatchPreview[]>([])
+const draftMatchLoading = ref(false)
+let draftMatchTimer: ReturnType<typeof setTimeout> | undefined
+let draftMatchRequest = 0
+const toIsoDate = (value: string, end = false) => value
+  ? new Date(`${value}T${end ? '23:59:59.999' : '00:00:00.000'}`).toISOString()
+  : null
+const loadDraftMatches = async () => {
+  if (!editingFilters.value || !props.boardId) return
+  const request = ++draftMatchRequest
+  draftMatchLoading.value = true
+  try {
+    const response = await $fetch<{ data: { previews: MatchPreview[] } }>(`/api/shares/${props.boardId}/matches`, {
+      method: 'POST',
+      body: {
+        search: filterDraft.search,
+        projectId: null,
+        tagId: null,
+        projectIds: filterDraft.projectIds,
+        tagIds: filterDraft.tagIds,
+        uploadedBy: null,
+        uploadedBys: filterDraft.uploadedBys,
+        dateFrom: toIsoDate(filterDraft.dateFrom),
+        dateTo: toIsoDate(filterDraft.dateTo, true),
+        assetScope: filterDraft.assetScope
+      }
+    })
+    if (request === draftMatchRequest) draftMatchPreviews.value = response.data.previews
+  } catch {
+    if (request === draftMatchRequest) draftMatchPreviews.value = []
+  } finally {
+    if (request === draftMatchRequest) draftMatchLoading.value = false
+  }
+}
+const scheduleDraftMatches = () => {
+  clearTimeout(draftMatchTimer)
+  draftMatchRequest += 1
+  draftMatchLoading.value = true
+  draftMatchTimer = setTimeout(loadDraftMatches, 250)
+}
+const resetFilterDraft = () => {
+  filterDraft.search = props.filterSearch
+  filterDraft.projectIds = [...props.filterProjectIds]
+  filterDraft.tagIds = [...props.filterTagIds]
+  filterDraft.uploadedBys = [...props.filterUploadedBys]
+  filterDraft.dateFrom = props.filterDateFrom
+  filterDraft.dateTo = props.filterDateTo
+  filterDraft.assetScope = props.assetScope
+}
+const beginEditingFilters = () => {
+  resetFilterDraft()
+  editingFilters.value = true
+}
+watch(() => [props.title, props.projectBacked], () => { editingFilters.value = false })
+watch(() => props.editFiltersOnOpen, value => {
+  if (value && props.mode === 'dynamic' && !props.projectBacked) beginEditingFilters()
+  else if (!value) editingFilters.value = false
+}, { immediate: true })
+watch(() => [
+  editingFilters.value,
+  filterDraft.search,
+  filterDraft.projectIds.join(','),
+  filterDraft.tagIds.join(','),
+  filterDraft.uploadedBys.join(','),
+  filterDraft.dateFrom,
+  filterDraft.dateTo,
+  filterDraft.assetScope
+], ([editing]) => {
+  if (editing) scheduleDraftMatches()
+  else {
+    clearTimeout(draftMatchTimer)
+    draftMatchRequest += 1
+    draftMatchLoading.value = false
+    draftMatchPreviews.value = []
+  }
+}, { immediate: true })
+const clearDraftFilters = () => {
+  filterDraft.search = ''
+  filterDraft.projectIds = []
+  filterDraft.tagIds = []
+  filterDraft.uploadedBys = []
+  filterDraft.dateFrom = ''
+  filterDraft.dateTo = ''
+}
+const toggleSubmitterFilter = (submitterId: string) => {
+  filterDraft.uploadedBys = toggleFilterOption(filterDraft.uploadedBys, submitterId)
+}
+const applyFilterDraft = () => {
+  if (filterDraft.assetScope !== props.assetScope) emit('setAssetScope', filterDraft.assetScope)
+  emit('update:filterSearch', filterDraft.search)
+  emit('update:filterProjectIds', [...filterDraft.projectIds])
+  emit('update:filterTagIds', [...filterDraft.tagIds])
+  emit('update:filterUploadedBys', [...filterDraft.uploadedBys])
+  emit('update:filterDateFrom', filterDraft.dateFrom)
+  emit('update:filterDateTo', filterDraft.dateTo)
+  editingFilters.value = false
 }
 const submitMember = () => {
   const email = selectedWorkspaceMember.value?.email?.trim()
@@ -144,6 +224,7 @@ watch(() => props.feedback, feedback => {
   feedbackTimer = setTimeout(() => emit('dismissFeedback'), 2500)
 })
 onBeforeUnmount(() => {
+  clearTimeout(draftMatchTimer)
   if (feedbackTimer) clearTimeout(feedbackTimer)
 })
 </script>
@@ -151,79 +232,39 @@ onBeforeUnmount(() => {
 <template>
   <div class="asset-filter-controls asset-filter-controls--expanded board-settings-controls">
     <button class="filter-sheet-handle" type="button" aria-label="Close board settings"><span aria-hidden="true" /></button>
-    <div class="filter-sheet-content">
-    <div class="board-settings-intro">
+    <Transition name="panel-step" mode="out-in">
+    <div :key="editingFilters ? 'filters' : 'settings'" class="filter-sheet-content">
+    <template v-if="!editingFilters">
+    <section class="filter-option-group board-settings-intro">
       <h2 class="filter-overlay-title">{{ title }}</h2>
-      <p class="board-type-summary"><template v-if="projectBacked"><strong>Smart board.</strong> Approved assets from this project appear automatically.</template><template v-else-if="mode === 'dynamic'"><strong>Smart board.</strong> Matching assets appear automatically based on rules.</template><template v-else>Add and arrange assets yourself.</template></p>
-    </div>
-
-    <section v-if="mode === 'dynamic'" class="filter-option-group board-filter-settings" role="group" aria-labelledby="board-saved-filters">
-      <div class="board-filter-settings-heading">
-        <h3 id="board-saved-filters">Board filters</h3>
-        <button v-if="canEdit && !projectBacked && !editingFilters" class="board-filter-change" type="button" :disabled="busy" @click="editingFilters = true">Change filters</button>
-      </div>
-      <p class="board-filter-summary">{{ boardFilterSummary }}</p>
-      <Transition name="board-filter-editor">
-        <div v-if="editingFilters" class="board-filter-editor">
-          <div class="board-filter-field">
-            <h4>Search</h4>
-            <input class="panel-field" type="search" :value="filterSearch" placeholder="Search assets" :disabled="busy" @input="$emit('update:filterSearch', ($event.target as HTMLInputElement).value)">
-          </div>
-          <div class="board-filter-field">
-            <h4>Projects</h4>
-            <div class="filter-option-list">
-              <button type="button" :aria-pressed="filterProjectIds.length === 0" :disabled="busy" @click="$emit('update:filterProjectIds', [])">All</button>
-              <button v-for="option in projects" :key="option.id" type="button" :aria-pressed="filterProjectIds.includes(option.id)" :disabled="busy" @click="$emit('update:filterProjectIds', toggleFilterOption(filterProjectIds, option.id))">{{ option.name }}</button>
-            </div>
-          </div>
-          <div class="board-filter-field">
-            <h4>Tags</h4>
-            <div class="filter-option-list">
-              <button type="button" :aria-pressed="filterTagIds.length === 0" :disabled="busy" @click="$emit('update:filterTagIds', [])">All</button>
-              <button v-for="option in tags" :key="option.id" type="button" :aria-pressed="filterTagIds.includes(option.id)" :disabled="busy" @click="$emit('update:filterTagIds', toggleFilterOption(filterTagIds, option.id))">{{ option.name }}</button>
-            </div>
-          </div>
-          <div v-if="submitters.length" class="board-filter-field">
-            <h4>Submitter</h4>
-            <div class="filter-option-list">
-              <button type="button" :aria-pressed="!filterUploadedBy" :disabled="busy" @click="$emit('update:filterUploadedBy', null)">All</button>
-              <button v-for="submitter in submitters" :key="submitter.id" type="button" :aria-pressed="filterUploadedBy === submitter.id" :disabled="busy" @click="$emit('update:filterUploadedBy', submitter.id)">{{ submitter.figma_handle || 'Unknown submitter' }}</button>
-            </div>
-          </div>
-          <div class="board-filter-field">
-            <h4>Date</h4>
-            <div class="filter-date-range">
-              <AppDatePicker :model-value="filterDateFrom" label="From" :max="filterDateTo" surface="field" :disabled="busy" @update:model-value="$emit('update:filterDateFrom', $event)" />
-              <AppDatePicker :model-value="filterDateTo" label="To" :min="filterDateFrom" surface="field" :disabled="busy" @update:model-value="$emit('update:filterDateTo', $event)" />
-            </div>
-          </div>
-          <div class="board-filter-editor-actions">
-            <button v-if="boardFilterCount" class="panel-secondary-action" type="button" :disabled="busy" @click="clearBoardFilters">Clear filters</button>
-            <button class="panel-primary-action" type="button" @click="editingFilters = false">Done</button>
-          </div>
-        </div>
-      </Transition>
+      <p class="board-type-summary"><template v-if="projectBacked"><strong>Smart board.</strong> {{ assetScope === 'all' ? 'Approved and draft assets' : 'Approved assets' }} from this project appear automatically.</template><template v-else-if="mode === 'dynamic'"><strong>Smart board.</strong> <br>Matching assets appear automatically based on rules.</template><template v-else>Add and arrange assets yourself.</template></p>
     </section>
 
+    <BoardAssetScopeControl v-if="purpose !== 'review' && (mode !== 'dynamic' || projectBacked)" :model-value="assetScope" :disabled="!canEdit || busy" :description="assetScope === 'all' ? publicationEnabled ? 'Approved and draft assets are visible here and on the public board. Archived assets stay hidden.' : 'Shows approved and draft assets. Archived assets stay hidden.' : 'Shows approved assets only.'" @update:model-value="$emit('setAssetScope', $event)" />
+
+    <BoardFilterWidget v-if="mode === 'dynamic'" class="board-filter-settings" :search="filterSearch" :project-ids="filterProjectIds" :tag-ids="filterTagIds" :uploaded-bys="filterUploadedBys" :date-from="filterDateFrom" :date-to="filterDateTo" :projects="projects" :tags="tags" :submitters="submitters" :asset-scope="assetScope">
+      <button v-if="canEdit && !projectBacked" class="panel-secondary-action" type="button" :disabled="busy" @click="beginEditingFilters">Change filters</button>
+    </BoardFilterWidget>
+
     <section class="filter-option-group" role="group" aria-labelledby="board-public-access">
-      <h3 id="board-public-access">Public access</h3>
-      <div class="board-public-access-row">
-        <div class="filter-option-list filter-option-list--segmented">
-          <button type="button" :aria-pressed="!publicationEnabled" :disabled="!canEdit || busy" @click="$emit('setPublication', false)">Unpublished</button>
-          <button type="button" :aria-pressed="publicationEnabled" :disabled="!canEdit || busy" @click="$emit('setPublication', true)">Published</button>
-        </div>
+      <div class="board-public-access-heading">
+        <h2 id="board-public-access" class="filter-overlay-title">Public access</h2>
         <Transition name="public-access-actions">
           <span v-if="publicationEnabled && publicUrl" class="public-access-actions">
-            <a class="button public-access-icon" :href="publicUrl" target="_blank" rel="noopener" aria-label="Open public page in a new tab" title="Open public page"><ArrowUpRight aria-hidden="true" /></a>
-            <button class="public-access-icon" type="button" aria-label="Copy public link" title="Copy public link" @click="$emit('copyLink')"><Copy aria-hidden="true" /></button>
+            <a class="public-access-icon" :href="publicUrl" target="_blank" rel="noopener" aria-label="Open public page in a new tab" title="Open public page"><ArrowUpRight :size="18" :stroke-width="2" aria-hidden="true" /></a>
+            <button class="public-access-icon" type="button" aria-label="Copy public link" title="Copy public link" @click="$emit('copyLink')"><Copy :size="18" :stroke-width="2" aria-hidden="true" /></button>
           </span>
         </Transition>
       </div>
+      <div class="filter-option-list filter-option-list--segmented">
+        <button type="button" :aria-pressed="!publicationEnabled" :disabled="!canEdit || busy" @click="$emit('setPublication', false)">Unpublished</button>
+        <button type="button" :aria-pressed="publicationEnabled" :disabled="!canEdit || busy" @click="$emit('setPublication', true)">Published</button>
+      </div>
     </section>
 
-    <section v-if="purpose === 'portfolio'" class="board-setting-group portfolio-summary">
-      <h3>Portfolio</h3>
-      <p>{{ portfolioKind === 'main' ? 'Main portfolio' : portfolioClient ? `Client portfolio · ${portfolioClient}` : 'Client portfolio' }}</p>
+    <section v-if="purpose === 'portfolio'" class="filter-option-group portfolio-summary" aria-labelledby="board-portfolio">
+      <h2 id="board-portfolio" class="filter-overlay-title">Portfolio</h2>
+      <p class="board-type-summary">{{ portfolioKind === 'main' ? 'Main portfolio' : portfolioClient ? `Client portfolio · ${portfolioClient}` : 'Client portfolio' }}</p>
       <NuxtLink class="panel-secondary-action" :to="fullSettingsUrl">Manage portfolio</NuxtLink>
     </section>
 
@@ -232,15 +273,15 @@ onBeforeUnmount(() => {
     </div>
 
     <section class="filter-option-group" role="group" aria-labelledby="board-public-layout">
-      <h3 id="board-public-layout">Public layout</h3>
+      <h2 id="board-public-layout" class="filter-overlay-title">Public layout</h2>
       <div class="filter-option-list filter-option-list--segmented">
         <button v-for="option in boardLayoutOptions" :key="option.value" type="button" :aria-pressed="layout === option.value" :disabled="!canEdit || busy" @click="$emit('setLayout', option.value)">{{ option.label }}</button>
       </div>
     </section>
 
-    <section class="board-setting-group board-members">
-      <h3>Board roles</h3>
-      <p>{{ purpose === 'review' ? 'Only added members can access this review board.' : 'Everyone in the workspace can view this board. Roles below grant additional permissions.' }}</p>
+    <section class="filter-option-group board-members" aria-labelledby="board-roles">
+      <h2 id="board-roles" class="filter-overlay-title">Board roles</h2>
+      <p class="board-type-summary">{{ purpose === 'review' ? 'Only added members can access this review board.' : 'Everyone in the workspace can view this board. Roles below grant additional permissions.' }}</p>
       <div v-if="members.length" class="board-member-list">
         <AppPersonRow
           v-for="member in members"
@@ -260,11 +301,11 @@ onBeforeUnmount(() => {
           @select-action="removeExistingMember(member)"
         />
       </div>
-      <p v-else>{{ purpose === 'review' ? 'No board members yet.' : 'No additional board roles yet.' }}</p>
+      <p v-else class="board-type-summary">{{ purpose === 'review' ? 'No board members yet.' : 'No additional board roles yet.' }}</p>
       <Transition name="member-form">
         <form v-if="canManageMembers && addingMember" class="member-form" @submit.prevent="submitMember">
           <div class="member-form-field">
-            <h4>Workspace member</h4>
+            <h3>Workspace member</h3>
             <AppRolePicker
               :model-value="selectedMemberId"
               :options="workspaceMemberOptions"
@@ -275,7 +316,7 @@ onBeforeUnmount(() => {
             />
           </div>
           <div class="member-form-field">
-            <h4>Board role</h4>
+            <h3>Board role</h3>
           <AppRolePicker
             :model-value="memberRole"
             :options="memberRoleOptions"
@@ -288,19 +329,74 @@ onBeforeUnmount(() => {
           <button class="panel-primary-action" type="submit" :disabled="busy">{{ busy ? 'Assigning…' : purpose === 'review' ? 'Add review member' : 'Assign board role' }}</button>
         </form>
       </Transition>
-      <p v-if="canManageMembers && !availableWorkspaceMembers.length">All eligible workspace members already have a board role.</p>
+      <p v-if="canManageMembers && !availableWorkspaceMembers.length" class="board-type-summary">All eligible workspace members already have a board role.</p>
       <button v-if="canManageMembers && availableWorkspaceMembers.length" class="panel-secondary-action" type="button" :aria-expanded="addingMember" @click="toggleMemberForm">{{ addingMember ? 'Cancel' : purpose === 'review' ? 'Add review member' : 'Assign board role' }}</button>
     </section>
 
-    <section v-if="canManageMembers && !projectBacked" class="board-setting-group danger-zone">
-      <h3>Delete board</h3>
-      <p>This permanently removes the board, member access, and its public link.</p>
-      <button class="panel-secondary-action" type="button" :disabled="busy" @click="$emit('deleteBoard')">Delete board</button>
+    <section v-if="canManageMembers && !projectBacked" class="filter-option-group danger-zone" aria-labelledby="delete-board-title">
+      <h2 id="delete-board-title" class="filter-overlay-title">Delete board</h2>
+      <p class="board-type-summary">This permanently removes the board, member access, and its public link.</p>
+      <button class="panel-secondary-action panel-compact-action" type="button" :disabled="busy" @click="$emit('deleteBoard')">Delete board</button>
     </section>
+    </template>
+    <template v-else>
+      <BoardAssetScopeControl v-if="purpose !== 'review'" v-model="filterDraft.assetScope" :disabled="busy" />
+      <BoardFilterWidget class="board-settings-intro" :search="filterDraft.search" :project-ids="filterDraft.projectIds" :tag-ids="filterDraft.tagIds" :uploaded-bys="filterDraft.uploadedBys" :date-from="filterDraft.dateFrom" :date-to="filterDraft.dateTo" :projects="projects" :tags="tags" :submitters="submitters" :assets="draftMatchPreviews" :loading="draftMatchLoading" :asset-scope="filterDraft.assetScope" show-previews clearable :disabled="busy" @clear="clearDraftFilters" />
+      <section class="filter-option-group">
+        <label class="sr-only" for="board-filter-search">Search assets</label>
+        <input id="board-filter-search" v-model="filterDraft.search" class="panel-field" type="search" placeholder="Search assets" :disabled="busy">
+      </section>
+      <section class="filter-option-group" role="group" aria-labelledby="board-filter-projects">
+        <h2 id="board-filter-projects" class="filter-overlay-title">Projects</h2>
+        <div class="filter-option-list">
+          <button type="button" :aria-pressed="filterDraft.projectIds.length === 0" :disabled="busy" @click="filterDraft.projectIds = []">All</button>
+          <button v-for="option in projects" :key="option.id" type="button" :aria-pressed="filterDraft.projectIds.includes(option.id)" :disabled="busy" @click="filterDraft.projectIds = toggleFilterOption(filterDraft.projectIds, option.id)">{{ option.name }}</button>
+        </div>
+      </section>
+      <section class="filter-option-group" role="group" aria-labelledby="board-filter-tags">
+        <h2 id="board-filter-tags" class="filter-overlay-title">Tags</h2>
+        <div class="filter-option-list">
+          <button type="button" :aria-pressed="filterDraft.tagIds.length === 0" :disabled="busy" @click="filterDraft.tagIds = []">All</button>
+          <button v-for="option in tags" :key="option.id" type="button" :aria-pressed="filterDraft.tagIds.includes(option.id)" :disabled="busy" @click="filterDraft.tagIds = toggleFilterOption(filterDraft.tagIds, option.id)">{{ option.name }}</button>
+        </div>
+      </section>
+      <section class="filter-option-group" role="group" aria-labelledby="board-filter-contributor">
+        <h2 id="board-filter-contributor" class="filter-overlay-title">Contributor</h2>
+        <div v-if="submitters.length" class="submitter-stack">
+          <button
+            v-for="submitter in submitters"
+            :key="submitter.id"
+            class="submitter-avatar"
+            type="button"
+            :aria-label="`Filter by ${submitterName(submitter)}`"
+            :aria-pressed="filterDraft.uploadedBys.includes(submitter.id)"
+            :disabled="busy"
+            :title="submitterName(submitter)"
+            @click="toggleSubmitterFilter(submitter.id)"
+          >
+            <img v-if="submitter.avatar_url" :src="submitter.avatar_url" alt="">
+            <span v-else aria-hidden="true">{{ submitterInitial(submitter) }}</span>
+          </button>
+        </div>
+        <p v-else class="board-type-summary">No contributors with assets yet.</p>
+      </section>
+      <section class="filter-option-group" role="group" aria-labelledby="board-filter-date">
+        <h2 id="board-filter-date" class="filter-overlay-title">Date</h2>
+        <div class="filter-date-range">
+          <AppDatePicker v-model="filterDraft.dateFrom" label="From" :max="filterDraft.dateTo" surface="field" :disabled="busy" />
+          <AppDatePicker v-model="filterDraft.dateTo" label="To" :min="filterDraft.dateFrom" surface="field" :disabled="busy" />
+        </div>
+      </section>
+    </template>
       <Transition name="board-settings-toast">
         <p v-if="feedback" class="board-settings-feedback" :class="{ error }" role="status" aria-live="polite">{{ feedback }}</p>
       </Transition>
     </div>
+    </Transition>
+    <AppPanelActions :visible="editingFilters">
+      <button class="panel-secondary-action" type="button" :disabled="busy" @click="editingFilters = false">Cancel</button>
+      <button class="panel-primary-action" type="button" :disabled="busy" @click="applyFilterDraft">Apply filters</button>
+    </AppPanelActions>
   </div>
 </template>
 
@@ -311,106 +407,6 @@ onBeforeUnmount(() => {
   padding: 0;
   border: 0;
 }
-
-.board-setting-group h3 {
-  margin: 0;
-  color: var(--color-surface);
-  font-size: var(--filter-caption-size);
-  font-weight: 700;
-  letter-spacing: 0;
-  line-height: 1;
-}
-
-.board-settings-intro {
-  display: grid;
-  gap: .75rem;
-}
-
-.board-settings-intro .filter-overlay-title { margin: 0; }
-
-.board-filter-settings,
-.board-filter-field {
-  display: grid;
-  gap: var(--filter-option-gap);
-}
-
-.board-filter-settings-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--filter-option-gap);
-}
-
-.board-filter-summary {
-  margin: 0;
-  color: var(--filter-overlay-panel-color);
-  font-size: var(--filter-option-font-size);
-  line-height: 1.35;
-}
-
-.board-filter-editor {
-  min-width: 0;
-  display: grid;
-  gap: var(--space);
-  overflow: hidden;
-}
-
-.board-filter-editor-enter-active,
-.board-filter-editor-leave-active {
-  max-height: 60rem;
-  transition:
-    max-height var(--filter-action-transition-duration) var(--filter-overlay-enter-easing),
-    opacity 180ms ease,
-    translate var(--filter-action-transition-duration) var(--filter-overlay-enter-easing);
-}
-
-.board-filter-editor-enter-from,
-.board-filter-editor-leave-to {
-  max-height: 0;
-  opacity: 0;
-  translate: 0 calc(var(--space) * -.5);
-}
-
-.board-filter-editor .panel-field { width: 100%; min-width: 0; }
-
-.board-filter-editor-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--filter-option-gap);
-}
-
-.board-filter-settings h4 {
-  margin: 0;
-  color: var(--filter-overlay-panel-color);
-  font-size: var(--filter-caption-size);
-  font-weight: 700;
-  line-height: 1;
-}
-
-.board-filter-change {
-  min-height: var(--filter-option-height);
-  padding: 0 var(--filter-option-padding);
-  border: var(--filter-hairline) solid var(--filter-overlay-border-color);
-  border-radius: var(--filter-pill-radius);
-  color: var(--filter-overlay-panel-color);
-  background: transparent;
-  font: inherit;
-  font-size: var(--filter-option-font-size);
-  cursor: pointer;
-}
-
-
-
-.board-type-summary,
-.board-setting-group p {
-  margin: 0;
-  color: var(--filter-overlay-muted-color);
-  font-size: var(--filter-option-font-size);
-  line-height: 1.35;
-}
-
-.board-type-summary strong { color: var(--filter-overlay-panel-color); }
-.board-setting-group { display: grid; gap: var(--space); }
 
 .board-settings-actions :is(a, button) {
   min-height: var(--filter-option-height);
@@ -438,16 +434,16 @@ onBeforeUnmount(() => {
   gap: var(--filter-option-gap);
 }
 
-.board-public-access-row {
+.board-public-access-heading {
   min-width: 0;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: var(--filter-option-gap);
 }
 
-.board-public-access-row > .filter-option-list--segmented {
-  min-width: 0;
-  flex: 1 1 auto;
+.board-public-access-heading > .filter-overlay-title {
+  margin: 0;
 }
 
 .board-settings-actions :is(a, button) {
@@ -460,19 +456,23 @@ onBeforeUnmount(() => {
   display: inline-flex;
   flex: 0 0 auto;
   gap: var(--filter-option-gap);
+  margin-inline-end: calc(var(--filter-option-padding) / 2);
   overflow: hidden;
 }
 
 .public-access-icon {
+  box-sizing: border-box;
   inline-size: var(--filter-option-height);
   block-size: var(--filter-option-height);
   min-inline-size: var(--filter-option-height);
   min-block-size: var(--filter-option-height);
+  max-inline-size: var(--filter-option-height);
+  max-block-size: var(--filter-option-height);
   flex: 0 0 var(--filter-option-height);
-  padding: 0;
   display: inline-grid;
   place-items: center;
-  border: var(--filter-hairline) solid var(--filter-overlay-primary-background);
+  padding: 0;
+  border: 0;
   border-radius: 50%;
   color: var(--filter-overlay-primary-color);
   background: var(--filter-overlay-primary-background);
@@ -482,9 +482,6 @@ onBeforeUnmount(() => {
 }
 
 .public-access-icon svg {
-  width: 1em;
-  height: 1em;
-  font-size: var(--filter-option-font-size);
   fill: none;
   stroke: currentColor;
 }
@@ -526,14 +523,6 @@ onBeforeUnmount(() => {
   min-width: 0;
   display: grid;
   gap: var(--filter-option-gap);
-}
-
-.member-form-field h4 {
-  margin: 0;
-  color: var(--filter-overlay-panel-color);
-  font-size: var(--filter-caption-size);
-  font-weight: 700;
-  line-height: 1;
 }
 
 .member-form-enter-active,
@@ -587,8 +576,6 @@ onBeforeUnmount(() => {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .board-filter-editor-enter-active,
-  .board-filter-editor-leave-active,
   .member-form-enter-active,
   .member-form-leave-active,
   .board-settings-toast-enter-active,

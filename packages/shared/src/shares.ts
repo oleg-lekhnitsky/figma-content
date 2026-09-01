@@ -4,6 +4,7 @@ export const boardRoleSchema = z.enum(['owner', 'editor', 'contributor', 'viewer
 export const boardMemberRoleSchema = boardRoleSchema.exclude(['owner'])
 export const boardPurposeSchema = z.enum(['showcase', 'review', 'portfolio', 'case'])
 export const boardLayoutSchema = z.enum(['masonry', 'column', 'presentation', 'grid'])
+export const boardAssetScopeSchema = z.enum(['approved', 'all'])
 export const boardViewSettingsSchema = z.object({
   showText: z.boolean().default(true),
   radius: z.enum(['none', 'small', 'default', 'large']).default('default'),
@@ -24,6 +25,7 @@ export const publicCollectionFiltersSchema = z.object({
   projectIds: z.array(z.uuid()).max(50).default([]),
   tagIds: z.array(z.uuid()).max(50).default([]),
   uploadedBy: z.uuid().nullable().default(null),
+  uploadedBys: z.array(z.uuid()).max(50).default([]),
   dateFrom: z.iso.datetime({ offset: true }).nullable().default(null),
   dateTo: z.iso.datetime({ offset: true }).nullable().default(null)
 }).refine(value => !value.dateFrom || !value.dateTo || value.dateTo >= value.dateFrom, {
@@ -72,7 +74,8 @@ export const updatePublicCollectionSchema = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('apply-filters'),
     behavior: z.enum(['add', 'automatic']),
-    filters: publicCollectionFiltersSchema
+    filters: publicCollectionFiltersSchema,
+    assetScope: boardAssetScopeSchema.optional()
   }),
   z.object({
     action: z.literal('portfolio-settings'),
@@ -86,6 +89,7 @@ export const updatePublicCollectionSchema = z.discriminatedUnion('action', [
     path: ['portfolioClient']
   }),
   z.object({ action: z.literal('layout'), layout: boardLayoutSchema }),
+  z.object({ action: z.literal('asset-scope'), assetScope: boardAssetScopeSchema }),
   z.object({ action: z.literal('view-settings'), viewSettings: boardViewSettingsSchema }),
   z.object({ action: z.literal('refresh') }),
   z.object({ action: z.literal('publish') }),
@@ -110,4 +114,5 @@ export const reviewDecisionSchema = z.object({
 export type PublicCollectionFilters = z.infer<typeof publicCollectionFiltersSchema>
 export type BoardRole = z.infer<typeof boardRoleSchema>
 export type BoardLayout = z.infer<typeof boardLayoutSchema>
+export type BoardAssetScope = z.infer<typeof boardAssetScopeSchema>
 export type BoardViewSettings = z.infer<typeof boardViewSettingsSchema>

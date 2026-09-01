@@ -21,6 +21,10 @@ interface Board {
   role: 'owner' | 'editor' | 'contributor' | 'viewer' | 'admin'
   itemCount: number
   previewAssets: PreviewAsset[]
+  portfolio_client: string | null
+  introduction: string | null
+  contact_heading: string | null
+  contact_links: Array<{ label: string; url: string }> | null
 }
 
 interface PortfolioBoardsResponse {
@@ -34,16 +38,33 @@ interface CreatePortfolioResponse {
 }
 
 const apiFetch = useRequestFetch()
+const route = useRoute()
 const { data, error, refresh } = await useFetch<{ data: { collections: Board[] } }>('/api/shares', {
   query: { previews: 'false' }
 })
-const mainPortfolio = computed(() => data.value?.data.collections.find(board => board.purpose === 'portfolio' && board.portfolio_kind === 'main') ?? null)
+const requestedPortfolioId = String(route.query.portfolio ?? '')
+const activePortfolioId = ref(requestedPortfolioId || null)
+const portfolios = computed(() => data.value?.data.collections.filter(board => board.purpose === 'portfolio') ?? [])
+const mainPortfolio = computed(() => (
+  portfolios.value.find(board => board.id === activePortfolioId.value)
+  ?? portfolios.value.find(board => board.portfolio_kind === 'main')
+  ?? portfolios.value[0]
+  ?? null
+))
 const regularBoards = computed(() => data.value?.data.collections.filter(board => board.purpose !== 'portfolio') ?? [])
 const selectedBoardIds = ref<string[]>([])
 const boardsError = ref(false)
 const busy = ref(false)
 const feedback = ref('')
 const feedbackError = ref(false)
+const panelStep = ref<'boards' | 'details'>(String(route.query.view ?? '') === 'details' ? 'details' : 'boards')
+const detailsRef = ref<{ save: () => Promise<void>; busy: boolean } | null>(null)
+const publicationEnabled = ref(false)
+
+watch(mainPortfolio, (portfolio) => {
+  if (portfolio) activePortfolioId.value = portfolio.id
+  publicationEnabled.value = portfolio?.publication_enabled ?? false
+}, { immediate: true })
 
 const selectedBoards = computed(() => {
   const boards = new Map(regularBoards.value.map(board => [board.id, board]))
@@ -130,6 +151,12 @@ const moveBoard = (index: number, direction: -1 | 1) => {
 }
 
 const close = () => navigateTo('/library')
+const openDetails = () => { panelStep.value = 'details' }
+const closeDetails = () => { panelStep.value = 'boards' }
+const refreshDetails = async () => { await refresh() }
+const updatePublication = (enabled: boolean) => {
+  publicationEnabled.value = enabled
+}
 
 </script>
 
@@ -137,63 +164,81 @@ const close = () => navigateTo('/library')
   <div class="portfolio-page">
     <SelectionPanel visible label="Portfolio" wide overlay @close="close">
       <div class="asset-filter-controls asset-filter-controls--filters asset-filter-controls--expanded portfolio-controls">
-        <div class="filter-sheet-content">
-          <div class="board-settings-intro">
+        <Transition name="panel-step" mode="out-in">
+        <div :key="panelStep" class="filter-sheet-content">
+          <template v-if="panelStep === 'boards'">
+          <section class="filter-option-group">
             <h1 class="filter-overlay-title">Portfolio</h1>
             <p class="board-type-summary">Choose existing boards and arrange the order in which they appear.</p>
-          </div>
+          </section>
 
         <section class="filter-option-group" aria-labelledby="portfolio-selected-title">
-          <div class="board-settings-intro">
-            <h2 id="portfolio-selected-title" class="filter-option-label">Included boards</h2>
-            <p class="board-type-summary">Boards remain available in the library when they are added here.</p>
-          </div>
+          <h2 id="portfolio-selected-title" class="filter-overlay-title">Included boards</h2>
+          <p class="board-type-summary">Boards remain available in the library when they are added here.</p>
           <p v-if="error || boardsError" class="board-type-summary error" role="alert">Unable to load boards.</p>
           <ol v-else-if="selectedBoards.length" class="portfolio-board-list">
-            <li v-for="(board, index) in selectedBoards" :key="board.id" class="portfolio-board-row">
-              <NuxtLink class="portfolio-board-summary" :to="{ path: '/library', query: { board: board.id } }">
-                <span>{{ board.title }}</span>
-                <small>{{ board.itemCount }} {{ board.itemCount === 1 ? 'item' : 'items' }}</small>
-              </NuxtLink>
-              <div v-if="canEdit" class="portfolio-board-actions">
+            <AppPanelRow
+              v-for="(board, index) in selectedBoards"
+              :key="board.id"
+              as="li"
+              :title="board.title"
+              :meta="`${board.itemCount} ${board.itemCount === 1 ? 'item' : 'items'}`"
+              :to="{ path: '/library', query: { board: board.id } }"
+            >
+              <template v-if="canEdit" #actions>
                 <button class="panel-secondary-action panel-icon-action" type="button" :disabled="busy || index === 0" :aria-label="`Move ${board.title} earlier`" @click="moveBoard(index, -1)"><ArrowUp :size="20" weight="Outline" :stroke-width="1.75" aria-hidden="true" /></button>
                 <button class="panel-secondary-action panel-icon-action" type="button" :disabled="busy || index === selectedBoards.length - 1" :aria-label="`Move ${board.title} later`" @click="moveBoard(index, 1)"><ArrowDown :size="20" weight="Outline" :stroke-width="1.75" aria-hidden="true" /></button>
                 <button class="panel-secondary-action" type="button" :disabled="busy" @click="removeBoard(board)">Remove</button>
-              </div>
-            </li>
+              </template>
+            </AppPanelRow>
           </ol>
           <p v-else-if="!error" class="board-type-summary">No boards added yet. Choose one below to start your portfolio.</p>
         </section>
 
         <section v-if="availableBoards.length && canEdit" class="filter-option-group" aria-labelledby="portfolio-available-title">
-          <div class="board-settings-intro">
-            <h2 id="portfolio-available-title" class="filter-option-label">Add boards</h2>
-            <p class="board-type-summary">Use work you have already arranged in the library.</p>
-          </div>
-          <div class="available-board-list">
-            <button v-for="board in availableBoards" :key="board.id" class="panel-secondary-action available-board" type="button" :disabled="busy" @click="addBoard(board)">
-              <span>Add {{ board.title }}</span>
-              <small>{{ board.itemCount }} {{ board.itemCount === 1 ? 'item' : 'items' }}</small>
+          <h2 id="portfolio-available-title" class="filter-overlay-title">Add boards</h2>
+          <p class="board-type-summary">Use work you have already arranged in the library.</p>
+          <div class="panel-choice-list">
+            <button v-for="board in availableBoards" :key="board.id" type="button" :disabled="busy" @click="addBoard(board)">
+              <strong>Add {{ board.title }}</strong>
+              <span>{{ board.itemCount }} {{ board.itemCount === 1 ? 'item' : 'items' }}</span>
             </button>
           </div>
         </section>
 
         <section v-else-if="!regularBoards.length" class="filter-option-group" aria-labelledby="portfolio-no-boards-title">
-          <h2 id="portfolio-no-boards-title" class="filter-option-label">No boards available</h2>
+          <h2 id="portfolio-no-boards-title" class="filter-overlay-title">No boards available</h2>
           <p class="board-type-summary">Create and arrange a board in the library, then add it here.</p>
           <NuxtLink class="panel-secondary-action" to="/library">Go to library</NuxtLink>
         </section>
 
-        <section v-if="mainPortfolio" class="filter-option-group" aria-labelledby="portfolio-publishing-title">
-          <div class="board-settings-intro">
-            <h2 id="portfolio-publishing-title" class="filter-option-label">Publishing</h2>
-            <p class="board-type-summary">{{ mainPortfolio.publication_enabled ? 'Your portfolio is available through its public link.' : 'Add your details and publish when it is ready.' }}</p>
-          </div>
-          <NuxtLink class="panel-secondary-action" :to="`/boards/${mainPortfolio.id}`">Manage details and publishing</NuxtLink>
-        </section>
-
           <p class="portfolio-feedback board-type-summary" :class="{ error: feedbackError }" role="status" aria-live="polite">{{ feedback }}</p>
+          </template>
+          <PortfolioDetailsControls
+            v-else-if="mainPortfolio"
+            ref="detailsRef"
+            :board-id="mainPortfolio.id"
+            :slug="mainPortfolio.slug"
+            :title="mainPortfolio.title"
+            :portfolio-kind="mainPortfolio.portfolio_kind"
+            :portfolio-client="mainPortfolio.portfolio_client"
+            :introduction="mainPortfolio.introduction"
+            :contact-heading="mainPortfolio.contact_heading"
+            :contact-links="mainPortfolio.contact_links"
+            :publication-enabled="publicationEnabled"
+            :can-edit="canEdit"
+            @saved="refreshDetails"
+            @publication-changed="updatePublication"
+          />
         </div>
+        </Transition>
+        <AppPanelActions :visible="Boolean(mainPortfolio)">
+          <button v-if="panelStep === 'boards'" class="panel-primary-action" type="button" :disabled="busy" @click="openDetails">Manage details and publishing</button>
+          <template v-else>
+            <button class="panel-secondary-action" type="button" :disabled="detailsRef?.busy" @click="closeDetails">Back</button>
+            <button class="panel-primary-action" type="button" :disabled="detailsRef?.busy" @click="detailsRef?.save()">Save details</button>
+          </template>
+        </AppPanelActions>
         <button class="filter-sheet-handle" type="button" aria-label="Close portfolio" @click="close"><span /></button>
       </div>
       <button class="filter-panel-toggle is-expanded" type="button" aria-label="Close portfolio" aria-expanded="true" @click="close"><Xmark :size="20" :stroke-width="2" aria-hidden="true" /></button>
@@ -204,56 +249,20 @@ const close = () => navigateTo('/library')
 <style scoped>
 .portfolio-page { min-height: 100vh; }
 
-.portfolio-board-list,
-.available-board-list {
+.portfolio-board-list {
   display: grid;
-  gap: var(--filter-action-gap);
+  gap: var(--filter-option-gap);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.portfolio-board-row {
-  display: grid;
-  gap: var(--filter-action-gap);
-  padding: var(--filter-option-padding);
-  border-radius: calc(var(--radius) * 1.5);
-  background: var(--filter-overlay-nested-background);
-}
-
-.portfolio-board-summary,
-.available-board {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space);
-  color: inherit;
-  text-decoration: none;
-}
-
-.portfolio-board-summary span,
-.available-board span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.portfolio-board-summary small,
-.available-board small {
-  flex: 0 0 auto;
+.panel-choice-list span {
   color: var(--filter-overlay-muted-color);
-  font-size: var(--filter-caption-size);
+  font-size: var(--font-size-caption);
+  letter-spacing: var(--letter-spacing-caption);
 }
 
-.portfolio-board-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--filter-action-gap);
-}
-
-.portfolio-board-actions > button:last-child { flex: 1 1 auto; }
 .portfolio-feedback:empty { display: none; }
 
 </style>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Gear2, MoreH, Plus, Search, Xmark } from 'reicon-vue'
-import type { BoardLayout, BoardViewSettings } from '@content-library/shared'
+import type { BoardAssetScope, BoardLayout, BoardViewSettings } from '@content-library/shared'
 import BrandWordmark from '~/components/BrandWordmark.vue'
 
 definePageMeta({ middleware: 'auth' })
@@ -38,16 +38,17 @@ interface BoardSummary {
   previewAssets: AssetCard[]
   role: string
   mode: 'dynamic' | 'static'
+  asset_scope: BoardAssetScope
   source_project_id?: string | null
   layout: BoardLayout
-  filters: { search: string; projectId: string | null; tagId: string | null; projectIds: string[]; tagIds: string[]; uploadedBy: string | null; dateFrom: string | null; dateTo: string | null }
+  filters: { search: string; projectId: string | null; tagId: string | null; projectIds: string[]; tagIds: string[]; uploadedBy: string | null; uploadedBys: string[]; dateFrom: string | null; dateTo: string | null }
   view_settings?: BoardViewSettings | null
 }
 interface BoardMember { user_id: string; role: string; allowed_users: { email: string | null; figma_handle: string | null; avatar_url: string | null } | null }
 interface BoardWorkspaceMember { id: string; email: string | null; figma_handle: string | null; avatar_url: string | null; role: string }
 interface BoardList { data: { collections: BoardSummary[] } }
 interface BoardContent { data: { assets: AssetCard[] } }
-interface BoardPopulateFilters { search: string; projectId: null; tagId: null; projectIds: string[]; tagIds: string[]; uploadedBy: null; dateFrom: string | null; dateTo: string | null }
+interface BoardPopulateFilters { search: string; projectId: null; tagId: null; projectIds: string[]; tagIds: string[]; uploadedBy: null; uploadedBys: string[]; dateFrom: string | null; dateTo: string | null }
 
 type DateRange = 'all' | 'today' | 'week' | 'two-weeks' | 'month' | 'custom'
 const dateRanges: DateRange[] = ['all', 'today', 'week', 'two-weeks', 'month', 'custom']
@@ -84,6 +85,7 @@ const filtersExpanded = ref(false)
 const viewExpanded = ref(false)
 const videoExpanded = ref(false)
 const boardSettingsExpanded = ref(false)
+const boardSettingsEditFilters = ref(false)
 const boardPopulateExpanded = ref(false)
 const boardPopulateBusy = ref(false)
 const boardPopulateError = ref('')
@@ -160,10 +162,27 @@ const handleBoardCreated = async (boardId: string) => {
 }
 const projects = computed(() => projectData.value?.data.projects ?? [])
 const tags = computed(() => tagData.value?.data.tags ?? [])
+const submitters = ref<Submitter[]>([])
+const submittersLoaded = ref(false)
+let submittersRequest: Promise<void> | null = null
+const ensureSubmitters = () => {
+  if (submittersLoaded.value || submittersRequest) return submittersRequest
+  submittersRequest = $fetch<AssetList>('/api/assets', { query: { page: 1, pageSize: 1 } })
+    .then((response) => {
+      submitters.value = response.data.submitters ?? []
+      submittersLoaded.value = true
+    })
+    .catch(() => {})
+    .finally(() => { submittersRequest = null })
+  return submittersRequest
+}
 const collections = computed(() => boardData.value?.data.collections ?? [])
 const boards = computed(() => collections.value.filter(board => board.purpose !== 'portfolio'))
 const selectedCollection = computed(() => collections.value.find(board => board.id === selectedBoardId.value))
 const selectedBoard = computed(() => boards.value.find(board => board.id === selectedBoardId.value))
+watch(selectedBoard, board => {
+  if (board) void ensureSubmitters()
+}, { immediate: true })
 const selectedDynamicBoard = computed(() => selectedBoard.value?.mode === 'dynamic' ? selectedBoard.value : null)
 const selectedStaticBoard = computed(() => selectedBoard.value?.mode === 'static' ? selectedBoard.value : null)
 const selectedBoardHasAssets = computed(() => Boolean(
@@ -290,6 +309,38 @@ const setSelectedBoardLayout = async (layout: BoardLayout) => {
     boardSettingsFeedback.error = true
   } finally { boardSettingsBusy.value = false }
 }
+const setSelectedBoardAssetScope = async (assetScope: BoardAssetScope) => {
+  const board = selectedBoard.value
+  if (!board || !canRenameSelectedBoard.value || boardSettingsBusy.value || board.asset_scope === assetScope) return
+  const previous = board.asset_scope
+  const replaceAssetScope = (nextScope: BoardAssetScope) => {
+    if (!boardData.value) return
+    boardData.value = {
+      ...boardData.value,
+      data: {
+        ...boardData.value.data,
+        collections: boardData.value.data.collections.map(collection => collection.id === board.id
+          ? { ...collection, asset_scope: nextScope }
+          : collection)
+      }
+    }
+  }
+  replaceAssetScope(assetScope)
+  boardSettingsBusy.value = true
+  boardSettingsFeedback.text = ''
+  boardSettingsFeedback.error = false
+  try {
+    await $fetch(`/api/shares/${board.id}`, { method: 'PATCH', body: { action: 'asset-scope', assetScope } })
+    boardAssetCache.delete(board.id)
+    boardVisualReady.delete(board.id)
+    await Promise.all([refreshBoards(), refreshSelectedBoard()])
+    boardSettingsFeedback.text = assetScope === 'all' ? 'Board now shows approved and draft assets.' : 'Board now shows approved assets only.'
+  } catch {
+    replaceAssetScope(previous)
+    boardSettingsFeedback.text = 'Unable to update the assets shown.'
+    boardSettingsFeedback.error = true
+  } finally { boardSettingsBusy.value = false }
+}
 const saveSelectedBoardMember = async (email: string, role: 'editor' | 'contributor' | 'viewer') => {
   const board = selectedBoard.value
   if (!board || !canManageSelectedBoardMembers.value || boardSettingsBusy.value) return
@@ -333,13 +384,13 @@ const deleteSelectedBoard = async () => {
     boardSettingsFeedback.error = true
   } finally { boardSettingsBusy.value = false }
 }
-const dynamicBoardFilters = reactive({ search: '', projectIds: [] as string[], tagIds: [] as string[], uploadedBy: null as string | null, dateFrom: '', dateTo: '' })
+const dynamicBoardFilters = reactive({ search: '', projectIds: [] as string[], tagIds: [] as string[], uploadedBys: [] as string[], dateFrom: '', dateTo: '' })
 const hydrateDynamicBoardFilters = (board: BoardSummary | null | undefined) => {
   const filters = board?.mode === 'dynamic' ? board.filters : null
   dynamicBoardFilters.search = filters?.search ?? ''
   dynamicBoardFilters.projectIds = [...(filters?.projectIds?.length ? filters.projectIds : filters?.projectId ? [filters.projectId] : [])]
   dynamicBoardFilters.tagIds = [...(filters?.tagIds?.length ? filters.tagIds : filters?.tagId ? [filters.tagId] : [])]
-  dynamicBoardFilters.uploadedBy = filters?.uploadedBy ?? null
+  dynamicBoardFilters.uploadedBys = [...(filters?.uploadedBys?.length ? filters.uploadedBys : filters?.uploadedBy ? [filters.uploadedBy] : [])]
   dynamicBoardFilters.dateFrom = filters?.dateFrom?.slice(0, 10) ?? ''
   dynamicBoardFilters.dateTo = filters?.dateTo?.slice(0, 10) ?? ''
 }
@@ -871,14 +922,18 @@ const openVideo = () => {
 const closeVideo = () => {
   videoExpanded.value = false
 }
-const openBoardSettings = () => {
+const showBoardSettings = (editFilters: boolean) => {
   boardSettingsFeedback.text = ''
   boardSettingsFeedback.error = false
+  boardSettingsEditFilters.value = editFilters
   compactFiltersVisible.value = false; searchExpanded.value = false; filtersExpanded.value = false; viewExpanded.value = false; videoExpanded.value = false; boardSettingsExpanded.value = true
   void loadSelectedBoardMembers()
 }
+const openBoardSettings = () => showBoardSettings(false)
+const openBoardFilters = () => showBoardSettings(true)
 const closeBoardSettings = () => {
   boardSettingsExpanded.value = false
+  boardSettingsEditFilters.value = false
   if (route.query.panel === 'settings') void replaceLibraryQuery({ panel: undefined })
 }
 const openBoardPopulate = () => {
@@ -897,13 +952,13 @@ const closeBoardPopulate = () => {
   boardPopulateExpanded.value = false
   finishExpandedPanelClose()
 }
-const applyBoardPopulateFilters = async (behavior: 'add' | 'automatic', filters: BoardPopulateFilters) => {
+const applyBoardPopulateFilters = async (behavior: 'add' | 'automatic', filters: BoardPopulateFilters, assetScope: BoardAssetScope) => {
   const board = selectedStaticBoard.value
   if (!board || boardPopulateBusy.value) return
   boardPopulateBusy.value = true
   boardPopulateError.value = ''
   try {
-    await $fetch(`/api/shares/${board.id}`, { method: 'PATCH', body: { action: 'apply-filters', behavior, filters } })
+    await $fetch(`/api/shares/${board.id}`, { method: 'PATCH', body: { action: 'apply-filters', behavior, filters, assetScope } })
     boardPopulateExpanded.value = false
     await refreshBoards()
     await refreshSelectedBoard()
@@ -964,7 +1019,7 @@ const toggleSearch = async () => {
 }
 const isoBoardDate = (value: string, end = false) => value ? new Date(`${value}T${end ? '23:59:59.999' : '00:00:00.000'}`).toISOString() : null
 let dynamicBoardSaveTimer: ReturnType<typeof setTimeout> | undefined
-watch(() => [dynamicBoardFilters.search, dynamicBoardFilters.projectIds.join(','), dynamicBoardFilters.tagIds.join(','), dynamicBoardFilters.uploadedBy, dynamicBoardFilters.dateFrom, dynamicBoardFilters.dateTo], () => {
+watch(() => [dynamicBoardFilters.search, dynamicBoardFilters.projectIds.join(','), dynamicBoardFilters.tagIds.join(','), dynamicBoardFilters.uploadedBys.join(','), dynamicBoardFilters.dateFrom, dynamicBoardFilters.dateTo], () => {
   if (!selectedDynamicBoard.value || selectedDynamicBoard.value.source_project_id || hydratingDynamicBoard) return
   clearTimeout(dynamicBoardSaveTimer)
   dynamicBoardSaveTimer = setTimeout(async () => {
@@ -973,7 +1028,8 @@ watch(() => [dynamicBoardFilters.search, dynamicBoardFilters.projectIds.join(','
     const filters = {
       search: dynamicBoardFilters.search, projectId: null, tagId: null,
       projectIds: dynamicBoardFilters.projectIds, tagIds: dynamicBoardFilters.tagIds,
-      uploadedBy: dynamicBoardFilters.uploadedBy,
+      uploadedBy: null,
+      uploadedBys: dynamicBoardFilters.uploadedBys,
       dateFrom: isoBoardDate(dynamicBoardFilters.dateFrom), dateTo: isoBoardDate(dynamicBoardFilters.dateTo, true)
     }
     board.filters = filters
@@ -1011,11 +1067,13 @@ const reconcileAssetMedia = (incoming: AssetCard, previous?: AssetCard): AssetCa
   previewUrl: preserveMountedPreview(previous.previewUrl, incoming.previewUrl) ?? incoming.previewUrl,
   preview2xUrl: preserveMountedPreview(previous.preview2xUrl, incoming.preview2xUrl)
 } : incoming
-const submitters = ref<Submitter[]>([])
 watch(() => data.value?.data, (next) => {
   if (!next) return
   loadingNextPage.value = false
-  if (next.page <= 1) submitters.value = next.submitters ?? []
+  if (next.page <= 1) {
+    submitters.value = next.submitters ?? []
+    submittersLoaded.value = true
+  }
   const incoming = next.assets ?? []
   if (next.page <= 1) {
     if (!forceAssetMediaReload && incoming.map(asset => `${asset.id}:${asset.updated_at}`).join('|') === assets.value.map(asset => `${asset.id}:${asset.updated_at}`).join('|')) return
@@ -1374,22 +1432,23 @@ onBeforeUnmount(() => {
 
       <SelectionPanel :visible="Boolean(selectedBoard && boardSettingsExpanded)" label="Board settings" wide overlay
         raised @close="closeBoardSettings" @after-leave="finishExpandedPanelClose">
-        <BoardSettingsControls v-if="selectedBoard" :title="selectedBoard.title" :purpose="selectedBoard.purpose"
+        <BoardSettingsControls v-if="selectedBoard" :title="selectedBoard.title" :board-id="selectedBoard.id" :purpose="selectedBoard.purpose"
           :portfolio-kind="selectedBoard.portfolio_kind" :portfolio-client="selectedBoard.portfolio_client"
-          :mode="selectedBoard.mode" :layout="selectedBoard.layout"
+          :mode="selectedBoard.mode" :asset-scope="selectedBoard.asset_scope" :layout="selectedBoard.layout"
           :project-backed="Boolean(selectedBoard.source_project_id)"
+          :edit-filters-on-open="boardSettingsEditFilters"
           :publication-enabled="selectedBoard.publication_enabled" :can-edit="canRenameSelectedBoard"
           :can-manage-members="canManageSelectedBoardMembers" :busy="boardSettingsBusy"
           :public-url="selectedBoardPublicUrl" :full-settings-url="`/boards/${selectedBoard.id}`"
           v-model:filter-search="dynamicBoardFilters.search"
           v-model:filter-project-ids="dynamicBoardFilters.projectIds"
           v-model:filter-tag-ids="dynamicBoardFilters.tagIds"
-          v-model:filter-uploaded-by="dynamicBoardFilters.uploadedBy"
+          v-model:filter-uploaded-bys="dynamicBoardFilters.uploadedBys"
           v-model:filter-date-from="dynamicBoardFilters.dateFrom"
           v-model:filter-date-to="dynamicBoardFilters.dateTo"
           :projects="projects" :tags="tags" :submitters="submitters"
           :members="boardMembers" :workspace-members="boardWorkspaceMembers" :feedback="boardSettingsFeedback.text" :error="boardSettingsFeedback.error"
-          @set-publication="setSelectedBoardPublication" @set-layout="setSelectedBoardLayout"
+          @set-publication="setSelectedBoardPublication" @set-layout="setSelectedBoardLayout" @set-asset-scope="setSelectedBoardAssetScope"
           @copy-link="copySelectedBoardLink" @save-member="saveSelectedBoardMember"
           @remove-member="removeSelectedBoardMember" @delete-board="deleteBoardDialogOpen = true"
           @dismiss-feedback="dismissBoardSettingsFeedback" />
@@ -1406,6 +1465,8 @@ onBeforeUnmount(() => {
         :board-title="selectedStaticBoard.title"
         :projects="projects"
         :tags="tags"
+        :submitters="submitters"
+        :asset-scope="selectedStaticBoard.asset_scope"
         :busy="boardPopulateBusy"
         :error="boardPopulateError"
         @close="closeBoardPopulate"
@@ -1553,9 +1614,14 @@ onBeforeUnmount(() => {
                   </div>
                 </template>
                 <template v-else-if="selectedDynamicBoard">
-                  <strong>No assets match this board’s filters</strong>
-                  <span>Change the saved filters in Board settings to include more approved assets.</span>
-                  <button type="button" @click="openBoardSettings">Board settings</button>
+                  <template v-if="canRenameSelectedBoard">
+                    <h2>Choose filters<br>to add assets</h2>
+                    <button type="button" @click="openBoardFilters">Change filters</button>
+                  </template>
+                  <template v-else>
+                    <strong>Assets appear automatically</strong>
+                    <span>Assets will appear here when they match this board’s filters.</span>
+                  </template>
                 </template>
                 <template v-else>
                   <strong>{{ hasFilters ? 'No matching assets' : 'No assets yet' }}</strong>
@@ -2572,63 +2638,6 @@ button {
 
 .remove-selected-button.remove-selected-button {
   background: var(--color-danger)
-}
-
-.submitter-stack {
-  min-width: max-content;
-  display: flex;
-  align-items: center;
-  padding-left: 2px
-}
-
-.submitter-avatar,
-.submitter-more {
-  width: 44px;
-  height: 44px;
-  min-width: 36px;
-  min-height: 36px;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  border: 2px solid var(--color-bg);
-  border-radius: 50%;
-  overflow: hidden;
-  background: var(--color-surface);
-  font-size: 11px
-}
-
-.submitter-avatar {
-  position: relative
-}
-
-.submitter-avatar+.submitter-avatar,
-.submitter-more {
-  margin-left: -8px
-}
-
-.submitter-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover
-}
-
-.submitter-avatar[aria-pressed=true] {
-  z-index: 2;
-  box-shadow: 0 0 0 2px currentColor
-}
-
-.submitter-avatar:hover {
-  z-index: 3;
-  opacity: 1;
-  scale: 1.08
-}
-
-.submitter-more {
-  width: auto;
-  min-width: 36px;
-  padding: 0 7px;
-  border-radius: 999px;
-  overflow: visible
 }
 
 .filter-create-board {

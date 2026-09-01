@@ -7,7 +7,7 @@ export default defineEventHandler(async (event) => {
   const slug = getRouterParam(event, 'slug') ?? ''
   const now = new Date().toISOString()
   const { data, error } = await useSupabaseAdmin().from('public_collections')
-    .select('id,organization_id,title,purpose,portfolio_kind,portfolio_client,introduction,contact_heading,contact_links,mode,layout,view_settings,filters,expires_at,created_at,updated_at,organizations(name)')
+    .select('id,organization_id,title,purpose,portfolio_kind,portfolio_client,introduction,contact_heading,contact_links,mode,asset_scope,layout,view_settings,filters,expires_at,created_at,updated_at,organizations(name)')
     .eq('slug', slug).eq('publication_enabled', true).or(`expires_at.is.null,expires_at.gt.${now}`).maybeSingle()
   if (error) throw databaseError('read public collection', error)
   if (!data) throw appError(404, 'COLLECTION_NOT_FOUND', 'This collection is unavailable or has expired.')
@@ -16,10 +16,10 @@ export default defineEventHandler(async (event) => {
   let cases: Array<{id:string;title:string;layout:string;assets:unknown[]}> = []
   if (collection.purpose === 'portfolio') {
     const { data: links, error: linksError } = await useSupabaseAdmin().from('portfolio_edition_cases')
-      .select('case_id,position,public_collections!portfolio_edition_cases_case_id_fkey(id,title,mode,layout,view_settings,filters,organization_id)')
+      .select('case_id,position,public_collections!portfolio_edition_cases_case_id_fkey(id,title,mode,asset_scope,layout,view_settings,filters,organization_id)')
       .eq('edition_id', collection.id).order('position')
     if (linksError) throw databaseError('read published portfolio cases', linksError)
-    cases = await Promise.all(links.map(async (link: { public_collections: {id:string;title:string;mode:'dynamic'|'static';layout:string;view_settings:unknown;filters:unknown;organization_id:string} | null }) => {
+    cases = await Promise.all(links.map(async (link: { public_collections: {id:string;title:string;mode:'dynamic'|'static';asset_scope:'approved'|'all';layout:string;view_settings:unknown;filters:unknown;organization_id:string} | null }) => {
       const item = link.public_collections
       if (!item) throw appError(404, 'CASE_NOT_FOUND', 'A portfolio case is unavailable.')
       return { id:item.id, title:item.title, layout:item.layout, viewSettings:boardViewSettingsSchema.parse(item.view_settings ?? {}), assets:await publicAssetsForCollection({ ...item, filters:publicCollectionFiltersSchema.parse(item.filters) }) }

@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import type { BoardAssetScope } from '@content-library/shared'
 import { Xmark } from 'reicon-vue'
 
 interface Option { id: string; name: string }
+interface Submitter { id: string; figma_handle: string | null; avatar_url: string | null }
 interface MatchPreview { id: string; title: string; previewUrl: string; mime_type: string; width: number; height: number }
 interface BoardFilters {
   search: string
@@ -10,6 +12,7 @@ interface BoardFilters {
   projectIds: string[]
   tagIds: string[]
   uploadedBy: null
+  uploadedBys: string[]
   dateFrom: string | null
   dateTo: string | null
 }
@@ -20,19 +23,23 @@ const props = defineProps<{
   boardTitle: string
   projects: Option[]
   tags: Option[]
+  submitters: Submitter[]
+  assetScope: BoardAssetScope
   busy?: boolean
   error?: string
 }>()
 const emit = defineEmits<{
   close: []
-  apply: [behavior: 'add' | 'automatic', filters: BoardFilters]
+  apply: [behavior: 'add' | 'automatic', filters: BoardFilters, assetScope: BoardAssetScope]
 }>()
 
 const search = ref('')
 const projectIds = ref<string[]>([])
 const tagIds = ref<string[]>([])
+const uploadedBys = ref<string[]>([])
 const dateFrom = ref('')
 const dateTo = ref('')
+const selectedAssetScope = ref<BoardAssetScope>('approved')
 const choosingBehavior = ref(false)
 const behavior = ref<'add' | 'automatic'>('add')
 const matchCount = ref(0)
@@ -53,12 +60,10 @@ const filters = computed<BoardFilters>(() => ({
   projectIds: projectIds.value,
   tagIds: tagIds.value,
   uploadedBy: null,
+  uploadedBys: uploadedBys.value,
   dateFrom: toIsoDate(dateFrom.value),
   dateTo: toIsoDate(dateTo.value, true)
 }))
-const matchHeading = computed(() => countLoading.value
-  ? 'Finding matches…'
-  : countError.value ? 'Matches' : `${matchCount.value} ${matchCount.value === 1 ? 'Match' : 'Matches'}`)
 const setupHeading = computed(() => `Adding ${matchCount.value} ${matchCount.value === 1 ? 'asset' : 'assets'}`)
 
 const loadMatchCount = async () => {
@@ -69,7 +74,7 @@ const loadMatchCount = async () => {
   try {
     const response = await $fetch<{ data: { count: number; previews: MatchPreview[] } }>(`/api/shares/${props.boardId}/matches`, {
       method: 'POST',
-      body: filters.value
+      body: { ...filters.value, assetScope: selectedAssetScope.value }
     })
     if (request === countRequest) {
       matchCount.value = response.data.count
@@ -89,20 +94,30 @@ const reset = () => {
   search.value = ''
   projectIds.value = []
   tagIds.value = []
+  uploadedBys.value = []
   dateFrom.value = ''
   dateTo.value = ''
+  selectedAssetScope.value = props.assetScope
   choosingBehavior.value = false
   behavior.value = 'add'
   matchCount.value = 0
   matchPreviews.value = []
   countError.value = ''
 }
+const clearFilters = () => {
+  search.value = ''
+  projectIds.value = []
+  tagIds.value = []
+  uploadedBys.value = []
+  dateFrom.value = ''
+  dateTo.value = ''
+}
 watch(() => props.visible, visible => {
   if (!visible) return
   reset()
   void loadMatchCount()
 })
-watch(filters, scheduleMatchCount, { deep: true })
+watch([filters, selectedAssetScope], scheduleMatchCount, { deep: true })
 onBeforeUnmount(() => clearTimeout(countTimer))
 
 const submit = async () => {
@@ -112,13 +127,20 @@ const submit = async () => {
     decisionTitle.value?.focus({ preventScroll: true })
     return
   }
-  emit('apply', behavior.value, filters.value)
+  emit('apply', behavior.value, filters.value, selectedAssetScope.value)
+}
+const submitterName = (submitter: Submitter) => submitter.figma_handle || 'Unknown submitter'
+const submitterInitial = (submitter: Submitter) => submitterName(submitter).trim().charAt(0).toLocaleUpperCase() || '?'
+const toggleSubmitter = (submitterId: string) => {
+  uploadedBys.value = uploadedBys.value.includes(submitterId)
+    ? uploadedBys.value.filter(id => id !== submitterId)
+    : [...uploadedBys.value, submitterId]
 }
 </script>
 
 <template>
   <SelectionPanel :visible="visible" label="Add with filters" wide overlay raised @close="emit('close')">
-    <Transition name="board-populate-step" mode="out-in">
+    <Transition name="panel-step" mode="out-in">
       <AssetFilterControls
         v-if="!choosingBehavior"
         key="filters"
@@ -129,17 +151,53 @@ const submit = async () => {
         v-model:date-to="dateTo"
         :projects="projects"
         :tags="tags"
-        :heading="`Apply filters to select assets for ${boardTitle}`"
         show-search
         expanded
         :actions-visible="true"
         @submit="submit"
       >
-        <section class="filter-option-group board-match-summary">
-          <h2 class="filter-overlay-title" aria-live="polite">{{ matchHeading }}</h2>
-          <p v-if="countError" class="error" role="alert">{{ countError }}</p>
-          <BoardMatchPreviews :assets="matchPreviews" />
-        </section>
+        <template #before>
+          <BoardAssetScopeControl v-model="selectedAssetScope" :disabled="busy" />
+          <BoardFilterWidget
+            :search="search"
+            :project-ids="projectIds"
+            :tag-ids="tagIds"
+            :uploaded-bys="uploadedBys"
+            :date-from="dateFrom"
+            :date-to="dateTo"
+            :projects="projects"
+            :tags="tags"
+            :submitters="submitters"
+            :assets="matchPreviews"
+            :loading="countLoading"
+            show-previews
+            :asset-scope="selectedAssetScope"
+            clearable
+            :disabled="busy"
+            @clear="clearFilters"
+          />
+        </template>
+        <template #after-tags>
+          <section v-if="submitters.length" class="filter-option-group" role="group" aria-labelledby="board-populate-contributors">
+            <h2 id="board-populate-contributors" class="filter-overlay-title">Contributor</h2>
+            <div class="submitter-stack">
+              <button
+                v-for="submitter in submitters"
+                :key="submitter.id"
+                class="submitter-avatar"
+                type="button"
+                :aria-label="`Filter by ${submitterName(submitter)}`"
+                :aria-pressed="uploadedBys.includes(submitter.id)"
+                :title="submitterName(submitter)"
+                @click="toggleSubmitter(submitter.id)"
+              >
+                <img v-if="submitter.avatar_url" :src="submitter.avatar_url" alt="">
+                <span v-else aria-hidden="true">{{ submitterInitial(submitter) }}</span>
+              </button>
+            </div>
+          </section>
+        </template>
+        <p v-if="countError" class="board-populate-error" role="alert">{{ countError }}</p>
         <template #actions>
           <button type="button" class="panel-secondary-action" @click="emit('close')">Cancel</button>
           <button class="panel-primary-action" type="submit" :disabled="countLoading || Boolean(countError)">Continue</button>
@@ -224,20 +282,4 @@ const submit = async () => {
   line-height: 1.1;
 }
 
-.board-populate-step-enter-active,
-.board-populate-step-leave-active {
-  transition-property: opacity, translate;
-  transition-duration: 180ms, 240ms;
-  transition-timing-function: ease-out, cubic-bezier(.2, 0, 0, 1);
-}
-
-.board-populate-step-enter-from { opacity: 0; translate: .75rem 0; }
-.board-populate-step-leave-to { opacity: 0; translate: -.375rem 0; }
-
-@media (prefers-reduced-motion: reduce) {
-  .board-populate-step-enter-active,
-  .board-populate-step-leave-active { transition: opacity 120ms ease-out; }
-  .board-populate-step-enter-from,
-  .board-populate-step-leave-to { translate: none; }
-}
 </style>

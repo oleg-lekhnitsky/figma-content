@@ -492,16 +492,17 @@ const deleteWorkspace = async () => {
             <div v-if="invitationsLoading || invitations.length" class="workspace-invitations">
               <h3>Active invitations</h3>
               <p v-if="invitationsLoading && !invitations.length" class="workspace-management-message">Loading invitations…</p>
-              <article v-for="invitation in invitations" :key="invitation.id" class="workspace-invitation-card">
-                <div class="workspace-invitation-copy">
-                  <strong>{{ invitation.email }}</strong>
-                  <span>{{ invitation.role }} · Expires {{ new Date(invitation.expires_at).toLocaleDateString() }}</span>
-                </div>
-                <div class="workspace-invitation-actions">
+              <AppPanelRow
+                v-for="invitation in invitations"
+                :key="invitation.id"
+                :title="invitation.email"
+                :meta="`${invitation.role} · Expires ${new Date(invitation.expires_at).toLocaleDateString()}`"
+              >
+                <template #actions>
                   <button v-if="inviteId === invitation.id && inviteUrl" class="panel-secondary-action" type="button" @click="copyInvite">Copy link</button>
                   <button class="panel-secondary-action" type="button" @click="revokeInvitation(invitation)">Revoke</button>
-                </div>
-              </article>
+                </template>
+              </AppPanelRow>
             </div>
             <p v-if="managementMessage" class="workspace-management-message" role="status" aria-live="polite">{{ managementMessage }}</p>
           </section>
@@ -537,7 +538,7 @@ const deleteWorkspace = async () => {
           <section v-if="current?.canDelete" class="filter-option-group workspace-delete-section">
             <h2 class="filter-overlay-title">Delete {{ current.name }} workspace</h2>
             <p>This permanently removes the workspace, its assets, boards, members, and public links.</p>
-            <button class="panel-secondary-action workspace-delete-action" type="button" :disabled="workspaces.length <= 1" @click="deleteWorkspaceDialogOpen = true">
+            <button class="panel-secondary-action panel-compact-action" type="button" :disabled="workspaces.length <= 1" @click="deleteWorkspaceDialogOpen = true">
               Delete workspace
             </button>
             <p v-if="workspaces.length <= 1" class="workspace-management-message">Create another workspace before deleting this one.</p>
@@ -736,7 +737,7 @@ const deleteWorkspace = async () => {
   min-width: 0;
   display: grid;
   align-content: start;
-  gap: var(--space);
+      gap: var(--filter-option-gap);
   padding: 0;
   color: var(--filter-overlay-panel-color);
   background: transparent;
@@ -751,50 +752,6 @@ const deleteWorkspace = async () => {
   font-size: var(--filter-caption-size);
   font-weight: 700;
 }
-.workspace-invitation-card {
-  min-width: 0;
-  display: grid;
-  align-items: center;
-  gap: var(--filter-action-gap);
-  padding: var(--filter-action-gap);
-  border-radius: calc(var(--radius) * 1.5);
-  background: color-mix(in srgb, var(--filter-overlay-panel-color) 7%, transparent);
-}
-.workspace-invitation-card { grid-template-columns: minmax(0, 1fr) auto; }
-.workspace-invitation-copy {
-  min-width: 0;
-  display: grid;
-  gap: var(--filter-option-gap);
-  padding: calc(var(--filter-option-padding) / 2);
-}
-.workspace-invitation-copy strong {
-  min-width: 0;
-  padding: 0;
-  overflow: hidden;
-  font-size: var(--filter-action-font-size);
-  font-weight: 500;
-  line-height: 1.1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.workspace-invitation-copy span {
-  color: var(--filter-overlay-muted-color);
-  font-size: var(--font-size-caption);
-  letter-spacing: var(--letter-spacing-caption);
-  line-height: 1.2;
-  text-transform: capitalize;
-}
-.workspace-invitation-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--filter-action-gap);
-}
-.workspace-invitation-actions .panel-secondary-action {
-  width: auto;
-  min-height: calc(var(--filter-action-height) - .5rem);
-  padding-inline: var(--filter-option-padding);
-}
-
 .workspace-member-list { display: grid; gap: var(--filter-option-gap); }
 
 .workspace-delete-section > p {
@@ -804,8 +761,6 @@ const deleteWorkspace = async () => {
   line-height: 1.25;
   padding: 0 calc(var(--filter-option-padding) / 2) ;
 }
-.workspace-delete-action { justify-self: start; width: auto; }
-
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
 
 .workspace-option-copy {
@@ -832,9 +787,6 @@ const deleteWorkspace = async () => {
 
 @media (max-width: 520px) {
   .workspace-panel { min-width: 0; }
-  .workspace-invitation-card { grid-template-columns: minmax(0, 1fr); }
-  .workspace-invitation-actions { justify-content: stretch; }
-  .workspace-invitation-actions .panel-secondary-action { flex: 1 1 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {

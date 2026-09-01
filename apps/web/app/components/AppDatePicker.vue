@@ -319,7 +319,7 @@ const clear = () => {
 }
 .app-date-picker-trigger-copy.has-value .app-date-picker-trigger-label {
   color: var(--filter-overlay-muted-color);
-  font-size: var(--filter-caption-size);
+  font-size: var(--font-size-caption);
 }
 .app-date-picker-trigger-value {
   overflow: hidden;

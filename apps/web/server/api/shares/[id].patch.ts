@@ -36,7 +36,7 @@ export default defineEventHandler(async (event) => {
   if (parsed.data.action === 'settings') {
     if (projectBoardLocksAction(collection.source_project_id, 'settings')) throw appError(409, 'PROJECT_BOARD_FILTERS', 'Project board filters are managed by the linked project.')
     const filters = session.user.role === 'contributor'
-      ? { ...parsed.data.filters, uploadedBy: session.user.id }
+      ? { ...parsed.data.filters, uploadedBy: session.user.id, uploadedBys: [session.user.id] }
       : parsed.data.filters
     const { data, error: settingsError } = await db.from('public_collections').update({ filters })
       .eq('id', id).eq('organization_id', session.user.organization_id).select('id,filters,updated_at').single()
@@ -46,23 +46,26 @@ export default defineEventHandler(async (event) => {
   if (parsed.data.action === 'apply-filters') {
     if (projectBoardLocksAction(collection.source_project_id, 'apply-filters')) throw appError(409, 'PROJECT_BOARD_FILTERS', 'Project board filters are managed by the linked project.')
     if (collection.purpose !== 'showcase') throw appError(409, 'BOARD_FILTERS_UNAVAILABLE', 'Filters can only populate a standard board.')
+    const assetScope = parsed.data.assetScope ?? collection.asset_scope as 'approved' | 'all'
     if (parsed.data.behavior === 'automatic') {
       const { data, error: automaticError } = await db.from('public_collections').update({
         mode: 'dynamic',
         content_strategy: 'dynamic',
-        filters: parsed.data.filters
+        filters: parsed.data.filters,
+        asset_scope: assetScope
       }).eq('id', id).eq('organization_id', session.user.organization_id)
-        .select('id,mode,content_strategy,filters,updated_at').single()
+        .select('id,mode,content_strategy,filters,asset_scope,updated_at').single()
       if (automaticError) throw databaseError('make board automatic', automaticError)
       return { data: { collection: data, behavior: 'automatic' } }
     }
     if (collection.mode !== 'static') throw appError(409, 'SMART_BOARD_MEMBERSHIP', 'Automatic board membership is controlled by rules.')
-    const result = await addCollectionMatches(id, session.user.organization_id, parsed.data.filters, session.user.id)
+    const result = await addCollectionMatches(id, session.user.organization_id, parsed.data.filters, session.user.id, assetScope)
     const { data, error: addError } = await db.from('public_collections').update({
       filters: parsed.data.filters,
-      content_strategy: 'manual'
+      content_strategy: 'manual',
+      asset_scope: assetScope
     }).eq('id', id).eq('organization_id', session.user.organization_id)
-      .select('id,mode,content_strategy,filters,updated_at').single()
+      .select('id,mode,content_strategy,filters,asset_scope,updated_at').single()
     if (addError) throw databaseError('save board match filters', addError)
     return { data: { collection: data, behavior: 'add', ...result } }
   }
@@ -85,6 +88,13 @@ export default defineEventHandler(async (event) => {
     if (layoutError) throw databaseError('update board layout', layoutError)
     return { data: { collection: data } }
   }
+  if (parsed.data.action === 'asset-scope') {
+    if (collection.purpose === 'review') throw appError(409, 'REVIEW_ASSET_SCOPE', 'Review boards always show approved and draft assets.')
+    const { data, error: scopeError } = await db.from('public_collections').update({ asset_scope: parsed.data.assetScope })
+      .eq('id', id).eq('organization_id', session.user.organization_id).select('id,asset_scope,updated_at').single()
+    if (scopeError) throw databaseError('update board asset scope', scopeError)
+    return { data: { collection: data } }
+  }
   if (parsed.data.action === 'view-settings') {
     const { data, error: viewError } = await db.from('public_collections').update({ view_settings: parsed.data.viewSettings })
       .eq('id', id).eq('organization_id', session.user.organization_id).select('id,view_settings,updated_at').single()
@@ -103,6 +113,6 @@ export default defineEventHandler(async (event) => {
   }
   if (collection.mode !== 'static') throw appError(409, 'DYNAMIC_COLLECTION', 'Dynamic collections update automatically.')
   const filters = publicCollectionFiltersSchema.parse(collection.filters)
-  const itemCount = await replaceCollectionSnapshot(id, session.user.organization_id, filters, session.user.id)
+  const itemCount = await replaceCollectionSnapshot(id, session.user.organization_id, filters, session.user.id, collection.asset_scope as 'approved' | 'all')
   return { data: { refreshed: true, itemCount } }
 })

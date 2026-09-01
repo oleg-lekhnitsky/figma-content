@@ -1,10 +1,10 @@
-import { boardOrderSchema } from '@content-library/shared'
+import { boardOrderSchema, publicCollectionFiltersSchema } from '@content-library/shared'
 import { getRouterParam, readValidatedBody } from 'h3'
 import { appError, databaseError } from '../../../utils/app-error'
 import { requireBoardRole } from '../../../utils/boards'
 import { requireTrustedMutation } from '../../../utils/request-security'
 import { requireAuth } from '../../../utils/session'
-import { matchingApprovedAssetIds } from '../../../utils/public-collections'
+import { assetIdsForCollection } from '../../../utils/public-collections'
 
 export default defineEventHandler(async (event) => {
   requireTrustedMutation(event)
@@ -17,11 +17,21 @@ export default defineEventHandler(async (event) => {
   const db = useSupabaseAdmin()
   let currentIds: Set<string>
   if (collection.mode === 'dynamic') {
-    currentIds = new Set(await matchingApprovedAssetIds(collection.organization_id, collection.filters))
+    currentIds = new Set(await assetIdsForCollection({
+      id: collection.id,
+      organization_id: collection.organization_id,
+      mode: 'dynamic',
+      filters: publicCollectionFiltersSchema.parse(collection.filters),
+      asset_scope: collection.asset_scope as 'approved' | 'all'
+    }))
   } else {
-    const { data: current, error: readError } = await db.from('public_collection_assets').select('asset_id').eq('collection_id', id)
-    if (readError) throw databaseError('read board order', readError)
-    currentIds = new Set(current.map((row: { asset_id: string }) => row.asset_id))
+    currentIds = new Set(await assetIdsForCollection({
+      id: collection.id,
+      organization_id: collection.organization_id,
+      mode: 'static',
+      filters: publicCollectionFiltersSchema.parse(collection.filters),
+      asset_scope: collection.purpose === 'review' ? 'all' : collection.asset_scope as 'approved' | 'all'
+    }))
   }
   if (currentIds.size !== input.data.assetIds.length || input.data.assetIds.some(assetId => !currentIds.has(assetId))) {
     throw appError(409, 'STALE_BOARD_ORDER', 'Board content changed. Reload and try again.')

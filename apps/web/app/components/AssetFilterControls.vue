@@ -122,6 +122,7 @@ const sortOptions = [
         <h2 class="filter-overlay-title">Tags</h2>
         <div class="filter-option-list"><button type="button" :aria-pressed="tagIds.length === 0" @click="emit('update:tagIds', [])">All</button><button v-for="option in tags" :key="option.id" type="button" :aria-pressed="tagIds.includes(option.id)" @click="emit('update:tagIds', toggleOption(tagIds, option.id))">{{ option.name }}</button></div>
       </section>
+      <slot name="after-tags" />
       <section v-if="showAssetFilters" class="filter-option-group">
         <h2 class="filter-overlay-title">Date</h2>
         <div v-if="useDatePresets" class="filter-option-list"><button v-for="option in dateOptions" :key="option.value" type="button" :aria-pressed="dateRange === option.value" @click="emit('update:dateRange', option.value)">{{ option.label }}</button></div>
@@ -153,7 +154,7 @@ const sortOptions = [
       </template>
       <slot />
     </div>
-    <div v-if="$slots.actions" class="filter-actions" :class="{ 'is-visible': actionsVisible }" :aria-hidden="!actionsVisible" :inert="!actionsVisible"><slot name="actions" /></div>
+    <AppPanelActions v-if="$slots.actions" :visible="actionsVisible"><slot name="actions" /></AppPanelActions>
   </form>
 </template>
 

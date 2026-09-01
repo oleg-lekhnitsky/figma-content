@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assetListQuerySchema, assetMetadataSchema, boardMemberSchema, boardOrderSchema, createPublicCollectionSchema, hasPermission, passwordChangeSchema, passwordLoginSchema, reviewDecisionSchema, reviewSubmissionSchema, roleSchema, updatePublicCollectionSchema, userInviteSchema, userUpdateSchema } from './index'
+import { assetListQuerySchema, assetMetadataSchema, boardMemberSchema, boardOrderSchema, createPublicCollectionSchema, hasPermission, passwordChangeSchema, passwordLoginSchema, publicCollectionFiltersSchema, reviewDecisionSchema, reviewSubmissionSchema, roleSchema, updatePublicCollectionSchema, userInviteSchema, userUpdateSchema } from './index'
 
 describe('shared authorization contracts', () => {
   it('keeps role permissions least-privileged', () => {
@@ -102,7 +102,26 @@ describe('shared authorization contracts', () => {
     const filters = { search: '', projectId: null, tagId: null, projectIds: [], tagIds: [], uploadedBy: null, dateFrom: null, dateTo: null }
     expect(updatePublicCollectionSchema.safeParse({ action: 'apply-filters', behavior: 'add', filters }).success).toBe(true)
     expect(updatePublicCollectionSchema.safeParse({ action: 'apply-filters', behavior: 'automatic', filters }).success).toBe(true)
+    expect(updatePublicCollectionSchema.safeParse({ action: 'apply-filters', behavior: 'automatic', filters, assetScope: 'all' }).success).toBe(true)
+    expect(updatePublicCollectionSchema.safeParse({ action: 'apply-filters', behavior: 'automatic', filters, assetScope: 'archived' }).success).toBe(false)
     expect(updatePublicCollectionSchema.safeParse({ action: 'apply-filters', behavior: 'replace', filters }).success).toBe(false)
+  })
+
+  it('supports multiple contributor filters while preserving legacy single-contributor filters', () => {
+    const first = '8bce9101-13ba-448a-acfa-54e91af1daca'
+    const second = '72d34fc8-dfc2-4a16-b342-3d063d1c61b1'
+    const base = { search: '', projectId: null, tagId: null, dateFrom: null, dateTo: null }
+    const legacy = publicCollectionFiltersSchema.parse({ ...base, uploadedBy: first })
+    const multiple = publicCollectionFiltersSchema.parse({ ...base, uploadedBy: null, uploadedBys: [first, second] })
+    expect(legacy.uploadedBy).toBe(first)
+    expect(legacy.uploadedBys).toEqual([])
+    expect(multiple.uploadedBys).toEqual([first, second])
+  })
+
+  it('accepts only supported board asset scopes', () => {
+    expect(updatePublicCollectionSchema.safeParse({ action: 'asset-scope', assetScope: 'approved' }).success).toBe(true)
+    expect(updatePublicCollectionSchema.safeParse({ action: 'asset-scope', assetScope: 'all' }).success).toBe(true)
+    expect(updatePublicCollectionSchema.safeParse({ action: 'asset-scope', assetScope: 'archived' }).success).toBe(false)
   })
 
   it('keeps board ownership out of member invitations', () => {

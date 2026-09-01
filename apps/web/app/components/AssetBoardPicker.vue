@@ -91,9 +91,9 @@ onMounted(() => requestAnimationFrame(() => requestAnimationFrame(() => searchIn
           <p class="asset-board-feedback" role="status" aria-live="polite">{{ feedback }}</p>
         </div>
       </div>
-      <div class="filter-actions is-visible">
+      <AppPanelActions>
         <button class="panel-primary-action" type="button" @click="emit('createBoard')">New board</button>
-      </div>
+      </AppPanelActions>
     </form>
     <button class="filter-panel-toggle is-expanded" type="button" aria-label="Close board picker" aria-expanded="true" @click="emit('close')">
       <Xmark :size="20" :stroke-width="2" aria-hidden="true" />

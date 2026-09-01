@@ -17,13 +17,13 @@ export default defineEventHandler(async (event) => {
   )
   if (collection.purpose === 'portfolio') {
     const { data: links, error } = await useSupabaseAdmin().from('portfolio_edition_cases')
-      .select('public_collections!portfolio_edition_cases_case_id_fkey(id,organization_id,mode,filters)')
+      .select('public_collections!portfolio_edition_cases_case_id_fkey(id,organization_id,mode,filters,asset_scope)')
       .eq('edition_id', id)
       .eq('organization_id', session.user.organization_id)
       .order('position')
     if (error) throw databaseError('read portfolio boards', error)
     const boardAssets = await Promise.all(links.map(async (link: {
-      public_collections: { id: string; organization_id: string; mode: 'dynamic' | 'static'; filters: unknown } | null
+      public_collections: { id: string; organization_id: string; mode: 'dynamic' | 'static'; filters: unknown; asset_scope: 'approved' | 'all' } | null
     }) => {
       const board = link.public_collections
       if (!board) return []
@@ -44,8 +44,12 @@ export default defineEventHandler(async (event) => {
     id: collection.id,
     organization_id: collection.organization_id,
     mode: collection.mode as 'dynamic' | 'static',
+    asset_scope: collection.asset_scope as 'approved' | 'all',
     filters: publicCollectionFiltersSchema.parse(collection.filters)
-  }, { includeUnapproved: collection.purpose === 'review' })
+  }, {
+    includeUnapproved: collection.purpose === 'review',
+    includeContributorDetails: collection.purpose === 'review' || collection.asset_scope === 'all'
+  })
   if (collection.purpose !== 'review' || !assets.length) return { data: { assets } }
   const { data: submissions, error } = await useSupabaseAdmin().from('public_collection_assets')
     .select('asset_id,review_status,created_at,reviewed_at')

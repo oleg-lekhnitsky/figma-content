@@ -9,7 +9,9 @@ export default defineEventHandler(async (event) => {
   const parsed = createPublicCollectionSchema.safeParse(await readBody(event))
   if (!parsed.success) throw appError(400, 'INVALID_COLLECTION', 'Check the collection settings and try again.', parsed.error.flatten())
   const input = parsed.data
-  const filters = session.user.role === 'contributor' ? { ...input.filters, uploadedBy: session.user.id } : input.filters
+  const filters = session.user.role === 'contributor'
+    ? { ...input.filters, uploadedBy: session.user.id, uploadedBys: [session.user.id] }
+    : input.filters
   const contentStrategy = input.contentStrategy
     ?? (['review', 'portfolio', 'case'].includes(input.purpose) ? 'manual' : input.mode === 'dynamic' ? 'dynamic' : 'snapshot')
   const db = useSupabaseAdmin()
@@ -31,7 +33,7 @@ export default defineEventHandler(async (event) => {
     publication_enabled: false,
     filters,
     expires_at: null
-  }).select('id,slug,title,purpose,portfolio_kind,portfolio_client,introduction,contact_heading,contact_links,review_month,submission_deadline,mode,filters,expires_at,publication_enabled,content_strategy,layout,created_at,updated_at').single()
+  }).select('id,slug,title,purpose,portfolio_kind,portfolio_client,introduction,contact_heading,contact_links,review_month,submission_deadline,mode,filters,expires_at,publication_enabled,content_strategy,asset_scope,layout,created_at,updated_at').single()
   if (error) throw databaseError('create public collection', error)
   const { error: ownerError } = await db.from('public_collection_members').insert({
     collection_id: data.id, organization_id: session.user.organization_id,

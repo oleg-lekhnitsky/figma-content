@@ -4,7 +4,6 @@ import { appError, databaseError } from '../../../utils/app-error'
 import { requireBoardRole } from '../../../utils/boards'
 import { requireTrustedMutation } from '../../../utils/request-security'
 import { requireAuth } from '../../../utils/session'
-import { writeAuditLog } from '../../../utils/audit'
 
 export default defineEventHandler(async (event) => {
   requireTrustedMutation(event)
@@ -21,14 +20,9 @@ export default defineEventHandler(async (event) => {
   if (role === 'contributor') query = query.eq('uploaded_by', session.user.id)
   const { data: asset, error: assetError } = await query.maybeSingle()
   if (assetError) throw databaseError('read board asset', assetError)
-  if (!asset) throw appError(403, 'BOARD_ASSET_FORBIDDEN', 'Contributors can add only their own approved assets.')
-  const canApprove = ['editor', 'admin'].includes(session.user.role)
-  if (asset.status !== 'approved' && !canApprove) throw appError(403, 'BOARD_ASSET_NOT_APPROVED', 'Approve this asset before adding it to a board.')
-  if (asset.status !== 'approved') {
-    const { error: approvalError } = await db.from('assets').update({ status: 'approved' })
-      .eq('id', asset.id).eq('organization_id', session.user.organization_id)
-    if (approvalError) throw databaseError('approve board asset', approvalError)
-    await writeAuditLog(session.user.organization_id, session.user.id, 'approve', 'asset', asset.id, { source: 'board-add' })
+  if (!asset) throw appError(403, 'BOARD_ASSET_FORBIDDEN', 'Contributors can add only their own assets.')
+  if (asset.status !== 'approved' && collection.asset_scope !== 'all') {
+    throw appError(409, 'BOARD_ASSET_NOT_APPROVED', 'Approve this asset or set the board to show all assets before adding it.')
   }
   const { data: lastItem } = await db.from('public_collection_assets').select('position').eq('collection_id', id)
     .order('position', { ascending: false, nullsFirst: false }).limit(1).maybeSingle()
@@ -39,5 +33,5 @@ export default defineEventHandler(async (event) => {
   if (error) throw databaseError('add board asset', error)
   const { error: strategyError } = await db.from('public_collections').update({ content_strategy: 'manual' }).eq('id', id).eq('organization_id', session.user.organization_id)
   if (strategyError) throw databaseError('update board content strategy', strategyError)
-  return { data: { added: true, approved: asset.status !== 'approved' } }
+  return { data: { added: true, approved: false } }
 })

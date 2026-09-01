@@ -21,13 +21,13 @@ export default defineEventHandler(async (event) => {
   if (linksOnly) return { data: { selectedIds } }
 
   const { data: cases, error } = await db.from('public_collections')
-    .select('id,title,purpose,mode,filters,organization_id')
+    .select('id,title,purpose,mode,filters,asset_scope,organization_id')
     .eq('organization_id', session.user.organization_id)
     .neq('purpose', 'portfolio')
     .neq('id', id)
     .order('created_at')
   if (error) throw databaseError('list portfolio cases', error)
-  const enriched = await Promise.all(cases.map(async (item: { id:string; title:string; purpose:'showcase'|'review'|'case'; mode:'dynamic'|'static'; filters:unknown; organization_id:string }) => ({
+  const enriched = await Promise.all(cases.map(async (item: { id:string; title:string; purpose:'showcase'|'review'|'case'; mode:'dynamic'|'static'; filters:unknown; asset_scope:'approved'|'all'; organization_id:string }) => ({
     id: item.id,
     title: item.title,
     ...await boardPreviewForCollection({ ...item, filters: publicCollectionFiltersSchema.parse(item.filters) }, { includePreviews })
