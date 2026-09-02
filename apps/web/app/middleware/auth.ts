@@ -18,10 +18,15 @@ export default defineNuxtRouteMiddleware(async () => {
   if (session.value?.data.authenticated) {
     return
   }
-  const sessionRequest = $fetch<AuthSessionResponse>('/api/auth/session').catch(() => undefined)
+  const sessionRequest = $fetch<AuthSessionResponse>('/api/auth/session')
+    .then(value => ({ value }))
+    .catch(() => ({ value: undefined }))
   const finishValidation = async () => {
-    session.value = await sessionRequest
-    if (!session.value?.data.authenticated) return navigateTo('/login')
+    const result = await sessionRequest
+    // A temporary API failure is not evidence that the browser session expired.
+    if (!result.value) return
+    session.value = result.value
+    if (!session.value.data.authenticated) return navigateTo('/login')
   }
 
   // On the initial client pass, mutating keyed data before Vue mounts makes the

@@ -46,7 +46,8 @@ const sessionToken = (event: H3Event) => {
 export const getAppSession = async (event: H3Event): Promise<AppSession | null> => {
   const token = sessionToken(event)
   if (!token) return null
-  const now = new Date().toISOString()
+  const nowDate = new Date()
+  const now = nowDate.toISOString()
   const { data } = await runSupabaseQuery('read session', async () => await useSupabaseAdmin().from('sessions')
     .select('id, expires_at, allowed_users(*,accounts(*))')
     .eq('token_hash', hashToken(token)).is('revoked_at', null).gt('expires_at', now).maybeSingle())
@@ -55,8 +56,21 @@ export const getAppSession = async (event: H3Event): Promise<AppSession | null> 
   if (!member?.is_active || !member.accounts) return null
   const { accounts, ...membership } = member
   const user = { ...membership, ...accounts, id: membership.id, email: accounts.email ?? membership.email } as AllowedUserRow
-  void useSupabaseAdmin().from('sessions').update({ last_used_at: now }).eq('id', data.id)
-  return { id: data.id as string, expiresAt: data.expires_at as string, user }
+  const ttlSeconds = Number(useRuntimeConfig().sessionTtlSeconds)
+  const ttlMilliseconds = ttlSeconds * 1000
+  const shouldRenew = new Date(data.expires_at as string).getTime() - nowDate.getTime() < ttlMilliseconds / 2
+  let expiresAt = data.expires_at as string
+  if (shouldRenew) {
+    const renewedExpiry = new Date(nowDate.getTime() + ttlMilliseconds).toISOString()
+    const { error } = await useSupabaseAdmin().from('sessions').update({ last_used_at: now, expires_at: renewedExpiry }).eq('id', data.id)
+    if (!error) {
+      expiresAt = renewedExpiry
+      if (!getHeader(event, 'authorization')) setWebSessionCookie(event, token, expiresAt)
+    }
+  } else {
+    void useSupabaseAdmin().from('sessions').update({ last_used_at: now }).eq('id', data.id)
+  }
+  return { id: data.id as string, expiresAt, user }
 }
 
 export const requireAuth = async (event: H3Event) => {
