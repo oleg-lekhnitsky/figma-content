@@ -11,9 +11,11 @@ const props = withDefaults(defineProps<{
   options: readonly RolePickerOption[]
   open?: boolean
   ariaLabel?: string
+  menuWidth?: number | 'content' | 'anchor'
 }>(), {
   open: false,
-  ariaLabel: 'Role'
+  ariaLabel: 'Role',
+  menuWidth: 'anchor'
 })
 
 const emit = defineEmits<{
@@ -27,7 +29,7 @@ const selectedOption = computed(() => props.options.find(option => option.value 
 <template>
   <AppDropdownMenu
     :open="open"
-    width="anchor"
+    :width="menuWidth"
     content-class="panel-dropdown-menu app-role-picker-menu"
     @update:open="emit('update:open', $event)"
   >

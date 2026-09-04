@@ -2,14 +2,14 @@
 
 :root {
   --filter-control-height: 2.25rem;
-  --filter-control-height-mobile: 2.75rem;
+  --filter-control-height-mobile: 3.25rem;
   --filter-control-padding: .875rem;
   --filter-control-end-padding: 2.25rem;
   --filter-control-font-size: .8125rem;
   --filter-control-max-width: 11rem;
   --filter-panel-control-gap: .375rem;
   --filter-compact-max-width: 20rem;
-  --filter-compact-background: rgb(0 0 0 / .22);
+  --filter-compact-background: var(--material-tinted-bg);
   --filter-clear-segment-width: 2.5rem;
   --filter-clear-icon-size: 1.1875rem;
   --filter-clear-icon-stroke: 2.1;
@@ -30,7 +30,7 @@
   --filter-overlay-exit-easing: cubic-bezier(.4, 0, .2, 1);
   --filter-overlay-panel-background: var(--material-tinted-bg);
   --filter-overlay-panel-background-mobile: var(--material-tinted-bg-mobile);
-  --filter-overlay-nested-background: color-mix(in srgb, var(--filter-overlay-panel-color) 18%, var(--material-tinted-fallback-bg));
+  --filter-overlay-nested-background: color-mix(in srgb, var(--filter-overlay-panel-color) 20%, var(--material-tinted-fallback-bg));
   --filter-overlay-panel-color: var(--material-tinted-fg);
   --filter-overlay-control-hover-background: var(--material-tinted-hover-bg);
   --filter-overlay-primary-background: rgb(255 255 255 / .9);
@@ -193,6 +193,14 @@ button.filter-dropdown-trigger { display: flex; align-items: center; white-space
 
 .filter-panel-toggle svg {
   width: 17px;
+}
+
+.filter-panel-toggle svg:is(.view-grid-icon, .filter-tuning-icon) {
+  width: var(--filter-control-height-mobile);
+  height: var(--filter-control-height-mobile);
+}
+
+.filter-panel-toggle svg:not(.reicon):not(.toolbar-custom-icon) {
   fill: none;
   stroke: currentColor;
   stroke-width: 1.8;
@@ -266,6 +274,7 @@ body:has(> .selection-panel.selection-panel--filter-overlay) > .selection-panel.
 }
 
 .selection-panel.selection-panel--bare:not(.selection-panel--filter-overlay) > .mobile-control-blur {
+  position: relative;
   flex: 0 0 auto;
   display: flex;
   width: max-content;
@@ -274,20 +283,37 @@ body:has(> .selection-panel.selection-panel--filter-overlay) > .selection-panel.
   box-sizing: border-box;
   overflow: hidden;
   border-radius: var(--filter-pill-radius);
-  background: var(--filter-compact-background);
+  background: transparent;
   box-shadow: none;
-  -webkit-backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
-  backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
+  isolation: isolate;
+}
+
+.selection-panel.selection-panel--bare:not(.selection-panel--filter-overlay) > .mobile-control-blur::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    linear-gradient(var(--filter-compact-background), var(--filter-compact-background)),
+    var(--filter-overlay-backdrop-background);
+  -webkit-backdrop-filter: blur(var(--filter-overlay-blur)) saturate(140%);
+  backdrop-filter: blur(var(--filter-overlay-blur)) saturate(140%);
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .selection-panel.selection-panel--bare:not(.selection-panel--filter-overlay) > .mobile-control-blur:has(> :is(.filter-panel-toggle:not(.is-expanded), .mobile-filter-search, .filter-clear-compact)):hover {
-    background: var(--filter-overlay-control-hover-background);
+  .selection-panel.selection-panel--bare:not(.selection-panel--filter-overlay) > .mobile-control-blur:has(> button:is(:hover, :focus-visible))::before {
+    background:
+      linear-gradient(var(--filter-overlay-control-hover-background), var(--filter-overlay-control-hover-background)),
+      var(--filter-overlay-backdrop-background);
   }
 }
 
 .selection-panel.selection-panel--bare:not(.selection-panel--filter-overlay) > .mobile-control-blur:has(.mobile-filter-search),
-.selection-panel.selection-panel--bare:not(.selection-panel--filter-overlay) > .mobile-control-blur:has(.filter-clear-compact) {
+.selection-panel.selection-panel--bare:not(.selection-panel--filter-overlay) > .mobile-control-blur:has(.filter-clear-compact),
+.selection-panel.selection-panel--bare:not(.selection-panel--filter-overlay) > .mobile-control-blur:has(> .filter-panel-toggle:not(.has-filter-count)),
+.selection-panel.selection-panel--bare:not(.selection-panel--filter-overlay) > .mobile-control-blur:has(> .selected-board-icon-action) {
   width: var(--filter-control-height-mobile);
   min-width: var(--filter-control-height-mobile);
   flex-basis: var(--filter-control-height-mobile);
@@ -305,9 +331,16 @@ body:has(> .selection-panel.selection-panel--filter-overlay) > .selection-panel.
   box-shadow: none !important;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
+  padding: calc(var(--filter-control-padding)*1) calc(var(--filter-control-padding)*1.25);
 }
 
-.selection-panel.selection-panel--bare:not(.selection-panel--filter-overlay) > .mobile-control-blur > :is(.filter-panel-toggle, .mobile-filter-search, .filter-clear-compact):is(:hover, :active, :focus, :focus-visible) {
+.selection-panel.selection-panel--bare:not(.selection-panel--filter-overlay) > .mobile-control-blur > :is(.mobile-filter-search, .filter-panel-toggle:not(.has-filter-count), .selected-board-icon-action) {
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.selection-panel.selection-panel--bare:not(.selection-panel--filter-overlay) > .mobile-control-blur > button:is(:hover, :active, :focus, :focus-visible) {
   opacity: 1 !important;
   background: transparent !important;
 }
@@ -338,16 +371,20 @@ body:has(> .selection-panel.selection-panel--filter-overlay) > .selection-panel.
 .selection-panel:not(.selection-panel--filter-overlay) > .filter-panel-toggle:not(.is-expanded),
 .selection-panel:not(.selection-panel--filter-overlay) > .filter-clear-compact {
   color: var(--filter-overlay-panel-color);
-  background: var(--filter-overlay-panel-background);
+  background:
+    linear-gradient(var(--filter-overlay-panel-background), var(--filter-overlay-panel-background)),
+    var(--filter-overlay-backdrop-background);
   box-shadow: none;
-  -webkit-backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
-  backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
+  -webkit-backdrop-filter: blur(var(--filter-overlay-blur)) saturate(140%);
+  backdrop-filter: blur(var(--filter-overlay-blur)) saturate(140%);
 }
 
 .selection-panel:not(.selection-panel--filter-overlay) > .filter-panel-toggle:not(.is-expanded):is(:hover, :focus-visible),
 .selection-panel:not(.selection-panel--filter-overlay) > .filter-clear-compact:is(:hover, :focus-visible) {
   opacity: 1;
-  background: var(--filter-overlay-control-hover-background);
+  background:
+    linear-gradient(var(--filter-overlay-control-hover-background), var(--filter-overlay-control-hover-background)),
+    var(--filter-overlay-backdrop-background);
 }
 
 /* Keep clearing distinct for accessibility while presenting it as part of the closed Filters pill. */
@@ -534,7 +571,7 @@ body:has(> .selection-panel.selection-panel--filter-overlay) > .selection-panel.
   letter-spacing: var(--letter-spacing-heading);
   line-height: 1.15;
   margin-bottom: 0;
-  padding: 0 calc(var(--filter-option-padding) / 1) ;
+  padding: 0 calc(var(--filter-option-padding) / 2) ;
 }
 
 .filter-option-group > .filter-overlay-title:not(:only-child){
@@ -551,7 +588,7 @@ margin-top: calc(var(--filter-overlay-padding) * -.15);
   color: var(--filter-overlay-muted-color);
   font-size: var(--filter-option-font-size);
   line-height: 1.35;
-  padding:0  calc(var(--filter-option-padding) / 1) ;
+  padding:0  calc(var(--filter-option-padding) / 2) ;
 }
 
 .selection-panel--filter-overlay .board-type-summary strong {
@@ -938,12 +975,18 @@ button.panel-dropdown-trigger:focus-visible {
 
 .panel-dropdown-menu.panel-dropdown-menu {
   gap: 2px;
-  padding: 4px;
+  /* padding: 4px; */
   border-radius: calc(var(--radius) * 1.5);
   background: var(--filter-overlay-nested-background);
   box-shadow: none;
+box-shadow:
+  0 2px 4px rgba(0, 0, 0, .06),
+  0 8px 24px rgba(0, 0, 0, 0.1),
+  0 24px 48px rgba(0, 0, 0, 0.38);
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
+  overflow: hidden;
+  clip-path: inset(0 round calc(var(--radius) * 1.5));
 }
 
 .panel-dropdown-menu.panel-dropdown-menu > button {

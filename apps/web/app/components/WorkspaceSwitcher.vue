@@ -463,8 +463,10 @@ const deleteWorkspace = async () => {
               <form v-if="inviteComposerOpen" class="workspace-setting-card" @submit.prevent="inviteMember">
                 <AppRolePicker
                   :model-value="inviteRole"
+                  class="workspace-invite-role"
                   :options="workspaceRoleOptions"
                   :open="inviteRoleMenuOpen"
+                  menu-width="content"
                   aria-label="Invitation role"
                   @update:model-value="inviteRole = $event as WorkspaceRole"
                   @update:open="inviteRoleMenuOpen = $event"
@@ -579,6 +581,11 @@ const deleteWorkspace = async () => {
   align-items: center;
   gap: 0;
   padding: 0;
+  border-radius:
+    calc(var(--radius) * .85)
+    calc(var(--identity-avatar-size, 36px) / 2)
+    calc(var(--identity-avatar-size, 36px) / 2)
+    calc(var(--radius) * .85);
   color: var(--color-fg);
   background: transparent;
 }
@@ -688,10 +695,13 @@ const deleteWorkspace = async () => {
 
 .workspace-management-grid { display: grid; gap: var(--space); }
 .workspace-name-form { min-width: 0; }
+.workspace-invite-role { min-width: 0; }
 
 .workspace-setting-card {
   min-width: 0;
   display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr);
+  align-items: center;
   align-content: start;
       gap: var(--filter-option-gap);
   padding: 0;
@@ -708,14 +718,42 @@ const deleteWorkspace = async () => {
   font-size: var(--filter-caption-size);
   font-weight: 700;
 }
-.workspace-member-list { display: grid; gap: var(--filter-option-gap); }
+.workspace-member-list {
+  display: grid;
+  overflow: hidden;
+  border-radius: calc(var(--radius) * 2.5);
+  /* background: color-mix(in srgb, var(--filter-overlay-panel-color) 7%, transparent); */
+  /* padding: calc(var(--filter-action-gap) / 1 ) calc(var(--filter-action-gap) / 1); */
+}
+
+.workspace-member-list :deep(.app-person-row) {
+  border-radius: 0;
+  background: transparent;
+}
+
+@media (max-width: 520px) {
+  .workspace-member-list :deep(.app-person-row) {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .workspace-member-list :deep(.app-person-controls) {
+    grid-column: auto;
+    justify-content: normal;
+  }
+
+  .workspace-member-list :deep(.app-person-role),
+  .workspace-member-list :deep(.app-person-static-role) {
+    width: 7.5rem;
+    flex: 0 1 7.5rem;
+  }
+}
 
 .workspace-delete-section > p {
   margin: 0;
   color: var(--filter-overlay-muted-color);
   font-size: var(--font-size-label);
   line-height: 1.25;
-  padding: 0 calc(var(--filter-option-padding) / 1) ;
+  padding: 0 calc(var(--filter-option-padding) / 2) ;
 }
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
 

@@ -120,7 +120,7 @@ const emit = defineEmits<{
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--filter-action-gap);
-  padding: var(--filter-action-gap);
+  padding: calc(var(--filter-action-gap) / 1 ) calc(var(--filter-action-gap) / 1);
   border-radius: calc(var(--radius) * 1.5);
   background: color-mix(in srgb, var(--filter-overlay-panel-color) 7%, transparent);
 }

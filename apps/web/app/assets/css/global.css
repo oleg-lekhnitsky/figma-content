@@ -256,7 +256,7 @@ button,
   transition-duration: 150ms;
   transition-timing-function: ease-out;
 }
-:is(button, a) svg {
+:is(button, a) svg:not(.toolbar-custom-icon) {
   stroke-width: var(--icon-stroke-width) !important;
 }
 .button-secondary.button-secondary:not(.button-icon) {

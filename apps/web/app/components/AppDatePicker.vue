@@ -24,8 +24,9 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 const open = ref(false)
-const trigger = ref<HTMLButtonElement>()
+const pickerRoot = ref<HTMLElement>()
 const calendar = ref<HTMLElement>()
+const triggerElement = () => pickerRoot.value?.querySelector<HTMLElement>('[data-popover-trigger]')
 
 const parseDate = (value: string) => {
   const match = props.precision === 'month'
@@ -142,7 +143,7 @@ const select = (date: Date) => {
   if (isDisabled(date)) return
   emit('update:modelValue', toValue(date))
   open.value = false
-  nextTick(() => trigger.value?.focus())
+  nextTick(() => triggerElement()?.focus())
 }
 
 const focusDate = async (date: Date) => {
@@ -209,21 +210,23 @@ const setOpen = (value: boolean) => {
 const clear = () => {
   emit('update:modelValue', '')
   open.value = false
-  nextTick(() => trigger.value?.focus())
+  nextTick(() => triggerElement()?.focus())
 }
 </script>
 
 <template>
-  <div class="date-field app-date-picker" :class="`app-date-picker--${surface}`">
+  <div ref="pickerRoot" class="date-field app-date-picker" :class="`app-date-picker--${surface}`">
     <AppPopover :open="open" :width="320" align="start" haspopup="dialog" @update:open="setOpen">
       <template #trigger="{ triggerProps }">
-        <button ref="trigger" v-bind="triggerProps" class="app-date-picker-trigger" type="button" :disabled="disabled" :aria-label="`${label}: ${displayValue || 'No date selected'}`">
-          <span class="app-date-picker-trigger-copy" :class="{ 'has-value': displayValue }">
-            <span v-if="showLabel" class="app-date-picker-trigger-label">{{ label }}</span>
-            <span v-if="displayValue" class="app-date-picker-trigger-value">{{ displayValue }}</span>
-          </span>
-          <Calendar :size="16" weight="Outline" :stroke-width="2" aria-hidden="true" />
-        </button>
+        <slot name="trigger" :trigger-props="triggerProps" :display-value="displayValue">
+          <button v-bind="triggerProps" class="app-date-picker-trigger" type="button" :disabled="disabled" :aria-label="`${label}: ${displayValue || 'No date selected'}`">
+            <span class="app-date-picker-trigger-copy" :class="{ 'has-value': displayValue }">
+              <span v-if="showLabel" class="app-date-picker-trigger-label">{{ label }}</span>
+              <span v-if="displayValue" class="app-date-picker-trigger-value">{{ displayValue }}</span>
+            </span>
+            <Calendar :size="16" weight="Outline" :stroke-width="2" aria-hidden="true" />
+          </button>
+        </slot>
       </template>
       <template #default>
         <section ref="calendar" class="app-calendar" role="dialog" :aria-label="`${label} ${precision}`">
@@ -350,6 +353,10 @@ const clear = () => {
   box-shadow: none;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, .06), 0 8px 24px rgba(0, 0, 0, 0.1), 0 24px 48px rgba(0, 0, 0, 0.38);
+    backdrop-filter: none;
+    overflow: hidden;
+    clip-path: inset(0 round calc(var(--radius) * 1.5));
 }
 .app-calendar-header,
 .app-calendar-footer,

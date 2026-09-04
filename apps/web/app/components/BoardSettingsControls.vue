@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { BoardAssetScope, BoardLayout } from '@content-library/shared'
-import { ArrowUpRight, Copy } from 'reicon-vue'
+import CopyLinkIcon from '~/components/CopyLinkIcon.vue'
+import OpenLinkIcon from '~/components/OpenLinkIcon.vue'
 import { boardLayoutOptions } from '../utils/board-layouts'
 
 interface FilterOption { id: string; name: string }
@@ -158,9 +159,15 @@ const resetFilterDraft = () => {
   filterDraft.dateTo = props.filterDateTo
   filterDraft.assetScope = props.assetScope
 }
-const beginEditingFilters = () => {
+const controlsRoot = ref<HTMLElement | null>(null)
+const beginEditingFilters = async (focus?: 'search') => {
   resetFilterDraft()
   editingFilters.value = true
+  if (!focus) return
+  await nextTick()
+  requestAnimationFrame(() => {
+    controlsRoot.value?.querySelector<HTMLInputElement>('#board-filter-search')?.focus()
+  })
 }
 watch(() => [props.title, props.projectBacked], () => { editingFilters.value = false })
 watch(() => props.editFiltersOnOpen, value => {
@@ -230,7 +237,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="asset-filter-controls asset-filter-controls--expanded board-settings-controls">
+  <div ref="controlsRoot" class="asset-filter-controls asset-filter-controls--expanded board-settings-controls">
     <button class="filter-sheet-handle" type="button" aria-label="Close board settings"><span aria-hidden="true" /></button>
     <Transition name="panel-step" mode="out-in">
     <div :key="editingFilters ? 'filters' : 'settings'" class="filter-sheet-content">
@@ -242,17 +249,18 @@ onBeforeUnmount(() => {
 
     <BoardAssetScopeControl v-if="purpose !== 'review' && (mode !== 'dynamic' || projectBacked)" :model-value="assetScope" :disabled="!canEdit || busy" :description="assetScope === 'all' ? publicationEnabled ? 'Approved and draft assets are visible here and on the public board. Archived assets stay hidden.' : 'Shows approved and draft assets. Archived assets stay hidden.' : 'Shows approved assets only.'" @update:model-value="$emit('setAssetScope', $event)" />
 
-    <BoardFilterWidget v-if="mode === 'dynamic'" class="board-filter-settings" :search="filterSearch" :project-ids="filterProjectIds" :tag-ids="filterTagIds" :uploaded-bys="filterUploadedBys" :date-from="filterDateFrom" :date-to="filterDateTo" :projects="projects" :tags="tags" :submitters="submitters" :asset-scope="assetScope">
-      <button v-if="canEdit && !projectBacked" class="panel-secondary-action" type="button" :disabled="busy" @click="beginEditingFilters">Change filters</button>
+    <BoardFilterWidget v-if="mode === 'dynamic'" class="board-filter-settings" :search="filterSearch" :project-ids="filterProjectIds" :tag-ids="filterTagIds" :uploaded-bys="filterUploadedBys" :date-from="filterDateFrom" :date-to="filterDateTo" :projects="projects" :tags="tags" :submitters="submitters" :asset-scope="assetScope" :interactive="canEdit && !projectBacked && !busy"
+      @update:asset-scope="$emit('setAssetScope', $event)" @update:project-ids="$emit('update:filterProjectIds', $event)" @update:tag-ids="$emit('update:filterTagIds', $event)" @update:uploaded-bys="$emit('update:filterUploadedBys', $event)" @update:date-from="$emit('update:filterDateFrom', $event)" @update:date-to="$emit('update:filterDateTo', $event)" @edit="beginEditingFilters">
+      <button v-if="canEdit && !projectBacked" class="panel-secondary-action" type="button" :disabled="busy" @click="beginEditingFilters()">Change filters</button>
     </BoardFilterWidget>
 
-    <section class="filter-option-group" role="group" aria-labelledby="board-public-access">
+    <section class="filter-option-group board-public-access" role="group" aria-labelledby="board-public-access">
       <div class="board-public-access-heading">
         <h2 id="board-public-access" class="filter-overlay-title">Public access</h2>
         <Transition name="public-access-actions">
           <span v-if="publicationEnabled && publicUrl" class="public-access-actions">
-            <a class="public-access-icon" :href="publicUrl" target="_blank" rel="noopener" aria-label="Open public page in a new tab" title="Open public page"><ArrowUpRight :size="18" :stroke-width="2" aria-hidden="true" /></a>
-            <button class="public-access-icon" type="button" aria-label="Copy public link" title="Copy public link" @click="$emit('copyLink')"><Copy :size="18" :stroke-width="2" aria-hidden="true" /></button>
+            <a class="public-access-icon" :href="publicUrl" target="_blank" rel="noopener" aria-label="Open public page in a new tab" title="Open public page"><OpenLinkIcon aria-hidden="true" /></a>
+            <button class="public-access-icon" type="button" aria-label="Copy public link" title="Copy public link" @click="$emit('copyLink')"><CopyLinkIcon aria-hidden="true" /></button>
           </span>
         </Transition>
       </div>
@@ -472,16 +480,60 @@ onBeforeUnmount(() => {
   padding: 0;
   border: 0;
   border-radius: 50%;
-  color: var(--filter-overlay-primary-color);
-  background: var(--filter-overlay-primary-background);
+  color: var(--filter-overlay-panel-color);
+  background: color-mix(in srgb, var(--filter-overlay-panel-color) 7%, transparent);
   line-height: 0;
   text-decoration: none;
   cursor: pointer;
 }
 
+.public-access-icon:hover {
+  background: color-mix(in srgb, var(--filter-overlay-panel-color) 11%, transparent);
+}
+
+.public-access-icon:active {
+  transform: scale(.96);
+}
+
+.public-access-icon:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
 .public-access-icon svg {
   fill: none;
   stroke: currentColor;
+}
+
+.public-access-icon :deep(:is(.copy-link-icon, .open-link-icon)) {
+  width: 100%;
+  height: 100%;
+}
+
+@media (max-width: 520px) {
+  .board-public-access {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
+  .board-public-access-heading {
+    display: contents;
+  }
+
+  .board-public-access-heading > .filter-overlay-title {
+    grid-column: 1 / -1;
+  }
+
+  .board-public-access > .filter-option-list--segmented {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .public-access-actions {
+    grid-column: 2;
+    grid-row: 2;
+    margin-inline-end: 0;
+  }
 }
 
 .public-access-actions-enter-active,
@@ -536,7 +588,33 @@ onBeforeUnmount(() => {
   translate: 0 -.375rem;
 }
 
-.board-member-list { display: grid; gap: var(--filter-option-gap); }
+.board-member-list {
+  display: grid;
+  overflow: hidden;
+  border-radius: calc(var(--radius) * 2.5);
+}
+
+.board-member-list :deep(.app-person-row) {
+  border-radius: 0;
+  background: transparent;
+}
+
+@media (max-width: 520px) {
+  .board-member-list :deep(.app-person-row) {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .board-member-list :deep(.app-person-controls) {
+    grid-column: auto;
+    justify-content: normal;
+  }
+
+  .board-member-list :deep(.app-person-role),
+  .board-member-list :deep(.app-person-static-role) {
+    width: 7.5rem;
+    flex: 0 1 7.5rem;
+  }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .member-form-enter-active,

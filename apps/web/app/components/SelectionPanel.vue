@@ -126,7 +126,7 @@ onBeforeUnmount(() => {
 }
 
 .selection-panel--raised {
-  bottom: calc(var(--space)*2)
+  bottom: calc(var(--space)*1)
 }
 
 .selection-panel :slotted(strong) {

@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { Gear2, MoreH, Plus, Search, Xmark } from 'reicon-vue'
+import { Gear2, MoreH, Plus, Xmark } from 'reicon-vue'
 import type { BoardAssetScope, BoardLayout, BoardViewSettings } from '@content-library/shared'
 import BrandWordmark from '~/components/BrandWordmark.vue'
+import FilterTuningIcon from '~/components/FilterTuningIcon.vue'
+import SearchMagnifierIcon from '~/components/SearchMagnifierIcon.vue'
+import ViewGridIcon from '~/components/ViewGridIcon.vue'
 
 definePageMeta({
   middleware: 'auth',
@@ -1568,13 +1571,13 @@ onBeforeUnmount(() => {
             :class="{ 'is-search-hidden': searchExpanded }" :aria-hidden="searchExpanded || undefined"
             :inert="searchExpanded || undefined"><button class="filter-panel-toggle"
                 :class="{ 'has-filter-count': activeFilterCount }" type="button" aria-label="Show filters"
-                aria-expanded="false" @click="openFilters"><span>Filters</span><span v-if="activeFilterCount"
+                aria-expanded="false" @click="openFilters"><FilterTuningIcon aria-hidden="true" /><span v-if="activeFilterCount"
                   class="filter-count">{{
                   activeFilterCount }}</span></button></div>
           <div v-if="selectedBoardHasAssets" class="mobile-control-blur compact-search-placeholder"
             :class="{ 'is-search-hidden': searchExpanded }" :aria-hidden="searchExpanded || undefined"
             :inert="searchExpanded || undefined"><button class="filter-panel-toggle" type="button"
-              aria-label="Change library view" :aria-expanded="viewExpanded" @click="openView">View</button></div>
+              aria-label="Change library view" :aria-expanded="viewExpanded" @click="openView"><ViewGridIcon aria-hidden="true" /></button></div>
           <div v-if="hasFilters || searchExpanded" class="mobile-control-blur compact-search-placeholder"
             :class="{ 'is-search-hidden': searchExpanded }" :aria-hidden="searchExpanded || undefined"
             :inert="searchExpanded || undefined"><button
@@ -1592,12 +1595,42 @@ onBeforeUnmount(() => {
               :class="{ 'is-expanded': searchExpanded }" type="button"
               :aria-label="searchExpanded ? 'Hide search' : 'Search assets'" :aria-expanded="searchExpanded"
               @click="toggleSearch"><span class="search-control-icon search-control-icon--search" aria-hidden="true">
-                <Search :size="20" />
+                <SearchMagnifierIcon />
               </span><span class="search-control-icon search-control-icon--close" aria-hidden="true">
                 <Xmark :size="20" :stroke-width="2" />
               </span></button></div>
         </SelectionPanel>
       </template>
+
+      <SelectionPanel
+        :visible="Boolean(libraryPageActive && selectedBoard && !filtersExpanded && !viewExpanded && !videoExpanded && !boardSettingsExpanded && !boardPopulateExpanded && !boardCreatorExpanded)"
+        label="Board actions" bare raised>
+        <div v-if="selectedBoardHasAssets" class="mobile-control-blur">
+          <button class="selected-board-action-button selected-board-icon-action" type="button"
+            aria-label="Change library view" :aria-expanded="viewExpanded" @click="openView">
+            <ViewGridIcon aria-hidden="true" />
+          </button>
+        </div>
+        <div v-if="selectedBoardHasAssets" class="mobile-control-blur">
+          <button class="selected-board-action-button selected-board-video-action" type="button"
+            aria-label="Create a video from this board" :aria-expanded="videoExpanded" @click="openVideo">Create Video</button>
+        </div>
+        <div v-if="selectedBoardHasAssets && canArrangeSelectedBoard" class="mobile-control-blur">
+          <button class="selected-board-action-button selected-board-arrange-action" type="button"
+            :aria-pressed="arrangeExpanded" @click="arrangeExpanded = !arrangeExpanded">{{ arrangeExpanded ? 'Done' : 'Arrange' }}</button>
+        </div>
+        <div v-if="arrangeExpanded && arrangeSelectedIds.length" class="mobile-control-blur selected-board-remove-control">
+          <button class="selected-board-action-button remove-selected-button" type="button" :disabled="arrangeRemoving"
+            @click="removeArrangeDialogOpen = true">Remove {{ arrangeSelectedIds.length }}</button>
+        </div>
+        <div class="mobile-control-blur">
+          <button class="selected-board-action-button selected-board-settings-button selected-board-icon-action"
+            type="button" aria-label="Board settings" title="Board settings"
+            :aria-expanded="boardSettingsExpanded" @click="openBoardSettings">
+            <Gear2 :size="20" aria-hidden="true" />
+          </button>
+        </div>
+      </SelectionPanel>
 
       <div
         class="board-swipe-region" @pointerdown="startBoardSwipe" @pointermove="moveBoardSwipe"
@@ -1620,25 +1653,6 @@ onBeforeUnmount(() => {
                 id="selected-board-title-feedback" class="selected-board-title-feedback"
                 :class="{ error: boardRenameFeedback.error }" role="status" aria-live="polite">{{
                 boardRenameFeedback.text }}</span></div>
-            <div class="selected-board-actions">
-              <button v-if="selectedBoardHasAssets" class="button-secondary selected-board-action-button" type="button" aria-label="Change library view"
-                :aria-expanded="viewExpanded" @click="openView">View</button>
-              <button v-if="selectedBoardHasAssets" class="button-secondary selected-board-action-button" type="button"
-                aria-label="Create a video from this board" :aria-expanded="videoExpanded"
-                @click="openVideo">Video</button>
-              <button v-if="selectedBoardHasAssets && canArrangeSelectedBoard" class="button-secondary selected-board-action-button" type="button"
-                :aria-pressed="arrangeExpanded" @click="arrangeExpanded = !arrangeExpanded">{{ arrangeExpanded ? 'Done'
-                :
-                'Arrange' }}</button>
-              <button v-if="arrangeExpanded && arrangeSelectedIds.length"
-                class="selected-board-action-button remove-selected-button" type="button" :disabled="arrangeRemoving"
-                @click="removeArrangeDialogOpen = true">Remove {{ arrangeSelectedIds.length }}</button>
-              <button class="button-secondary selected-board-action-button selected-board-settings-button"
-                type="button" aria-label="Board settings"
-                title="Board settings" :aria-expanded="boardSettingsExpanded" @click="openBoardSettings">
-                <Gear2 :size="20" aria-hidden="true" />
-              </button>
-            </div>
           </div>
         </div>
         <div
@@ -2339,17 +2353,8 @@ button {
   transition: opacity .18s ease-out, transform .22s cubic-bezier(.2, 0, 0, 1)
 }
 
-.selected-board-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: calc(var(--space)/2)
-}
-
 .selected-board-action-button {
   --action-stagger: 0ms;
-  flex: 0 0 auto;
   min-height: 36px;
   padding-inline: calc(var(--space)*.75);
   font-size: 13px;
@@ -2361,41 +2366,36 @@ button {
   transition-timing-function: ease-out, cubic-bezier(.2, 0, 0, 1), ease
 }
 
-.selected-board-action-button:nth-child(2) {
-  --action-stagger: 35ms
+.selected-board-video-action,
+.selected-board-arrange-action {
+  font-size: 16px
 }
 
-.selected-board-action-button:nth-child(3) {
-  --action-stagger: 70ms
-}
-
-.selected-board-action-button:nth-child(4) {
-  --action-stagger: 105ms
-}
-
-.selected-board-settings-button {
-  width: 36px;
-  min-width: 36px;
+.selected-board-icon-action {
+  width: var(--filter-control-height-mobile);
+  min-width: var(--filter-control-height-mobile);
   padding: 0;
   display: grid;
   place-items: center
 }
 
-.selected-board-settings-button svg {
+.selected-board-icon-action :deep(.view-grid-icon) {
+  width: var(--filter-control-height-mobile);
+  height: var(--filter-control-height-mobile)
+}
+
+.selected-board-icon-action > svg:not(.view-grid-icon) {
   width: 18px;
   height: 18px
+}
+
+.selected-board-remove-control.selected-board-remove-control::before {
+  background: var(--color-danger) !important
 }
 
 .selected-board-heading.title-hidden .selected-board-meta {
   opacity: 0;
   transform: translateY(16px)
-}
-
-.selected-board-heading.title-hidden .selected-board-action-button {
-  pointer-events: none;
-  opacity: 0;
-  transform: translateY(6px);
-  transition-delay: 0ms, 0ms, 0ms
 }
 
 .selected-board-title-feedback {
@@ -2483,9 +2483,9 @@ button {
 }
 
 .mobile-filter-search.mobile-filter-search {
-  width: 44px;
-  height: 44px;
-  min-height: 44px;
+  width: var(--filter-control-height-mobile);
+  height: var(--filter-control-height-mobile);
+  min-height: var(--filter-control-height-mobile);
   display: grid;
   place-items: center;
   padding: 0;
@@ -2522,6 +2522,14 @@ button {
 
 .mobile-filter-search svg {
   width: 19px;
+}
+
+.mobile-filter-search :deep(.search-magnifier-icon) {
+  width: var(--filter-control-height-mobile);
+  height: var(--filter-control-height-mobile)
+}
+
+.mobile-filter-search svg:not(.reicon) {
   fill: none;
   stroke: currentColor;
   stroke-width: 2.1;
@@ -2538,7 +2546,7 @@ button {
   right: calc(var(--filter-control-height-mobile) + var(--filter-panel-control-gap));
   left: 0;
   width: auto;
-  min-height: 44px;
+  min-height: var(--filter-control-height-mobile);
   display: flex;
   align-items: center
 }
@@ -2550,23 +2558,25 @@ button {
 
 .mobile-search-form label {
   width: 100%;
-  height: 44px
+  height: var(--filter-control-height-mobile)
 }
 
 .mobile-search-form input {
   box-sizing: border-box;
   width: 100%;
   max-width: none;
-  height: 44px;
-  min-height: 44px;
+  height: var(--filter-control-height-mobile);
+  min-height: var(--filter-control-height-mobile);
   padding: 0 18px;
   border: 0;
   border-radius: 999px;
   color: var(--material-tinted-fg);
-  background: var(--material-tinted-bg);
+  background:
+    linear-gradient(var(--filter-compact-background), var(--filter-compact-background)),
+    var(--filter-overlay-backdrop-background);
   font-size: 16px;
-  -webkit-backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
-  backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation))
+  -webkit-backdrop-filter: blur(var(--filter-overlay-blur)) saturate(140%);
+  backdrop-filter: blur(var(--filter-overlay-blur)) saturate(140%)
 }
 
 .mobile-search-form input::placeholder {
@@ -2796,9 +2806,9 @@ button {
   }
 
   .mobile-filter-search.mobile-filter-search {
-    width: 44px;
-    height: 44px;
-    min-height: 44px
+    width: var(--filter-control-height-mobile);
+    height: var(--filter-control-height-mobile);
+    min-height: var(--filter-control-height-mobile)
   }
 
   .mobile-filter-search:is(:hover, :active, :focus) {
@@ -2816,12 +2826,12 @@ button {
 
   .mobile-search-form {
     width: auto;
-    height: 44px
+    height: var(--filter-control-height-mobile)
   }
 
   .mobile-search-form label {
     width: 100%;
-    height: 44px
+    height: var(--filter-control-height-mobile)
   }
 
   .mobile-search-form label {
