@@ -69,6 +69,9 @@ export interface VideoComposerSettings {
   flickerEffect: 'off' | 'scale' | 'drift' | 'flip'
   flipMaterial: 'flat' | 'lit'
   flipLightIntensity: number
+  lightX: number
+  lightY: number
+  lightZ: number
   flipRoughness: number
   flipGridColumns: number
   flipGridRows: number
@@ -82,6 +85,7 @@ export interface VideoComposerSettings {
   driftAmount: number
   gridMoveDistance: number
   gridStaggerCurve: VideoEasing
+  gridBuildUp?: boolean
   gridLayout: 'flat' | 'tube'
   gridTubeBend: 'outside' | 'inside'
   gridTubeMotion: 'continuous' | 'stepped'

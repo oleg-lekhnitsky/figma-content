@@ -442,9 +442,12 @@ textarea {
 }
 
 
-.app-popover-content {
+:root {
   --popover-radius: calc(var(--radius) * 1.5);
   --popover-shadow: 0 2px 4px rgb(0 0 0 / .04), 0 8px 20px rgb(0 0 0 / .08), 0 16px 32px rgb(0 0 0 / .14);
+}
+
+.app-popover-content {
   position: fixed;
   z-index: 100;
   overflow: auto;
@@ -453,7 +456,7 @@ textarea {
   box-shadow: var(--popover-shadow);
 }
 @media (max-width: 520px) {
-  .app-popover-content {
+  :root {
     --popover-radius: calc(var(--radius-mobile) * 1.5);
   }
 }

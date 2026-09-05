@@ -1507,6 +1507,12 @@ box-shadow:
     max-height: calc(var(--filter-action-height) * 2 + var(--filter-action-gap) + max(var(--space), env(safe-area-inset-bottom)));
   }
 
+  .filter-actions.filter-actions--standalone.is-visible {
+    padding-top: var(--space);
+    border-radius: var(--filter-overlay-radius);
+    background: var(--filter-overlay-panel-background-mobile);
+  }
+
   :is(.selection-panel--filter-overlay .filter-actions, .filter-actions--standalone) > button {
     max-width: 100%;
   }

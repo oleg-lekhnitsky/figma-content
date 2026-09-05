@@ -1,15 +1,28 @@
 <script setup lang="ts">
 import type { CSSProperties } from 'vue'
+import { snapVideoRange } from '~/utils/video-range-snap'
 
 const props = withDefaults(defineProps<{
   value?: number
   min?: number | string
   max?: number | string
   step?: number | string
+  snapStep?: number
+  snapPoints?: number[]
 }>(), { value: 0, min: 0, max: 100, step: 1 })
 
 const minimum = computed(() => Number(props.min))
 const maximum = computed(() => Number(props.max))
+const emit = defineEmits<{ input: [event: Event] }>()
+const pointerInput = ref(false)
+const bypassSnap = ref(false)
+const handleInput = (event: Event) => {
+  const input = event.target as HTMLInputElement
+  if (pointerInput.value && !bypassSnap.value) {
+    input.value = String(snapVideoRange(Number(input.value), minimum.value, maximum.value, Number(props.step) || 1, props.snapStep, props.snapPoints))
+  }
+  emit('input', event)
+}
 const position = computed(() => Math.max(0, Math.min(100, (props.value - minimum.value) / Math.max(.000001, maximum.value - minimum.value) * 100)))
 const zero = computed(() => Math.max(0, Math.min(100, (0 - minimum.value) / Math.max(.000001, maximum.value - minimum.value) * 100)))
 const style = computed<CSSProperties>(() => ({
@@ -21,7 +34,12 @@ const style = computed<CSSProperties>(() => ({
 <template>
   <input
     class="video-range-input" type="range" :min="min" :max="max" :step="step" :value="value"
-    :style="style">
+    :style="style"
+    @pointerdown="pointerInput = true; bypassSnap = $event.altKey"
+    @pointermove="bypassSnap = $event.altKey"
+    @keydown="pointerInput = false"
+    @blur="pointerInput = false"
+    @input="handleInput">
 </template>
 
 <style scoped>

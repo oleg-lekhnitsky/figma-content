@@ -3,6 +3,8 @@ import type { VideoComposerSettings } from '~/types/video-composer'
 import { MIN_VIDEO_DURATION_SECONDS, normalizeVideoDuration, videoFormatDimensions } from '~/types/video-composer'
 import { defaultVideoBackground } from '~/utils/video-background'
 import { videoTemplates } from '~/utils/video-templates'
+import { curvedGridDirection, curvedGridStep } from '~/utils/curved-grid-motion'
+import { gridBuildPhase } from '~/utils/grid-build-phase'
 
 const easingCurves: Record<VideoComposerSettings['easing'], readonly [number, number, number, number]> = {
   flow: [.2, 0, .2, 1],
@@ -32,7 +34,7 @@ interface VideoComposerRuntimeOptions {
 }
 
 export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Ref<string>, initialTemplateId='flicker-01', runtimeOptions:VideoComposerRuntimeOptions={}) => {
-  const settings = ref<VideoComposerSettings>({ templateId:initialTemplateId,format:'portrait',fit:'contain',transition:'fade',secondsPerSlide:6,showTitles:false,direction:'up',gap:40,tilt:0,scaleCenter:false,tiltMode:'off',easing:'glide',cornerRadius:0,distance:100,centerScale:1.4,fade:0,offsetX:0,offsetY:0,scaleFocus:'center',solo:false,visibleCount:6,planeSize:100,planeRotation:0,cycles:1,loop:true,staggerFrames:2,delayFrames:0,cycleDegrees:360,orbitRadius:280,perspective:140,rotationX:0,rotationY:0,rotationZ:0,reverse:false,spin:0,spread:0,staggerSeconds:.4,scaleStyle:'bloom',growFrom:'center',imageFit:'fit',flickerEffect:'off',flipMaterial:'lit',flipLightIntensity:100,flipRoughness:72,flipGridColumns:1,flipGridRows:1,flipGridGap:4,flipStagger:0,flickerPacing:'equal',scaleDirection:'forward',driftDirection:'up',scaleAmount:30,driftAmount:30,gridMoveDistance:300,gridStaggerCurve:'linear',gridLayout:'flat',gridTubeBend:'outside',gridTubeMotion:'continuous',gridTubeStepRotation:20,gridTubeEmphasisStyle:'stable',gridCameraZoom:100,gridTubeStagger:0,gridScatter:0,gridRotationVariance:0,gridScaleVariance:0,gridEmphasis:'none',gridEmphasisAmount:0,gridEmphasisCurve:'smooth',delaySeconds:0,fps:30,safeArea:false,exportMotionBlur:false,...defaultVideoBackground,globeMinScale:10,globeMaxScale:20,globeAxis:'y',globeMotion:'continuous',globeStops:8,globeShuffle:false,globeFaceCamera:true,globeShowBackfaces:true,globeFlipImage:false,storiesBigScale:115,storiesBigDrift:40,storiesThumbSize:85,storiesThumbAspect:'1:1',storiesContainerOpacity:40,storiesContainerBlur:60,storiesSelectorPad:5,storiesSelectorStroke:2,storiesDimAmount:20,swipeAlternating:true })
+  const settings = ref<VideoComposerSettings>({ templateId:initialTemplateId,format:'portrait',fit:'contain',transition:'fade',secondsPerSlide:6,showTitles:false,direction:'up',gap:40,tilt:0,scaleCenter:false,tiltMode:'off',easing:'glide',cornerRadius:0,distance:100,centerScale:1.4,fade:0,offsetX:0,offsetY:0,scaleFocus:'center',solo:false,visibleCount:6,planeSize:100,planeRotation:0,cycles:1,loop:true,staggerFrames:2,delayFrames:0,cycleDegrees:360,orbitRadius:280,perspective:140,rotationX:0,rotationY:0,rotationZ:0,reverse:false,spin:0,spread:0,staggerSeconds:.4,scaleStyle:'bloom',growFrom:'center',imageFit:'fit',flickerEffect:'off',flipMaterial:'lit',flipLightIntensity:100,lightX:-3,lightY:4,lightZ:5,flipRoughness:72,flipGridColumns:1,flipGridRows:1,flipGridGap:4,flipStagger:0,flickerPacing:'equal',scaleDirection:'forward',driftDirection:'up',scaleAmount:30,driftAmount:30,gridMoveDistance:300,gridStaggerCurve:'linear',gridLayout:'flat',gridTubeBend:'outside',gridTubeMotion:'continuous',gridTubeStepRotation:20,gridTubeEmphasisStyle:'stable',gridCameraZoom:100,gridTubeStagger:0,gridScatter:0,gridRotationVariance:0,gridScaleVariance:0,gridEmphasis:'none',gridEmphasisAmount:0,gridEmphasisCurve:'smooth',delaySeconds:0,fps:30,safeArea:false,exportMotionBlur:false,...defaultVideoBackground,globeMinScale:10,globeMaxScale:20,globeAxis:'y',globeMotion:'continuous',globeStops:8,globeShuffle:false,globeFaceCamera:true,globeShowBackfaces:true,globeFlipImage:false,storiesBigScale:115,storiesBigDrift:40,storiesThumbSize:85,storiesThumbAspect:'1:1',storiesContainerOpacity:40,storiesContainerBlur:60,storiesSelectorPad:5,storiesSelectorStroke:2,storiesDimAmount:20,swipeAlternating:true })
   Object.assign(settings.value,videoTemplates.find(item=>item.id===initialTemplateId)?.preset)
   settings.value.secondsPerSlide=normalizeVideoDuration(settings.value.secondsPerSlide)
   const canvas = shallowRef<HTMLCanvasElement>()
@@ -46,8 +48,12 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
   let assetLoadRevision = 0
   const cancelVideoRequests = new Map<string, () => void>()
   const videos = new Map<string, HTMLVideoElement>()
+  let frameVideoIds = new Set<string>()
+  let mediaWaitStartedAt: number | undefined
+  const waitingForMedia = new Set<string>()
   const videoRequests = new Map<string, Promise<HTMLVideoElement>>()
   const textures = new Map<string, unknown>()
+  let gradientCache: { key: string; texture: import('three').CanvasTexture } | undefined
   const webglMeshes = new Map<string, import('three').Mesh>()
   const gridWrapMeshes = new Map<string, import('three').Mesh>()
   let animationFrame = 0
@@ -71,6 +77,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     webglMeshes.clear()
   }
   const disposeTextures = () => {
+    gradientCache?.texture.dispose();gradientCache=undefined
     disposeWebglMeshes()
     textures.forEach(texture=>(texture as import('three').Texture).dispose())
     textures.clear()
@@ -96,6 +103,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     : template.value.collection==='globe'&&settings.value.globeMotion==='stepped'
       ? settings.value.secondsPerSlide+Math.max(1,Math.round(settings.value.cycles*Math.min(settings.value.visibleCount,settings.value.globeStops)))*settings.value.delaySeconds
     : template.value.collection==='orbit' ? Math.max(.5,settings.value.secondsPerSlide)+Math.max(0,settings.value.delaySeconds)*Math.max(1,settings.value.cycles*Math.max(1,Math.round(settings.value.visibleCount)))
+    : template.value.collection==='grid'&&settings.value.gridBuildUp&&settings.value.loop ? (settings.value.secondsPerSlide+(settings.value.gridLayout==='tube'&&settings.value.gridTubeMotion==='continuous'?0:settings.value.delaySeconds))*settings.value.cycles*2
     : template.value.collection==='grid' ? (settings.value.secondsPerSlide+(settings.value.gridLayout==='tube'&&settings.value.gridTubeMotion==='continuous'?0:settings.value.delaySeconds))*settings.value.cycles
     : template.value.collection==='carousel-3d'||template.value.collection==='globe' ? settings.value.secondsPerSlide*settings.value.cycles
     : template.value.collection==='flicker'||template.value.collection==='test'||template.value.collection==='swipe-depth' ? settings.value.secondsPerSlide*settings.value.cycles
@@ -131,7 +139,10 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     if(pending)return pending
     const request=new Promise<HTMLVideoElement>((resolve,reject)=>{
       const video=cached||document.createElement('video')
-      video.muted=true;video.loop=true;video.playsInline=true;video.preload='auto'
+      video.muted=true;video.defaultMuted=true;video.loop=true;video.playsInline=true;video.preload='auto'
+      video.setAttribute('muted','');video.setAttribute('playsinline','')
+      if(!waitingForMedia.size)mediaWaitStartedAt=performance.now()
+      waitingForMedia.add(asset.id)
       videos.set(asset.id,video)
       const cleanup=()=>{
         clearTimeout(timeout)
@@ -139,8 +150,13 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
         video.removeEventListener('error',failed)
         cancelVideoRequests.delete(asset.id)
         videoRequests.delete(asset.id)
+        waitingForMedia.delete(asset.id)
+        if(!waitingForMedia.size && mediaWaitStartedAt !== undefined){
+          if(playing.value)playbackStartedAt+=performance.now()-mediaWaitStartedAt
+          mediaWaitStartedAt=undefined
+        }
       }
-      const ready=()=>{cleanup();resolve(video)}
+      const ready=()=>{if(!playing.value)video.pause();cleanup();resolve(video)}
       const failed=()=>{
         cleanup();videos.delete(asset.id)
         video.pause();video.removeAttribute('src');video.load()
@@ -151,6 +167,8 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
       video.addEventListener('loadeddata',ready,{once:true});video.addEventListener('error',failed,{once:true})
       if(!cached)video.src=`/api/assets/${encodeURIComponent(asset.id)}/media?variant=original`
       video.load()
+      // Start muted decoding too: metadata/preload alone may not produce a frame on mobile.
+      void video.play().catch(()=>{})
     })
     videoRequests.set(asset.id,request)
     return request
@@ -174,8 +192,10 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
   type RenderableSource = HTMLImageElement|HTMLCanvasElement|HTMLVideoElement
   const loadRenderable = async(asset:AssetMasonryItem):Promise<RenderableSource> => {
     if(asset.mime_type?.startsWith('video/')){
+      const requestedFrame=frameVideoIds
+      requestedFrame.add(asset.id)
       const video=await loadVideo(asset)
-      if(playing.value&&!disposed&&video.paused)void video.play().catch(()=>{})
+      if(playing.value&&!disposed&&requestedFrame===frameVideoIds&&video.paused)void video.play().catch(()=>{})
       return video
     }
     try{return await loadImage(asset)}catch{return missingAssetSource(asset)}
@@ -236,12 +256,16 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
   }
   const createGradientTexture = (THREE:typeof import('three'),width:number,height:number) => {
     if(runtimeOptions.transparentBackground||settings.value.backgroundType!=='gradient')return
+    const key=JSON.stringify([width,height,settings.value.backgroundColor,settings.value.backgroundGradientColor,settings.value.backgroundGradientAngle])
+    if(gradientCache?.key===key)return gradientCache.texture
+    gradientCache?.texture.dispose();gradientCache=undefined
     const background=document.createElement('canvas')
     const scale=Math.min(1,512/Math.max(width,height))
     background.width=Math.max(1,Math.round(width*scale));background.height=Math.max(1,Math.round(height*scale))
     const context=background.getContext('2d');if(!context)return
     paintBackground(context,background.width,background.height)
     const texture=new THREE.CanvasTexture(background);texture.colorSpace=THREE.SRGBColorSpace
+    gradientCache={key,texture}
     return texture
   }
   const draw2d = async (time:number,revision:number) => {
@@ -415,7 +439,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     if(backgroundTexture)scene.background=backgroundTexture
     if(settings.value.flipMaterial==='lit'){
       const intensity=Math.max(0,settings.value.flipLightIntensity)/100
-      scene.add(new THREE.HemisphereLight(0xffffff,0x555555,1.05*intensity));const keyLight=new THREE.DirectionalLight(0xffffff,1.2*intensity);keyLight.position.set(-3,4,5);scene.add(keyLight)
+      scene.add(new THREE.HemisphereLight(0xffffff,0x555555,1.05*intensity));const keyLight=new THREE.DirectionalLight(0xffffff,1.2*intensity);keyLight.position.set(settings.value.lightX,settings.value.lightY,settings.value.lightZ);scene.add(keyLight)
     }
     const viewportHeight=2*camera.position.z*Math.tan(THREE.MathUtils.degToRad(camera.fov/2)),viewportWidth=viewportHeight*camera.aspect
     const totalWidth=viewportWidth*.82*settings.value.planeSize/100,totalHeight=viewportHeight*.82*settings.value.planeSize/100
@@ -441,7 +465,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
       scene.add(group);meshes.push(makeFace(group,frontTexture,false),makeFace(group,backTexture,true))
     }))
     if(!isCurrent()||renderer!==threeRenderer)return
-    renderer.render(scene,camera);backgroundTexture?.dispose();meshes.forEach(mesh=>{mesh.geometry.dispose();(mesh.material as import('three').Material).dispose()});feedback.value=''
+    renderer.render(scene,camera);meshes.forEach(mesh=>{mesh.geometry.dispose();(mesh.material as import('three').Material).dispose()});feedback.value=''
   }
   const drawStories = async (time:number,revision:number) => {
     const target=canvas.value;if(!target||!assets.value.length)return
@@ -540,6 +564,13 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     const isCarousel3d=template.value.collection==='carousel-3d'
     const isGrid=template.value.collection==='grid'
     const isGridTube=isGrid&&settings.value.gridLayout==='tube'
+    const isGridBuildUp=isGrid&&settings.value.gridBuildUp===true
+    const buildPhase=gridBuildPhase(time,totalDuration.value,settings.value.loop)
+    const buildZoomPhase=Math.max(0,(buildPhase-.72)/.28)
+    const buildZoom=1+(settings.value.centerScale-1)*buildZoomPhase*buildZoomPhase*buildZoomPhase
+    if(isGridBuildUp&&isGridTube)time=buildPhase*totalDuration.value/(settings.value.loop?2:1)
+    const buildRandom=(index:number,salt:number)=>{const value=Math.sin((index+1)*12.9898+salt*78.233)*43758.5453;return value-Math.floor(value)}
+    const buildEntrance=(index:number)=>Math.max(0,Math.min(1,(buildPhase-(buildRandom(index,7)*.8-.12))/.08))
     const isOrbit=template.value.collection==='orbit'
     const isGlobe=template.value.collection==='globe'
     const isScale=template.value.collection==='scale'
@@ -584,7 +615,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
       const intensity=Math.max(0,settings.value.flipLightIntensity)/100
       scene.add(new THREE.HemisphereLight(0xffffff,0x555555,1.05*intensity))
       const keyLight=new THREE.DirectionalLight(0xffffff,1.2*intensity)
-      keyLight.position.set(-3,4,5);scene.add(keyLight)
+      keyLight.position.set(settings.value.lightX,settings.value.lightY,settings.value.lightZ);scene.add(keyLight)
     }
     if(isOrbit&&(settings.value.offsetX||settings.value.offsetY))camera.setViewOffset(width,height,-settings.value.offsetX/100*width,-settings.value.offsetY/100*height,width,height)
     const carouselRotator=new THREE.Group(),carouselRing=new THREE.Group()
@@ -673,7 +704,6 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     if(isGlobe&&settings.value.globeMotion!=='stepped')globeGroup.rotation[settings.value.globeAxis]=carouselTravel
     const gridGap=gridCellWidth*Math.max(0,settings.value.flipGridGap)/100
     const gridPitchX=gridCellWidth+gridGap,gridPitchY=gridCellHeight+gridGap
-    const gridPoint=(index:number)=>({x:(index%gridColumns-(gridColumns-1)/2)*gridPitchX,y:((gridRows-1)/2-Math.floor(index/gridColumns))*gridPitchY})
     const gridStepSpan=Math.max(.01,settings.value.secondsPerSlide+settings.value.delaySeconds)
     const gridStep=Math.floor(time/gridStepSpan),gridStepTime=time-gridStep*gridStepSpan
     const gridFocusColumn=Math.floor((gridColumns-1)/2)
@@ -719,7 +749,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     const gridCardProgressValues=[...gridRawCardProgress]
     const gridProgressAllowance=Math.abs(gridStepMoveRows)>0?gridGap*.9/(Math.abs(gridStepMoveRows)*gridPitchY):1
     if(gridProgressAllowance<=.0001)gridCardProgressValues.fill(gridTravelProgress)
-    else{
+    else if(!isGridBuildUp){
       const constraintSoftness=Math.min(.06,gridProgressAllowance*.75)
       const smoothMinimum=(left:number,right:number)=>{
         const blend=Math.max(constraintSoftness-Math.abs(left-right),0)/constraintSoftness
@@ -787,6 +817,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     // Flat carousels only need nearby cards. Cull before loading images, decoding
     // videos, or touching textures; large boards otherwise process every asset.
     const renderEntries=sceneAssets.map((asset,index)=>({asset,index})).filter(({index})=>{
+      if(isGridBuildUp&&buildEntrance(index)<=0)return false
       if(isCarousel3d||isGrid||isOrbit||isGlobe||isScale||isSwipeDepth)return true
       let offset=(centers[index]||0)-focusCenter
       if(sceneAssets.length>1){
@@ -797,9 +828,15 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
       const visibleRadius=settings.value.solo?.5:Math.max(.5,(settings.value.visibleCount-1)/2)
       return Math.abs(centered)<=visibleRadius
     })
+    const frameTextureRequests=new Map<string,Promise<import('three').Texture|undefined>>()
+    const updatedVideoTextures=new Set<string>()
+    const tubeLaneTravel=new Map<number,number>()
     await Promise.all(renderEntries.map(async({asset,index})=>{
       const isVideo=asset.mime_type?.startsWith('video/')===true
       const textureKey=isVideo?`${asset.id}:video:${isGrid?`grid:${settings.value.fit}`:'plane'}`:`${asset.id}:${settings.value.cornerRadius}:${settings.value.planeSize}:${isGrid?`grid:${settings.value.fit}`:'plane'}`
+      let textureRequest=frameTextureRequests.get(textureKey)
+      if(!textureRequest){
+        textureRequest=(async()=>{
       let texture=textures.get(textureKey) as import('three').Texture|undefined
       if(!texture){
         if(isVideo){
@@ -836,8 +873,15 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
           texture=new THREE.CanvasTexture(rounded);texture.colorSpace=THREE.SRGBColorSpace;texture.generateMipmaps=false;texture.minFilter=THREE.LinearFilter;textures.set(textureKey,texture)
         }
       }
+          return texture
+        })()
+        frameTextureRequests.set(textureKey,textureRequest)
+      }
+      const texture=await textureRequest
+      if(!texture)return
       if(!isCurrent())return
-      if(isVideo){
+      if(isVideo&&!updatedVideoTextures.has(textureKey)){
+        updatedVideoTextures.add(textureKey)
         const video=videos.get(asset.id)
         const videoCanvas=texture.image as HTMLCanvasElement
         if(video?.duration&&Number.isFinite(video.duration)){
@@ -919,22 +963,19 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
         const random=(salt:number)=>{const value=Math.sin((index+1)*12.9898+salt*78.233)*43758.5453;return value-Math.floor(value)}
         const signedRandom=(salt:number)=>random(salt)*2-1
         const horizontal=settings.value.driftDirection==='left'||settings.value.driftDirection==='right'
-        const directionSign=settings.value.driftDirection==='left'||settings.value.driftDirection==='up'?1:-1
+        const directionSign=curvedGridDirection(settings.value.driftDirection,settings.value.gridTubeBend==='inside')
         const stagger=Math.max(-1,Math.min(1,(settings.value.gridTubeStagger??0)/100))
         const stepDuration=Math.max(.1,settings.value.secondsPerSlide)
-        const stepSpan=stepDuration+Math.max(0,settings.value.delaySeconds)
-        const completedSteps=Math.floor(time/stepSpan)
-        const stepTime=time-completedSteps*stepSpan
         const lane=horizontal?row:column,laneCount=horizontal?gridRows:gridColumns
-        const orderedLane=stagger<0?laneCount-1-lane:lane
-        const staggerWindow=Math.abs(stagger)*stepDuration*.8
-        const laneDistribution=cubicBezierProgress(orderedLane/Math.max(1,laneCount-1),easingCurves[settings.value.gridStaggerCurve]||easingCurves.linear)
-        const laneDelay=laneDistribution*staggerWindow
-        const laneDuration=Math.max(.1,stepDuration-staggerWindow)
-        const steppedProgress=cubicBezierProgress(THREE.MathUtils.clamp((stepTime-laneDelay)/laneDuration,0,1),easingCurves[settings.value.easing])
-        const travel=(settings.value.gridTubeMotion==='stepped'
-          ? completedSteps+steppedProgress
-          : time/stepDuration*(horizontal?gridColumns:gridRows))*directionSign
+        let travel=tubeLaneTravel.get(lane)
+        if(travel===undefined){
+          if(settings.value.gridTubeMotion==='stepped'){
+            const orderedLane=stagger<0?laneCount-1-lane:lane
+            const distribution=cubicBezierProgress(orderedLane/Math.max(1,laneCount-1),easingCurves[settings.value.gridStaggerCurve]||easingCurves.linear)
+            travel=curvedGridStep(time,stepDuration,settings.value.delaySeconds,distribution,stagger,value=>cubicBezierProgress(value,easingCurves[settings.value.easing]))*directionSign
+          }else travel=time/stepDuration*(horizontal?gridColumns:gridRows)*directionSign
+          tubeLaneTravel.set(lane,travel)
+        }
         const angleStep=Math.PI*2/gridColumns
         const tubeRadius=gridPitchX/Math.max(.01,2*Math.sin(Math.PI/gridColumns))
         const scatter=Math.max(0,Math.min(1,(settings.value.gridScatter??0)/100))
@@ -948,7 +989,9 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
         const baseY=((gridRows-1)/2-row)*gridPitchY
         const baseTubeY=horizontal?baseY:((baseY+travel*gridPitchY+verticalSpan/2)%verticalSpan+verticalSpan)%verticalSpan-verticalSpan/2
         const tubeY=baseTubeY+(!horizontal?staggerParity*gridPitchY*spatialStagger:0)+signedRandom(2)*gridGap*scatter*.45
-        const edgeDistance=THREE.MathUtils.clamp(Math.abs(tubeY)/(viewportHeight/2),0,1)
+        const baseDepth=Math.cos(angle)*tubeRadius*bendDirection
+        const projectedHalfHeight=Math.max(.001,(camera.position.z-baseDepth)*Math.tan(THREE.MathUtils.degToRad(camera.fov/2)))
+        const edgeDistance=THREE.MathUtils.clamp(Math.abs(tubeY+settings.value.offsetY/100)*camera.zoom*(isGridBuildUp?buildZoom:1)/projectedHalfHeight,0,1)
         const rawEmphasisInfluence=settings.value.gridEmphasis==='center'
           ? 1-edgeDistance
           : settings.value.gridEmphasis==='edges'?edgeDistance:0
@@ -974,8 +1017,35 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
         mesh.position.set(Math.sin(angle)*styledRadius+settings.value.offsetX/100,tubeY+settings.value.offsetY/100,Math.cos(angle)*styledRadius*bendDirection)
         mesh.rotation.y=angle*bendDirection
         mesh.rotation.z=rotationZ
-        mesh.scale.setScalar(sizeScale)
+        const entrance=isGridBuildUp?buildEntrance(index):1
+        const entranceScale=entrance*entrance*(3-2*entrance)
+        mesh.scale.setScalar(sizeScale*entranceScale)
+        material.opacity=entranceScale
+        mesh.frustumCulled=true
         mesh.visible=true
+      }else if(isGridBuildUp){
+        const random=(salt:number)=>buildRandom(index,salt)
+        const zoom=buildZoom
+        const fieldWidth=gridColumns*gridPitchX,fieldHeight=gridRows*gridPitchY
+        const travel=buildPhase*settings.value.gridMoveDistance/100*gridPitchY
+        const dx=settings.value.driftDirection==='left'?-travel:settings.value.driftDirection==='right'?travel:0
+        const dy=settings.value.driftDirection==='up'?travel:settings.value.driftDirection==='down'?-travel:0
+        const wrap=(value:number,span:number)=>((value+span/2)%span+span)%span-span/2
+        const scatter=settings.value.gridScatter/100
+        const x=wrap((index%gridColumns-(gridColumns-1)/2)*gridPitchX+(random(1)-.5)*gridPitchX*scatter+dx,fieldWidth)
+        const y=wrap(((gridRows-1)/2-Math.floor(index/gridColumns))*gridPitchY+(random(2)-.5)*gridPitchY*scatter+dy,fieldHeight)
+        const entrance=buildEntrance(index),ease=entrance*entrance*(3-2*entrance)
+        const variation=Math.max(.1,1-random(3)*settings.value.gridScaleVariance/100)
+        mesh.position.set(x*zoom+settings.value.offsetX/100,y*zoom+settings.value.offsetY/100,0)
+        const edgeDistance=THREE.MathUtils.clamp(Math.abs(y*zoom)/(viewportHeight/2),0,1)
+        const rawInfluence=settings.value.gridEmphasis==='center'?1-edgeDistance:settings.value.gridEmphasis==='edges'?edgeDistance:0
+        const influence=cubicBezierProgress(rawInfluence,easingCurves[settings.value.gridEmphasisCurve]||easingCurves.smooth)
+        const emphasisScale=1+influence*Math.max(0,settings.value.gridEmphasisAmount??0)/100
+        mesh.scale.setScalar(zoom*variation*ease*emphasisScale)
+        mesh.rotation.z=THREE.MathUtils.degToRad((random(4)*2-1)*settings.value.gridRotationVariance)
+        material.opacity=ease
+        mesh.renderOrder=Math.round(variation*emphasisScale*1000)
+        mesh.frustumCulled=true
       }else if(isGrid){
         // Advance the grid by one complete row on every focus transition. The
         // base row advances with the step, so completed moves remain continuous;
@@ -1202,13 +1272,19 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
       })
     }
     if(!isCurrent()||renderer!==threeRenderer)return
+    if(isGridBuildUp&&isGridTube){
+      camera.zoom*=buildZoom
+      camera.updateProjectionMatrix()
+    }
     feedback.value=''
     renderer.render(scene,camera)
-    backgroundTexture?.dispose()
+
   }
   const drawAt=async(time:number)=>{
     if(disposed)return
     const revision=++renderRevision
+    const usedVideos=new Set<string>()
+    frameVideoIds=usedVideos
     try {
       if(template.value.collection==='scale')await drawScale(time,revision)
       else if(template.value.collection==='test')await drawTestFlip(time,revision)
@@ -1217,7 +1293,9 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
       else if(template.value.renderer==='webgl')await drawWebgl(time,revision)
       else await draw2d(time,revision)
     } catch {
-      if(revision===renderRevision)feedback.value='Preview unavailable. Check that this board still has accessible image previews.'
+      if(revision===renderRevision)feedback.value='Preview unavailable. Check that this board still has accessible media.'
+    } finally {
+      if(revision===renderRevision&&template.value.renderer==='canvas-2d')videos.forEach((video,id)=>{if(!usedVideos.has(id))video.pause()})
     }
   }
   const stop=()=>{playing.value=false;lastPreviewFrameAt=0;cancelAnimationFrame(animationFrame);videos.forEach(video=>video.pause())}
@@ -1241,7 +1319,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     }
     void drawAt(continuousGridLoop?gridPlaybackTime:progress.value).finally(()=>{if(playing.value)animationFrame=requestAnimationFrame(tick)})
   }
-  const startPlayback=()=>{if(disposed||playing.value)return;const startTime=template.value.collection==='grid'&&settings.value.loop?gridPlaybackTime:progress.value;playbackStartedAt=performance.now()-startTime*1000;lastPreviewFrameAt=0;playing.value=true;videos.forEach(video=>void video.play().catch(()=>{}));animationFrame=requestAnimationFrame(tick)}
+  const startPlayback=()=>{if(disposed||playing.value)return;const startTime=template.value.collection==='grid'&&settings.value.loop?gridPlaybackTime:progress.value;playbackStartedAt=performance.now()-startTime*1000;lastPreviewFrameAt=0;playing.value=true;if(waitingForMedia.size)mediaWaitStartedAt=performance.now();animationFrame=requestAnimationFrame(tick)}
   const togglePlayback=()=>{if(playing.value){stop();void drawAt(progress.value);return}startPlayback()}
   const seek=(value:number)=>{progress.value=value;if(template.value.collection==='grid')gridPlaybackTime=value;if(playing.value)playbackStartedAt=performance.now()-value*1000;return drawAt(value)}
   const setCanvas=(value:HTMLCanvasElement)=>{canvas.value=value;void drawAt(progress.value)}
@@ -1356,7 +1434,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     if(!Number.isFinite(value)||value<MIN_VIDEO_DURATION_SECONDS)settings.value.secondsPerSlide=MIN_VIDEO_DURATION_SECONDS
   })
   watch(
-    ()=>[settings.value.format,settings.value.fit,settings.value.transition,settings.value.secondsPerSlide,settings.value.showTitles,settings.value.direction,settings.value.gap,settings.value.tilt,settings.value.scaleCenter,settings.value.tiltMode,settings.value.easing,settings.value.cornerRadius,settings.value.distance,settings.value.centerScale,settings.value.fade,settings.value.offsetX,settings.value.offsetY,settings.value.scaleFocus,settings.value.solo,settings.value.visibleCount,settings.value.planeSize,settings.value.planeRotation,settings.value.cycles,settings.value.loop,settings.value.staggerFrames,settings.value.delayFrames,settings.value.cycleDegrees,settings.value.orbitRadius,settings.value.perspective,settings.value.rotationX,settings.value.rotationY,settings.value.rotationZ,settings.value.reverse,settings.value.spin,settings.value.spread,settings.value.staggerSeconds,settings.value.scaleStyle,settings.value.growFrom,settings.value.imageFit,settings.value.flickerEffect,settings.value.flipMaterial,settings.value.flipLightIntensity,settings.value.flipRoughness,settings.value.flickerPacing,settings.value.scaleDirection,settings.value.driftDirection,settings.value.scaleAmount,settings.value.driftAmount,settings.value.gridMoveDistance,settings.value.gridStaggerCurve,settings.value.gridLayout,settings.value.gridTubeBend,settings.value.gridTubeMotion,settings.value.gridTubeStepRotation,settings.value.gridTubeEmphasisStyle,settings.value.gridCameraZoom,settings.value.gridTubeStagger,settings.value.gridScatter,settings.value.gridRotationVariance,settings.value.gridScaleVariance,settings.value.gridEmphasis,settings.value.gridEmphasisAmount,settings.value.delaySeconds,settings.value.backgroundType,settings.value.backgroundColor,settings.value.backgroundGradientColor,settings.value.backgroundGradientAngle,settings.value.globeMinScale,settings.value.globeMaxScale,settings.value.globeAxis,settings.value.globeMotion,settings.value.globeStops,settings.value.globeShuffle,settings.value.globeFaceCamera,settings.value.globeShowBackfaces,settings.value.globeFlipImage,settings.value.storiesBigScale,settings.value.storiesBigDrift,settings.value.storiesThumbSize,settings.value.storiesThumbAspect,settings.value.storiesContainerOpacity,settings.value.storiesContainerBlur,settings.value.storiesSelectorPad,settings.value.storiesSelectorStroke,settings.value.storiesDimAmount,settings.value.swipeAlternating],
+    ()=>[settings.value.format,settings.value.fit,settings.value.transition,settings.value.secondsPerSlide,settings.value.showTitles,settings.value.direction,settings.value.gap,settings.value.tilt,settings.value.scaleCenter,settings.value.tiltMode,settings.value.easing,settings.value.cornerRadius,settings.value.distance,settings.value.centerScale,settings.value.fade,settings.value.offsetX,settings.value.offsetY,settings.value.scaleFocus,settings.value.solo,settings.value.visibleCount,settings.value.planeSize,settings.value.planeRotation,settings.value.cycles,settings.value.loop,settings.value.staggerFrames,settings.value.delayFrames,settings.value.cycleDegrees,settings.value.orbitRadius,settings.value.perspective,settings.value.rotationX,settings.value.rotationY,settings.value.rotationZ,settings.value.reverse,settings.value.spin,settings.value.spread,settings.value.staggerSeconds,settings.value.scaleStyle,settings.value.growFrom,settings.value.imageFit,settings.value.flickerEffect,settings.value.flipMaterial,settings.value.flipLightIntensity,settings.value.lightX,settings.value.lightY,settings.value.lightZ,settings.value.flipRoughness,settings.value.flickerPacing,settings.value.scaleDirection,settings.value.driftDirection,settings.value.scaleAmount,settings.value.driftAmount,settings.value.gridMoveDistance,settings.value.gridStaggerCurve,settings.value.gridLayout,settings.value.gridBuildUp,settings.value.gridTubeBend,settings.value.gridTubeMotion,settings.value.gridTubeStepRotation,settings.value.gridTubeEmphasisStyle,settings.value.gridCameraZoom,settings.value.gridTubeStagger,settings.value.gridScatter,settings.value.gridRotationVariance,settings.value.gridScaleVariance,settings.value.gridEmphasis,settings.value.gridEmphasisAmount,settings.value.delaySeconds,settings.value.backgroundType,settings.value.backgroundColor,settings.value.backgroundGradientColor,settings.value.backgroundGradientAngle,settings.value.globeMinScale,settings.value.globeMaxScale,settings.value.globeAxis,settings.value.globeMotion,settings.value.globeStops,settings.value.globeShuffle,settings.value.globeFaceCamera,settings.value.globeShowBackfaces,settings.value.globeFlipImage,settings.value.storiesBigScale,settings.value.storiesBigDrift,settings.value.storiesThumbSize,settings.value.storiesThumbAspect,settings.value.storiesContainerOpacity,settings.value.storiesContainerBlur,settings.value.storiesSelectorPad,settings.value.storiesSelectorStroke,settings.value.storiesDimAmount,settings.value.swipeAlternating],
     ()=>{if(!playing.value)void nextTick(()=>drawAt(progress.value))}
   )
   watch(()=>settings.value.gridEmphasisCurve,()=>{if(!playing.value)void nextTick(()=>drawAt(progress.value))})

@@ -377,14 +377,14 @@ const showAllAssets = () => {
 .board-video-composer {
   --video-panel-radius: clamp(1.25rem, 2vw, 2rem);
   --video-type-caption: var(--font-size-caption);
-  --video-type-body: var(--font-size-label);
+  --video-type-body: var(--filter-option-font-size);
   --video-weight-regular: 500;
   --video-weight-strong: 600;
   --video-text-muted: color-mix(in srgb, var(--filter-overlay-panel-color) 58%, transparent);
   --video-text-secondary: color-mix(in srgb, var(--filter-overlay-panel-color) 72%, transparent);
   --video-range-label-color: color-mix(in srgb, var(--filter-overlay-panel-color) 88%, transparent);
   --video-range-value-color: color-mix(in srgb, var(--filter-overlay-panel-color) 76%, transparent);
-  --video-control-height: 40px;
+  --video-control-height: calc(var(--control-height) + 8px);
   --video-inspector-section-gap: calc(var(--space)*.75);
   --video-inspector-control-gap: .5rem;
   --video-inspector-pair-gap: calc(var(--space)/2);
@@ -676,12 +676,15 @@ const showAllAssets = () => {
 }
 
 :deep(.video-template-list>button) {
+  --video-preset-radius: calc(var(--radius) * 1.5);
+  --video-preset-padding: calc(var(--space) / 4);
+  --video-preset-border: 1px;
   width: 100%;
   min-height: 0;
   touch-action: manipulation;
-  padding: calc(var(--space)/4);
-  border: 1px solid transparent;
-  border-radius: calc(var(--radius)*1.5);
+  padding: var(--video-preset-padding);
+  border: var(--video-preset-border) solid transparent;
+  border-radius: var(--video-preset-radius);
   background: color-mix(in srgb, var(--filter-overlay-panel-color) 7%, transparent);
   color: inherit;
   text-align: left;
@@ -723,7 +726,7 @@ const showAllAssets = () => {
 }
 
 :deep(.video-template-thumb) {
-  border-radius: calc(var(--radius)*1.5)
+  border-radius: max(0px, calc(var(--video-preset-radius) - var(--video-preset-padding) - var(--video-preset-border)))
 }
 
 :deep(.video-template-list strong) {
@@ -860,7 +863,7 @@ const showAllAssets = () => {
   gap: .375rem;
   color: var(--video-text-secondary);
   font-size: var(--video-type-body);
-  font-weight: var(--video-weight-strong);
+  font-weight: var(--video-weight-regular);
   padding: 0 calc(var(--filter-option-padding) / 2);
 }
 
@@ -871,12 +874,15 @@ const showAllAssets = () => {
   margin-top: var(--video-inspector-control-gap)
 }
 
+:deep(.video-choice-row button) {
+  font-size: var(--video-type-body);
+  font-weight: var(--video-weight-regular);
+}
+
 :deep(.video-choice-row:not(:has(button:nth-child(6)))) {
   box-sizing: border-box;
   width: 100%;
-  height: var(--video-control-height) !important;
-  min-height: var(--video-control-height) !important;
-  max-height: var(--video-control-height) !important;
+  min-height: var(--video-control-height);
   flex-wrap: nowrap;
   gap: 2px;
   padding: 4px;
@@ -886,12 +892,10 @@ const showAllAssets = () => {
 
 :deep(.video-choice-row:not(:has(button:nth-child(6))) button) {
   min-width: 0;
-  height: calc(var(--video-control-height) - 8px) !important;
-  min-height: calc(var(--video-control-height) - 8px) !important;
-  max-height: calc(var(--video-control-height) - 8px) !important;
+  height: min-content;
+  min-height: var(--control-height);
   flex: 1 1 0;
-  padding: 0 8px;
-  padding-block: 0 !important;
+  padding: var(--filter-option-padding) 8px;
   border: 0;
   border-radius: calc(var(--radius)*1.5 - 4px);
   color: var(--video-text-muted);
@@ -1045,11 +1049,12 @@ const showAllAssets = () => {
   gap: var(--video-inspector-control-gap);
   padding: calc(var(--video-inspector-control-gap)*2);
   padding-bottom: calc(var(--video-inspector-control-gap)*2.5);
-  border-radius: calc(var(--radius) + var(--video-inspector-control-gap)*2);
-  background: var(--filter-overlay-panel-background);
-  -webkit-backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation));
-  backdrop-filter: blur(var(--filter-control-blur)) saturate(var(--material-tinted-saturation));
-  box-shadow: 0 10px 30px oklch(0 0 0/.18)
+  border-radius: var(--popover-radius);
+  color: var(--filter-overlay-panel-color);
+  background: var(--filter-overlay-nested-background);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: var(--popover-shadow)
 }
 
 :deep(.video-color-picker-toolbar) {
