@@ -17,7 +17,7 @@ const headingId = useId()
 </script>
 
 <template>
-  <section class="filter-option-group board-public-access" role="group" :aria-labelledby="headingId">
+  <section class="filter-option-group board-public-access" :class="{ 'board-public-access--with-actions': !!destinationUrl }" role="group" :aria-labelledby="headingId">
     <div class="board-public-access-heading">
       <h2 :id="headingId" class="filter-overlay-title">Public access</h2>
       <Transition name="public-access-actions">
@@ -101,8 +101,12 @@ const headingId = useId()
 
 @media (max-width: 520px) {
   .board-public-access {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
     align-items: center;
+  }
+
+  .board-public-access--with-actions {
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .board-public-access-heading {

@@ -12,7 +12,10 @@ const dialog = ref<HTMLDialogElement>()
 const overlayContent = ref<HTMLElement>()
 const assetVisual = ref<HTMLElement>()
 const assetTitleInput = ref<HTMLTextAreaElement>()
+const tagInput = ref<{ commit: () => boolean }>()
 const moreOpen = ref(false)
+const projectPickerOpen = ref(false)
+const campaignPickerOpen = ref(false)
 const deleteDialogOpen = ref(false)
 const deleting = ref(false)
 const { data, error, status: assetStatus, refresh, execute: loadAsset } = useLazyFetch<{ data: { asset: AssetDetail } }>(() => `/api/assets/${props.assetId}`, { immediate: false })
@@ -100,6 +103,15 @@ const boardSearchInput = ref<HTMLInputElement>()
 const boardPickerTrigger = ref<HTMLButtonElement>()
 const addingBoardId = ref('')
 const editing = ref(false); const title = ref(''); const description = ref(''); const projectId = ref(''); const campaignId = ref(''); const tagsText = ref(''); const language = ref(''); const contentType = ref(''); const actionError = ref(''); const actionMessage = ref(''); const downloading = ref(false); const saving = ref(false); const titleSaving = ref(false); const approvalBusy = ref(false)
+let actionMessageTimer: ReturnType<typeof setTimeout> | undefined
+watch(actionMessage, message => {
+  if (actionMessageTimer) clearTimeout(actionMessageTimer)
+  if (message) actionMessageTimer = setTimeout(() => { actionMessage.value = '' }, 2500)
+})
+onBeforeUnmount(() => {
+  if (actionMessageTimer) clearTimeout(actionMessageTimer)
+})
+
 const isClosing = ref(false)
 const gestureX = ref(0)
 const gestureY = ref(0)
@@ -265,6 +277,7 @@ const handleTitleKeydown = (event: KeyboardEvent) => {
   }
 }
 const saveDetails = async () => {
+  if (tagInput.value && !tagInput.value.commit()) return
   saving.value = true
   title.value = toTitleCase(title.value)
   const tags = [...new Set(tagsText.value.split(/[,\n]/).map(tag => tag.trim()).filter(Boolean))]
@@ -676,31 +689,31 @@ watch(() => props.assetId, id => {
           <span class="skeleton-line skeleton-section" />
           <span class="skeleton-line skeleton-meta" />
         </aside>
-        <aside v-else-if="asset">
+        <aside v-else-if="asset" class="asset-details-panel">
           <form v-if="editing" class="edit-form" @submit.prevent="saveDetails">
-            <label>Title<input v-model="title" name="title" required maxlength="200"></label>
-            <label>Description<textarea v-model="description" name="description" rows="4" maxlength="5000" /></label>
-            <div class="edit-grid">
-              <label>Project<select v-model="projectId" name="project">
-                  <option value="">No project</option>
-                  <option v-for="project in projectData?.data.projects ?? []" :key="project.id" :value="project.id">{{
-                    project.name }}</option>
-                </select></label>
-              <label>Campaign<select v-model="campaignId" name="campaign">
-                  <option value="">No campaign</option>
-                  <option v-for="campaign in campaignData?.data.campaigns ?? []" :key="campaign.id"
-                    :value="campaign.id">{{ campaign.name }}</option>
-                </select></label>
-              <label>Language<input v-model="language" name="language" maxlength="35" placeholder="English"></label>
-              <label>Content type<input v-model="contentType" name="contentType" maxlength="80"
-                  placeholder="Campaign image"></label>
-            </div>
-            <label>Tags<textarea v-model="tagsText" name="tags" rows="2" maxlength="4049"
-                aria-describedby="tags-hint" /></label>
-            <small id="tags-hint" class="field-hint">Separate tags with commas.</small>
-            <div class="action-row"><button type="submit" :disabled="saving">{{ saving ? 'Saving…' : 'Save changes'
-            }}</button><button class="button-secondary" type="button" :disabled="saving"
-                @click="cancelEditing">Cancel</button></div>
+            <AppSettingsSection>
+              <label><span>Title</span><input v-model="title" class="panel-field" name="title" required maxlength="200"></label>
+              <label><span>Description</span><textarea v-model="description" class="panel-field" name="description" rows="4" maxlength="5000" /></label>
+            </AppSettingsSection>
+            <AppSettingsSection>
+              <div class="edit-field">
+                <span>Project</span>
+                <AppRolePicker v-model="projectId" v-model:open="projectPickerOpen" aria-label="Project" :teleport-to="dialog || 'body'"
+                  :options="[{ value: '', label: 'No project', description: '' }, ...(projectData?.data.projects ?? []).map(item => ({ value: item.id, label: item.name, description: '' }))]" />
+              </div>
+              <div class="edit-field">
+                <span>Campaign</span>
+                <AppRolePicker v-model="campaignId" v-model:open="campaignPickerOpen" aria-label="Campaign" :teleport-to="dialog || 'body'"
+                  :options="[{ value: '', label: 'No campaign', description: '' }, ...(campaignData?.data.campaigns ?? []).map(item => ({ value: item.id, label: item.name, description: '' }))]" />
+              </div>
+            </AppSettingsSection>
+            <AppSettingsSection>
+              <AppTagInput ref="tagInput" v-model="tagsText" :disabled="saving" />
+            </AppSettingsSection>
+            <AppPanelActions standalone class="asset-edit-actions">
+                <button class="panel-secondary-action" type="button" :disabled="saving" @click="cancelEditing">Cancel</button>
+                <button class="panel-primary-action" type="submit" :disabled="saving">{{ saving ? 'Saving…' : 'Save' }}</button>
+            </AppPanelActions>
           </form>
           <template v-else>
             <h1><textarea v-if="canEdit" ref="assetTitleInput" v-model="title" class="asset-title-input" rows="1" maxlength="200"
@@ -740,40 +753,39 @@ watch(() => props.assetId, id => {
             </AppDropdownMenu>
           </div>
           <p v-if="actionError" class="error" role="alert">{{ actionError }}</p>
-          <p v-if="actionMessage" class="success" role="status">{{ actionMessage }}</p>
-          <dl v-if="!editing">
-            <div>
+          <section v-if="!editing" class="asset-metadata" aria-label="Asset details">
+            <AppPanelRow v-if="asset.projects?.name?.trim()" title=""><dl>
               <dt>Project</dt>
               <dd>{{ asset.projects?.name ?? '—' }}</dd>
-            </div>
-            <div>
+            </dl></AppPanelRow>
+            <AppPanelRow v-if="asset.campaigns?.name?.trim()" title=""><dl>
               <dt>Campaign</dt>
               <dd>{{ asset.campaigns?.name ?? '—' }}</dd>
-            </div>
-            <div>
+            </dl></AppPanelRow>
+            <AppPanelRow v-if="asset.width > 0 && asset.height > 0" title=""><dl>
               <dt>Dimensions</dt>
               <dd>{{ asset.width }} × {{ asset.height }}</dd>
-            </div>
-            <div>
+            </dl></AppPanelRow>
+            <AppPanelRow title=""><dl>
               <dt>File</dt>
               <dd>{{ asset.mime_type.replace('image/', '').toUpperCase() }} · {{ formatBytes(asset.file_size) }}</dd>
-            </div>
-            <div>
+            </dl></AppPanelRow>
+            <AppPanelRow v-if="asset.language?.trim()" title=""><dl>
               <dt>Language</dt>
               <dd>{{ asset.language ?? '—' }}</dd>
-            </div>
-            <div>
+            </dl></AppPanelRow>
+            <AppPanelRow v-if="asset.content_type?.trim()" title=""><dl>
               <dt>Content type</dt>
               <dd>{{ asset.content_type ?? '—' }}</dd>
-            </div>
-            <div>
+            </dl></AppPanelRow>
+            <AppPanelRow title=""><dl>
               <dt>Uploaded by</dt>
               <dd class="uploader-info">
                 <img v-if="asset.allowed_users?.avatar_url" :src="asset.allowed_users.avatar_url" alt="">
                 <span>{{ asset.allowed_users?.figma_handle ?? 'Unknown' }}</span>
               </dd>
-            </div>
-          </dl>
+            </dl></AppPanelRow>
+          </section>
           <section v-if="!editing && asset.asset_tags.some(item => item.tags)" class="meta-section">
             <ul class="meta-tags" aria-label="Asset tags">
               <li v-for="item in asset.asset_tags" v-show="item.tags" :key="item.tags?.id">
@@ -817,6 +829,7 @@ watch(() => props.assetId, id => {
           <ShareCollection ref="boardCreator" hide-trigger @created="handleBoardCreated" />
         </footer>
       </section>
+      <AppStatusToast :message="actionMessage" />
     </dialog>
     <AppDialog
       v-model:open="deleteDialogOpen" :title="`Delete “${asset?.title ?? 'asset'}”?`"
@@ -1083,12 +1096,13 @@ watch(() => props.assetId, id => {
 }
 
 aside {
+  min-width: 0;
   min-height: 0;
   padding-right: var(--space);
   padding-bottom: calc(var(--space)*2);
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  overflow: visible;
 }
 
 .asset-status {
@@ -1149,6 +1163,7 @@ h1 {
 }
 
 .primary-actions {
+  --filter-overlay-panel-color: var(--material-tinted-fg);
   flex-wrap: nowrap
 }
 
@@ -1434,59 +1449,74 @@ label {
 
 .edit-form {
   display: grid;
-  gap: var(--space);
+  gap: calc(var(--space) / 2);
 }
 
-.edit-form label {
-  margin: 0;
-}
-
-.edit-form .action-row {
-  margin: 0;
-}
-
-.edit-grid {
+.edit-form label,
+.edit-field {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space);
+  gap: var(--filter-option-gap);
+  margin: 0;
+  font-size: var(--filter-option-font-size);
+}
+
+.edit-form label > span,
+.edit-field > span {
+  padding-inline: calc(var(--filter-option-padding) / 2);
+  color: var(--filter-overlay-muted-color);
 }
 
 .field-hint {
-  margin-top: calc(var(--space) * -1);
-  color: var(--asset-overlay-muted);
+  margin: 0;
+  padding-inline: calc(var(--filter-option-padding) / 2);
+  color: var(--filter-overlay-muted-color);
+  font-size: var(--filter-option-font-size);
 }
 
-input,
-textarea,
-.edit-form select {
-  width: 100%;
-  padding: 10px 0
+.asset-details-panel {
+  --filter-overlay-panel-color: var(--asset-overlay-fg);
+  --filter-overlay-muted-color: var(--asset-overlay-muted);
+  --filter-overlay-primary-background: var(--asset-overlay-fg);
+  --filter-overlay-primary-color: var(--color-bg);
 }
 
-.edit-form select {
-  min-height: 44px;
-}
-
-dl {
-  margin-top: calc(var(--space)*2);
-  border-top: 1px solid var(--asset-overlay-divider)
-}
-
-dl div {
+.asset-metadata {
   display: grid;
-  grid-template-columns: 7rem 1fr;
-  gap: var(--space);
-  padding: 10px 0;
-  border-bottom: 1px solid var(--asset-overlay-divider)
+  gap: var(--filter-action-gap);
+  margin-top: var(--filter-overlay-group-gap);
 }
 
-dt {
-  color: var(--asset-overlay-muted)
+.asset-metadata dl {
+  display: grid;
+  gap: calc(var(--filter-option-gap) / 2);
+  margin: 0;
 }
 
-dd {
-  margin: 0
+.asset-metadata dt {
+  color: var(--asset-overlay-muted);
+  font-size: var(--font-size-caption);
 }
+
+.asset-metadata dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--filter-action-font-size);
+}
+
+.asset-edit-actions {
+  --filter-overlay-panel-color: var(--material-tinted-fg);
+  --filter-overlay-primary-background: rgb(255 255 255 / .9);
+  --filter-overlay-primary-color: #595959;
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  color: var(--filter-overlay-panel-color);
+}
+
+.edit-form > .asset-edit-actions.is-visible {
+  margin-top: 0;
+}
+
 
 .uploader-info {
   display: flex;
@@ -1708,7 +1738,7 @@ li span {
     min-height: 100dvh;
     display: block;
     box-sizing: border-box;
-    padding: calc(var(--space)*2) var(--space) max(calc(var(--space)*3), env(safe-area-inset-bottom));
+    padding: calc(env(safe-area-inset-top, 0px) + var(--space)*2) var(--space) max(calc(var(--space)*3), env(safe-area-inset-bottom));
     color: var(--asset-overlay-fg);
     background: transparent;
     overflow: visible

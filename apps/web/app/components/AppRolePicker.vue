@@ -12,6 +12,7 @@ const props = withDefaults(defineProps<{
   open?: boolean
   ariaLabel?: string
   menuWidth?: number | 'content' | 'anchor'
+  teleportTo?: string | HTMLElement
 }>(), {
   open: false,
   ariaLabel: 'Role',
@@ -30,6 +31,7 @@ const selectedOption = computed(() => props.options.find(option => option.value 
   <AppDropdownMenu
     :open="open"
     :width="menuWidth"
+    :teleport-to="teleportTo"
     content-class="panel-dropdown-menu app-role-picker-menu"
     @update:open="emit('update:open', $event)"
   >
@@ -52,7 +54,7 @@ const selectedOption = computed(() => props.options.find(option => option.value 
       >
         <span class="app-role-picker-copy">
           <strong>{{ option.label }}</strong>
-          <small>{{ option.description }}</small>
+          <small v-if="option.description">{{ option.description }}</small>
         </span>
       </button>
     </template>
@@ -63,7 +65,18 @@ const selectedOption = computed(() => props.options.find(option => option.value 
 .app-role-picker-trigger { width: 100%; }
 
 :global(.app-role-picker-menu.panel-dropdown-menu) {
-  min-width: min(22rem, calc(100vw - var(--space) * 2));
+  min-width: 0;
+  max-width: 100%;
+  border-radius: var(--popover-radius);
+  clip-path: none;
+  box-shadow: none;
+}
+
+:global(.app-role-picker-menu.panel-dropdown-menu > button) {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  border-radius: var(--menu-radius);
 }
 
 .app-role-picker-option {

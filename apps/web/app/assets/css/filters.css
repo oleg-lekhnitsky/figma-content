@@ -550,7 +550,8 @@ body:has(> .selection-panel.selection-panel--filter-overlay) > .selection-panel.
 
   .selection-panel--filter-overlay .asset-filter-controls--expanded .filter-sheet-content > :is(.filter-overlay-title, .filter-option-group, .submitter-stack, .board-settings-intro, .board-settings-actions),
   .selection-panel--filter-overlay .asset-filter-controls--expanded .portfolio-settings > :is(.filter-option-group, .board-settings-actions),
-  .selection-panel--filter-overlay .asset-filter-controls--expanded > .filter-actions.is-visible {
+  .selection-panel--filter-overlay .asset-filter-controls--expanded > .filter-actions.is-visible,
+  .filter-actions--standalone.is-visible {
     box-sizing: border-box;
     padding: var(--filter-overlay-padding);
     border-radius: var(--filter-overlay-radius);
@@ -567,7 +568,7 @@ body:has(> .selection-panel.selection-panel--filter-overlay) > .selection-panel.
   
   color: var(--filter-overlay-panel-color);
   font-size: var(--filter-title-size);
-  font-weight: 500;
+  font-weight: 700;
   letter-spacing: var(--letter-spacing-heading);
   line-height: 1.15;
   margin-bottom: 0;
@@ -587,9 +588,8 @@ margin-top: calc(var(--filter-overlay-padding) * -.15);
   margin: 0;
   color: var(--filter-overlay-muted-color);
   letter-spacing: var(--letter-spacing-heading);
-  font-size: var(--filter-option-font-size);
-      font-size: var(--filter-title-size);
-  line-height: 1.35;
+  font-size: var(--filter-title-size);
+  font-weight: 700;
   line-height: 1.1;
   padding:0  calc(var(--filter-option-padding) / 2) ;
 }
@@ -603,7 +603,7 @@ margin-top: calc(var(--filter-overlay-padding) * -.15);
   padding-inline: calc(var(--filter-option-padding) / 2);
   color: var(--filter-overlay-panel-color);
   font-size: var(--filter-title-size);
-  font-weight: 500;
+  font-weight: 700;
   letter-spacing: var(--letter-spacing-heading);
   line-height: 1.45;
   overflow-wrap: anywhere;
@@ -1243,7 +1243,7 @@ box-shadow:
   background: var(--filter-overlay-control-hover-background);
 }
 
-.selection-panel--filter-overlay .filter-actions {
+:is(.selection-panel--filter-overlay .filter-actions, .filter-actions--standalone) {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
@@ -1264,7 +1264,7 @@ box-shadow:
     visibility 0s var(--filter-action-transition-duration);
 }
 
-.selection-panel--filter-overlay .filter-actions.is-visible {
+:is(.selection-panel--filter-overlay .filter-actions, .filter-actions--standalone).is-visible {
   max-height: var(--filter-action-height);
   margin-top: var(--filter-overlay-group-gap);
   opacity: 1;
@@ -1274,7 +1274,7 @@ box-shadow:
   transition-delay: 0s;
 }
 
-.selection-panel--filter-overlay .filter-actions > button {
+:is(.selection-panel--filter-overlay .filter-actions, .filter-actions--standalone) > button {
   width: 100%;
   min-width: 0;
   height: calc(var(--filter-action-height)/2);
@@ -1287,29 +1287,29 @@ box-shadow:
   white-space: nowrap;
 }
 
-.selection-panel--filter-overlay .filter-actions > button:not(.panel-secondary-action, .button-secondary) {
+:is(.selection-panel--filter-overlay .filter-actions, .filter-actions--standalone) > button:not(.panel-secondary-action, .button-secondary) {
   color: var(--filter-overlay-primary-color);
   background: var(--filter-overlay-primary-background);
 }
 
-.selection-panel--filter-overlay .filter-actions > .panel-secondary-action {
+:is(.selection-panel--filter-overlay .filter-actions, .filter-actions--standalone) > .panel-secondary-action {
   color: var(--filter-overlay-panel-color);
   background: color-mix(in srgb, var(--filter-overlay-panel-color) 7%, transparent);
 }
 
-:is(.selection-panel--filter-overlay .filter-actions > button, .filter-action-button) {
+:is(:is(.selection-panel--filter-overlay .filter-actions, .filter-actions--standalone) > button, .filter-action-button) {
   transition: opacity 120ms ease-out, scale 120ms ease-out;
 }
 
-:is(.selection-panel--filter-overlay .filter-actions > button, .filter-action-button):not(:disabled):hover {
+:is(:is(.selection-panel--filter-overlay .filter-actions, .filter-actions--standalone) > button, .filter-action-button):not(:disabled):hover {
   opacity: .8;
 }
 
-:is(.selection-panel--filter-overlay .filter-actions > button, .filter-action-button):not(:disabled):active {
+:is(:is(.selection-panel--filter-overlay .filter-actions, .filter-actions--standalone) > button, .filter-action-button):not(:disabled):active {
   scale: .96;
 }
 
-:is(.selection-panel--filter-overlay .filter-actions > button, .filter-action-button):disabled {
+:is(:is(.selection-panel--filter-overlay .filter-actions, .filter-actions--standalone) > button, .filter-action-button):disabled {
   opacity: .45;
   scale: 1;
 }
@@ -1456,7 +1456,7 @@ box-shadow:
   }
 
   .selection-panel--filter-overlay .filter-option-list:not(.filter-option-list--segmented) > button,
-  .selection-panel--filter-overlay .filter-actions > button {
+  :is(.selection-panel--filter-overlay .filter-actions, .filter-actions--standalone) > button {
     flex-shrink: 0;
     
   }
@@ -1496,18 +1496,18 @@ box-shadow:
     display: none;
   }
 
-  .selection-panel--filter-overlay .filter-actions {
+  :is(.selection-panel--filter-overlay .filter-actions, .filter-actions--standalone) {
     width: 100%;
     flex-wrap: wrap;
     box-sizing: border-box;
     padding: 0 var(--filter-sheet-inline-padding-mobile) max(var(--space), env(safe-area-inset-bottom));
   }
 
-  .selection-panel--filter-overlay .filter-actions.is-visible {
+  :is(.selection-panel--filter-overlay .filter-actions, .filter-actions--standalone).is-visible {
     max-height: calc(var(--filter-action-height) * 2 + var(--filter-action-gap) + max(var(--space), env(safe-area-inset-bottom)));
   }
 
-  .selection-panel--filter-overlay .filter-actions > button {
+  :is(.selection-panel--filter-overlay .filter-actions, .filter-actions--standalone) > button {
     max-width: 100%;
   }
 
@@ -1528,17 +1528,17 @@ box-shadow:
   .selection-panel--filter-overlay .asset-filter-controls,
   .selection-panel--filter-overlay .video-mobile-panel,
   .selection-panel--filter-overlay > .filter-panel-toggle.is-expanded,
-  .selection-panel--filter-overlay .filter-actions {
+  :is(.selection-panel--filter-overlay .filter-actions, .filter-actions--standalone) {
     animation-duration: .01ms;
     animation-delay: 0ms;
     transition-duration: .01ms;
   }
 
-  :is(.selection-panel--filter-overlay .filter-actions > button, .filter-action-button) {
+  :is(:is(.selection-panel--filter-overlay .filter-actions, .filter-actions--standalone) > button, .filter-action-button) {
     transition: none;
   }
 
-  :is(.selection-panel--filter-overlay .filter-actions > button, .filter-action-button):not(:disabled):active {
+  :is(:is(.selection-panel--filter-overlay .filter-actions, .filter-actions--standalone) > button, .filter-action-button):not(:disabled):active {
     scale: 1;
   }
 }

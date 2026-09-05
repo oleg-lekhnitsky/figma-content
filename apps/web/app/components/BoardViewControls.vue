@@ -17,15 +17,14 @@ const gapOptions: Array<{ value: BoardViewSettings['gap']; label: string }> = [
   { value: 'wide', label: 'Wide' }
 ]
 const columnOptions: Array<{ value: BoardViewSettings['columns']; label: string }> = [
-  { value: 'even-fewer', label: 'Even fewer' }, { value: 'fewer', label: 'Fewer' },
-  { value: 'auto', label: 'Default' }, { value: 'more', label: 'More' }, { value: 'even-more', label: 'Even more' }
+  { value: 'fewer', label: 'Fewer' }, { value: 'auto', label: 'Default' },
+  { value: 'more', label: 'More' }, { value: 'even-more', label: 'Even more' }
 ]
 const isCompact = ref(false)
 let compactQuery: MediaQueryList | undefined
 const updateCompact = () => { isCompact.value = compactQuery?.matches ?? false }
-const visibleColumnOptions = computed(() => isCompact.value ? columnOptions.filter(option => option.value !== 'even-fewer') : columnOptions)
 const columnPressed = (value: BoardViewSettings['columns']) => props.modelValue.columns === value
-  || (isCompact.value && value === 'fewer' && props.modelValue.columns === 'even-fewer')
+  || (value === 'fewer' && props.modelValue.columns === 'even-fewer')
 onMounted(() => {
   compactQuery = window.matchMedia('(max-width: 520px)')
   updateCompact()
@@ -61,7 +60,7 @@ onBeforeUnmount(() => compactQuery?.removeEventListener('change', updateCompact)
       <h2 id="board-view-columns" class="filter-overlay-title">Columns</h2>
       <div class="filter-option-list filter-option-list--segmented">
         <button
-          v-for="(option, index) in visibleColumnOptions"
+          v-for="(option, index) in columnOptions"
           :key="option.value"
           type="button"
           :aria-label="isCompact ? `${index + 1}: ${option.label}` : undefined"
