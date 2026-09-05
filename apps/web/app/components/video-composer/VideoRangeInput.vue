@@ -36,7 +36,7 @@ const style = computed<CSSProperties>(() => ({
   height: var(--video-control-height, 40px);
   margin: 0;
   border: 0;
-  border-radius: calc(var(--radius));
+  border-radius: calc(var(--radius)*1.5);
   appearance: none;
   -webkit-appearance: none;
   cursor: ew-resize;
@@ -112,7 +112,6 @@ const style = computed<CSSProperties>(() => ({
     touch-action: none;
     -webkit-user-select: none;
     user-select: none;
-    border-radius: calc(var(--radius)*1.5);
     
   }
 

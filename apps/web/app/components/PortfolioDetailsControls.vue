@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { BoardLayout, BoardViewSettings } from '@content-library/shared'
-import { ArrowDown, ArrowUp, Copy, ArrowUpRight } from 'reicon-vue'
+import { MoreH } from 'reicon-vue'
+import PublicAccessControl from '~/components/PublicAccessControl.vue'
 import { boardLayoutOptions } from '../utils/board-layouts'
 
 interface ContactLink { label: string; url: string }
@@ -35,6 +36,7 @@ const portfolioClientDraft = ref('')
 const introductionDraft = ref('')
 const contactHeadingDraft = ref('')
 const contactLinkDrafts = ref<ContactLink[]>([])
+const contactMenuOpen = ref<number | null>(null)
 const busy = ref(false)
 const feedback = ref('')
 const feedbackError = ref(false)
@@ -182,7 +184,7 @@ defineExpose({ save, busy })
       <h2 class="filter-overlay-title">Portfolio details</h2>
       <p class="board-type-summary">{{ portfolioKind === 'client' ? portfolioClient ? `Client version for ${portfolioClient}.` : 'Client version.' : 'Main portfolio.' }}</p>
       <label class="sr-only" for="portfolio-name">Portfolio name</label>
-      <input id="portfolio-name" v-model="titleDraft" class="panel-field" required maxlength="120" placeholder="Portfolio name" :disabled="!canEdit || busy">
+      <textarea id="portfolio-name" v-model="titleDraft" class="panel-field" rows="3" required maxlength="120" placeholder="Portfolio name" :disabled="!canEdit || busy" />
     </section>
 
     <section v-if="portfolioKind === 'client'" class="filter-option-group">
@@ -197,20 +199,36 @@ defineExpose({ save, busy })
 
     <section class="filter-option-group contact-fields" aria-labelledby="portfolio-contact-title">
       <h2 id="portfolio-contact-title" class="filter-overlay-title">Contact</h2>
+      <p class="board-type-summary">Add a closing message and links to your email, website, or social&nbsp;profiles.</p>
       <label>
-        <span class="filter-option-label">Closing message</span>
+        <span class="sr-only">Closing message</span>
         <input v-model="contactHeadingDraft" class="panel-field" maxlength="160" placeholder="Let’s work together" :disabled="!canEdit || busy">
       </label>
-      <AppPanelRow v-for="(link, index) in contactLinkDrafts" :key="index" :title="link.label || `Link ${index + 1}`">
-        <label><span class="filter-option-label">Link label</span><input v-model="link.label" class="panel-field" required maxlength="80" placeholder="Email" :disabled="busy"></label>
-        <label><span class="filter-option-label">URL</span><input v-model="link.url" class="panel-field" required inputmode="url" placeholder="mailto:you@example.com" :disabled="busy"></label>
+      <div class="contact-links" role="group" aria-labelledby="portfolio-contact-links-title">
+        <h3 id="portfolio-contact-links-title">Links</h3>
+      <AppPanelRow v-for="(link, index) in contactLinkDrafts" :key="index" class="contact-link-row" :title="link.label || `Link ${index + 1}`">
+        <label><span class="sr-only">Label for link {{ index + 1 }}</span><input v-model="link.label" class="panel-field" required maxlength="80" placeholder="Link label (e.g. Email)" :disabled="!canEdit || busy"></label>
+        <label><span class="sr-only">URL for link {{ index + 1 }}</span><input v-model="link.url" class="panel-field" required inputmode="url" placeholder="mailto:you@example.com" :disabled="!canEdit || busy"></label>
         <template #actions>
-          <button class="panel-secondary-action panel-icon-action" type="button" :disabled="busy || index === 0" :aria-label="`Move ${link.label || `link ${index + 1}`} earlier`" @click="moveContactLink(index, -1)"><ArrowUp :size="20" :stroke-width="1.75" aria-hidden="true" /></button>
-          <button class="panel-secondary-action panel-icon-action" type="button" :disabled="busy || index === contactLinkDrafts.length - 1" :aria-label="`Move ${link.label || `link ${index + 1}`} later`" @click="moveContactLink(index, 1)"><ArrowDown :size="20" :stroke-width="1.75" aria-hidden="true" /></button>
-          <button class="panel-secondary-action" type="button" :disabled="busy" @click="removeContactLink(index)">Remove</button>
+          <AppDropdownMenu
+            :open="contactMenuOpen === index"
+            align="end"
+            content-class="panel-dropdown-menu"
+            @update:open="contactMenuOpen = $event ? index : null"
+          >
+            <template #trigger="{ triggerProps }">
+              <button v-bind="triggerProps" class="panel-secondary-action panel-icon-action contact-link-more" type="button" :disabled="!canEdit || busy" :aria-label="`Actions for ${link.label || `link ${index + 1}`}`">
+                <MoreH :size="18" aria-hidden="true" />
+              </button>
+            </template>
+            <button role="menuitem" type="button" :disabled="!canEdit || busy || index === 0" @click="moveContactLink(index, -1)">Move up</button>
+            <button role="menuitem" type="button" :disabled="!canEdit || busy || index === contactLinkDrafts.length - 1" @click="moveContactLink(index, 1)">Move down</button>
+            <button role="menuitem" type="button" :disabled="!canEdit || busy" @click="removeContactLink(index); contactMenuOpen = null">Remove link</button>
+          </AppDropdownMenu>
         </template>
       </AppPanelRow>
       <button v-if="canEdit" class="panel-secondary-action" type="button" :disabled="busy" @click="addContactLink">Add link</button>
+      </div>
     </section>
 
     <section class="filter-option-group" role="group" aria-labelledby="portfolio-layout-title">
@@ -228,20 +246,14 @@ defineExpose({ save, busy })
       @change="setShowText"
     />
 
-    <section class="filter-option-group" role="group" aria-labelledby="portfolio-public-access">
-      <div class="portfolio-public-heading">
-        <h2 id="portfolio-public-access" class="filter-overlay-title">Public access</h2>
-        <span class="portfolio-public-actions">
-          <a class="panel-secondary-action panel-icon-action" :href="portfolioDestination" target="_blank" rel="noopener" :aria-label="portfolioDestinationLabel" :title="portfolioDestinationLabel"><ArrowUpRight :size="18" :stroke-width="2" aria-hidden="true" /></a>
-          <button v-if="publicationEnabled" class="panel-secondary-action panel-icon-action" type="button" aria-label="Copy public link" title="Copy public link" @click="copyLink"><Copy :size="18" :stroke-width="2" aria-hidden="true" /></button>
-        </span>
-      </div>
-      <p class="board-type-summary">{{ publicationEnabled ? 'Anyone with the link can view this portfolio.' : 'Preview saved changes before publishing.' }}</p>
-      <div class="filter-option-list filter-option-list--segmented">
-        <button type="button" :aria-pressed="!publicationEnabled" :disabled="!canEdit || busy" @click="setPublication(false)">Unpublished</button>
-        <button type="button" :aria-pressed="publicationEnabled" :disabled="!canEdit || busy" @click="setPublication(true)">Published</button>
-      </div>
-    </section>
+    <PublicAccessControl
+      :publication-enabled="publicationEnabled"
+      :disabled="!canEdit || busy"
+      :destination-url="portfolioDestination"
+      :destination-label="portfolioDestinationLabel"
+      @set-publication="setPublication"
+      @copy-link="copyLink"
+    />
 
     <section v-if="portfolioKind === 'client' && canDelete" class="filter-option-group" aria-labelledby="delete-portfolio-version-title">
       <h2 id="delete-portfolio-version-title" class="filter-overlay-title">Delete client version</h2>
@@ -255,8 +267,32 @@ defineExpose({ save, busy })
 
 <style scoped>
 .portfolio-details-form { display: contents; }
-.contact-fields, .contact-fields label { display: grid; gap: var(--filter-option-gap); }
-.portfolio-public-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--filter-option-gap); }
-.portfolio-public-actions { display: flex; gap: var(--filter-action-gap); }
-.portfolio-public-heading .filter-overlay-title { flex: 1 1 auto; }
+.contact-fields label { display: grid; gap: var(--filter-option-gap); }
+
+.contact-links {
+  display: grid;
+  gap: calc(var(--space) * .75);
+}
+
+.contact-link-row.app-panel-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.contact-link-row :deep(.app-panel-row-content) {
+  gap: calc(var(--filter-option-gap) / 2);
+  padding: 0;
+}
+.contact-link-row :deep(.app-panel-row-actions) {
+  width: auto;
+  padding-top: .25rem;
+}
+.contact-link-more.panel-icon-action {
+  width: calc(var(--filter-action-height) - .5rem);
+  min-width: calc(var(--filter-action-height) - .5rem);
+  min-height: calc(var(--filter-action-height) - .5rem);
+  flex-basis: calc(var(--filter-action-height) - .5rem);
+}
 </style>

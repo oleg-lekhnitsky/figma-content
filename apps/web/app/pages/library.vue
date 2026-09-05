@@ -344,7 +344,7 @@ const setSelectedBoardAssetScope = async (assetScope: BoardAssetScope) => {
     boardAssetCache.delete(board.id)
     boardVisualReady.delete(board.id)
     await Promise.all([refreshBoards(), refreshSelectedBoard()])
-    boardSettingsFeedback.text = assetScope === 'all' ? 'Board now shows approved and draft assets.' : 'Board now shows approved assets only.'
+    boardSettingsFeedback.text = assetScope === 'all' ? 'Board now shows liked and draft assets.' : 'Board now shows liked assets only.'
   } catch {
     replaceAssetScope(previous)
     boardSettingsFeedback.text = 'Unable to update the assets shown.'
@@ -2345,7 +2345,7 @@ button {
   align-items: center;
   gap: 8px;
   color: var(--color-muted);
-  font-size: 12px;
+  font-size: var(--font-size-body);
   font-weight: 600;
   letter-spacing: var(--letter-spacing-label);
   opacity: 1;

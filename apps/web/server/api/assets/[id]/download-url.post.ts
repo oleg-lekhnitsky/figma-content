@@ -10,6 +10,6 @@ export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   if (!id) throw appError(400, 'INVALID_ASSET_ID', 'Asset ID is required.')
   const asset = await requireAsset(id, session.user.organization_id)
-  if (session.user.role === 'viewer' && asset.status !== 'approved') throw appError(403, 'FORBIDDEN', 'Only approved assets can be downloaded.')
+  if (session.user.role === 'viewer' && asset.status !== 'approved') throw appError(403, 'FORBIDDEN', 'Only liked assets can be downloaded.')
   return { data: { url: await signedAssetUrl(asset.image_path, 60), expiresIn: 60 } }
 })

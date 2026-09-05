@@ -102,9 +102,11 @@ Authenticated users can browse `/library` and open `/assets/:id`. The API stores
 
 ## Phase 5 workflow and administration
 
-Asset details expose server-enforced actions based on the signed-in role. Contributors may edit or archive their own uploads, editors may manage and approve every asset, and admins may permanently delete assets. Selecting a previously uploaded Figma node now defaults to **Upload new version**; every replacement gets an immutable storage path and `asset_versions` record, increments the current version, and returns the asset to draft for review.
+Asset details expose server-enforced actions based on the signed-in role. Contributors may edit or archive their own uploads, editors may manage and like every asset, and admins may permanently delete assets. Selecting a previously uploaded Figma node now defaults to **Upload new version**; every replacement gets an immutable storage path and `asset_versions` record, increments the current version, and returns the asset to draft for review.
 
-Admins can manage the allowlist at `/admin/users`, change roles, enable or disable access, and revoke active sessions. `/admin/audit-log` records login, upload, edit, approval, archive, deletion, invitations, role/access changes, and session revocation. All queries remain scoped to the administrator's organization.
+Admins can manage the allowlist at `/admin/users`, change roles, enable or disable access, and revoke active sessions. `/admin/audit-log` records login, upload, edit, likes, archive, deletion, invitations, role/access changes, and session revocation. All queries remain scoped to the administrator's organization.
+
+The interface calls the shared asset status **Liked** and uses **Like / Unlike** for the heart action. This remains a workspace-wide status controlling viewer access and board inclusion, not a personal favorite. Existing database/API values (`approved`, `approve`, and `asset:approve`) remain unchanged for compatibility.
 
 ## Figma plugin development
 

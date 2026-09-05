@@ -21,7 +21,7 @@ export default defineEventHandler(async (event) => {
   const input = await readValidatedBody(event, value => reviewDecisionSchema.safeParse(value))
   if (!input.success) throw appError(400, 'INVALID_REVIEW_DECISION', 'Choose submissions and a valid review decision.')
   if (input.data.decision === 'approve' && !['editor', 'admin'].includes(session.user.role)) {
-    throw appError(403, 'APPROVAL_FORBIDDEN', 'Only workspace editors and admins can approve assets.')
+    throw appError(403, 'APPROVAL_FORBIDDEN', 'Only workspace editors and admins can like assets.')
   }
 
   const db = useSupabaseAdmin()

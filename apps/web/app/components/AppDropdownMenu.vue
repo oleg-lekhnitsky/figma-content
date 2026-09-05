@@ -126,13 +126,13 @@ onBeforeUnmount(() => clearTimeout(typeaheadTimer))
     --menu-inset: calc(var(--space) * 2 / 3);
     --menu-row-gap: calc(var(--space) / 6);
     --menu-row-height: var(--control-height);
+    --menu-padding: calc(var(--space) * 2 / 3);
     min-width: min(calc(var(--control-height) * 5), calc(100vw - var(--space) * 2));
-    padding: calc(var(--space) * 2 / 3);
-    border-radius: calc(var(--radius-mobile) + var(--space) / 3)
+    padding: var(--menu-padding)
   }
 
   .app-dropdown-menu-content :deep([role^='menuitem']) {
-    border-radius: calc(var(--radius-mobile) - var(--space) / 3);
+    border-radius: var(--menu-radius);
     padding-inline: var(--space);
     font-size: calc(var(--font-size-body) * 1.0625)
   }

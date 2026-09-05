@@ -42,6 +42,9 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
   const feedback = ref('')
   const images = new Map<string, HTMLImageElement>()
   const imageRequests = new Map<string, Promise<HTMLImageElement>>()
+  let disposed = false
+  let assetLoadRevision = 0
+  const cancelVideoRequests = new Map<string, () => void>()
   const videos = new Map<string, HTMLVideoElement>()
   const videoRequests = new Map<string, Promise<HTMLVideoElement>>()
   const textures = new Map<string, unknown>()
@@ -121,6 +124,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     throw new Error(`Could not load a preview for ${asset.id}`)
   }
   const loadVideo = (asset:AssetMasonryItem) => {
+    if(disposed)return Promise.reject(new Error('Editor closed'))
     const cached=videos.get(asset.id)
     if(cached&&cached.readyState>=HTMLMediaElement.HAVE_CURRENT_DATA)return Promise.resolve(cached)
     const pending=videoRequests.get(asset.id)
@@ -129,14 +133,32 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
       const video=cached||document.createElement('video')
       video.muted=true;video.loop=true;video.playsInline=true;video.preload='auto'
       videos.set(asset.id,video)
-      const ready=()=>{videoRequests.delete(asset.id);if(playing.value)void video.play().catch(()=>{});resolve(video)}
-      const failed=()=>{videoRequests.delete(asset.id);videos.delete(asset.id);reject(new Error(`Could not load video ${asset.id}`))}
+      const cleanup=()=>{
+        clearTimeout(timeout)
+        video.removeEventListener('loadeddata',ready)
+        video.removeEventListener('error',failed)
+        cancelVideoRequests.delete(asset.id)
+        videoRequests.delete(asset.id)
+      }
+      const ready=()=>{cleanup();resolve(video)}
+      const failed=()=>{
+        cleanup();videos.delete(asset.id)
+        video.pause();video.removeAttribute('src');video.load()
+        reject(new Error(`Could not load video ${asset.id}`))
+      }
+      const timeout=setTimeout(failed,15000)
+      cancelVideoRequests.set(asset.id,failed)
       video.addEventListener('loadeddata',ready,{once:true});video.addEventListener('error',failed,{once:true})
       if(!cached)video.src=`/api/assets/${encodeURIComponent(asset.id)}/media?variant=original`
       video.load()
     })
     videoRequests.set(asset.id,request)
     return request
+  }
+  const releaseVideos = () => {
+    cancelVideoRequests.forEach(cancel=>cancel())
+    videos.forEach(video=>{video.pause();video.removeAttribute('src');video.load()})
+    videos.clear();videoRequests.clear()
   }
   const missingAssetSource = (asset:AssetMasonryItem) => {
     const placeholder=document.createElement('canvas'),width=720,height=Math.max(480,Math.round(width*Math.max(.55,Math.min(1.8,asset.height/Math.max(1,asset.width)))))
@@ -151,14 +173,18 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
   }
   type RenderableSource = HTMLImageElement|HTMLCanvasElement|HTMLVideoElement
   const loadRenderable = async(asset:AssetMasonryItem):Promise<RenderableSource> => {
-    if(asset.mime_type?.startsWith('video/'))return loadVideo(asset)
+    if(asset.mime_type?.startsWith('video/')){
+      const video=await loadVideo(asset)
+      if(playing.value&&!disposed&&video.paused)void video.play().catch(()=>{})
+      return video
+    }
     try{return await loadImage(asset)}catch{return missingAssetSource(asset)}
   }
   const sourceWidth = (source:RenderableSource) => source instanceof HTMLImageElement?source.naturalWidth:source instanceof HTMLVideoElement?source.videoWidth:source.width
   const sourceHeight = (source:RenderableSource) => source instanceof HTMLImageElement?source.naturalHeight:source instanceof HTMLVideoElement?source.videoHeight:source.height
   const preloadFlickerAssets = async () => {
     const count=Math.min(assets.value.length,Math.max(1,Math.min(30,Math.round(settings.value.visibleCount))))
-    await Promise.all(assets.value.slice(0,count).map(asset=>loadRenderable(asset)))
+    await Promise.all(assets.value.slice(0,count).filter(asset=>!asset.mime_type?.startsWith('video/')).map(asset=>loadRenderable(asset)))
   }
   const cachedImageFor = (asset:AssetMasonryItem) => urlsFor(asset)
     .map(url=>images.get(url))
@@ -303,7 +329,10 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
       ? (localProgress<flipActiveFraction?cubicBezierProgress(localProgress/Math.max(.001,flipActiveFraction),curve):1)
       : 0
     const faceOffset=settings.value.flickerEffect==='flip'&&flipProgress>=.5?1:0
-    const asset=assets.value[(slotIndex+faceOffset)%assets.value.length]!,image=await loadRenderable(asset)
+    const asset=assets.value[(slotIndex+faceOffset)%assets.value.length]!
+    videos.forEach((video,id)=>{if(id!==asset.id)video.pause()})
+    const image=await loadRenderable(asset)
+    if(disposed||revision!==renderRevision)return
     const mediaWidth=sourceWidth(image),mediaHeight=sourceHeight(image)
     const sourceAspect=mediaWidth/mediaHeight,canvasAspect=width/height,planeScale=Math.max(.01,settings.value.planeSize/100)
     let drawWidth:number,drawHeight:number
@@ -1178,6 +1207,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     backgroundTexture?.dispose()
   }
   const drawAt=async(time:number)=>{
+    if(disposed)return
     const revision=++renderRevision
     try {
       if(template.value.collection==='scale')await drawScale(time,revision)
@@ -1211,7 +1241,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     }
     void drawAt(continuousGridLoop?gridPlaybackTime:progress.value).finally(()=>{if(playing.value)animationFrame=requestAnimationFrame(tick)})
   }
-  const startPlayback=()=>{if(playing.value)return;const startTime=template.value.collection==='grid'&&settings.value.loop?gridPlaybackTime:progress.value;playbackStartedAt=performance.now()-startTime*1000;lastPreviewFrameAt=0;playing.value=true;videos.forEach(video=>void video.play().catch(()=>{}));animationFrame=requestAnimationFrame(tick)}
+  const startPlayback=()=>{if(disposed||playing.value)return;const startTime=template.value.collection==='grid'&&settings.value.loop?gridPlaybackTime:progress.value;playbackStartedAt=performance.now()-startTime*1000;lastPreviewFrameAt=0;playing.value=true;videos.forEach(video=>void video.play().catch(()=>{}));animationFrame=requestAnimationFrame(tick)}
   const togglePlayback=()=>{if(playing.value){stop();void drawAt(progress.value);return}startPlayback()}
   const seek=(value:number)=>{progress.value=value;if(template.value.collection==='grid')gridPlaybackTime=value;if(playing.value)playbackStartedAt=performance.now()-value*1000;return drawAt(value)}
   const setCanvas=(value:HTMLCanvasElement)=>{canvas.value=value;void drawAt(progress.value)}
@@ -1311,14 +1341,14 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     if(template.value.collection!=='grid')settings.value.visibleCount=countForAssets()
     void nextTick(async()=>{
       if(rendererChanged)await waitForReplacementCanvas(previousCanvas,changeRevision)
-      if(changeRevision!==templateChangeRevision)return
+      if(disposed||changeRevision!==templateChangeRevision)return
       // Warm the remaining Flicker images without blocking the renderer switch.
       // Waiting for every preview here can leave mobile on a single frame for
       // several seconds when moving from a WebGL preset to the 2D canvas.
       if(template.value.collection==='flicker')void preloadFlickerAssets()
-      if(changeRevision!==templateChangeRevision)return
+      if(disposed||changeRevision!==templateChangeRevision)return
       await drawAt(0)
-      if(changeRevision!==templateChangeRevision)return
+      if(disposed||changeRevision!==templateChangeRevision)return
       startPlayback()
     })
   })
@@ -1336,7 +1366,22 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     ()=>{if(!playing.value)void nextTick(()=>drawAt(progress.value))}
   )
   let initializedAssets = false
-  watch(assets,()=>{const shouldAutoplay=!initializedAssets;initializedAssets=true;images.clear();videos.forEach(video=>{video.pause();video.removeAttribute('src');video.load()});videos.clear();videoRequests.clear();disposeTextures();progress.value=0;gridPlaybackTime=0;void nextTick(async()=>{if(template.value.collection==='flicker')await preloadFlickerAssets();await drawAt(0);if(shouldAutoplay)startPlayback()})},{immediate:true})
-  onBeforeUnmount(()=>{stop();cancelAnimationFrame(textureRefreshFrame);disposeRenderer();videos.forEach(video=>{video.removeAttribute('src');video.load()});videoRequests.clear()})
+  watch(assets,()=>{
+    const revision=++assetLoadRevision
+    const shouldAutoplay=!initializedAssets
+    initializedAssets=true
+    images.clear();releaseVideos();disposeTextures();progress.value=0;gridPlaybackTime=0
+    void nextTick(async()=>{
+      if(disposed||revision!==assetLoadRevision)return
+      if(template.value.collection==='flicker')void preloadFlickerAssets()
+      await drawAt(0)
+      if(disposed||revision!==assetLoadRevision)return
+      if(shouldAutoplay)startPlayback()
+    })
+  },{immediate:true})
+  onBeforeUnmount(()=>{
+    disposed=true;assetLoadRevision++;renderRevision++;templateChangeRevision++
+    stop();cancelAnimationFrame(textureRefreshFrame);disposeRenderer();releaseVideos()
+  })
   return {settings,template,canvas,playing,exporting,progress,feedback,totalDuration,setCanvas,togglePlayback,seek,renderVideo,drawAt,stop}
 }

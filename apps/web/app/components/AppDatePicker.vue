@@ -347,16 +347,13 @@ const clear = () => {
   display: grid;
   gap: var(--space);
   padding: var(--filter-action-padding);
-  border-radius: calc(var(--radius) * 1.5);
+  border-radius: var(--popover-radius);
   color: var(--filter-overlay-panel-color);
   background: var(--filter-overlay-nested-background);
   box-shadow: none;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, .06), 0 8px 24px rgba(0, 0, 0, 0.1), 0 24px 48px rgba(0, 0, 0, 0.38);
-    backdrop-filter: none;
-    overflow: hidden;
-    clip-path: inset(0 round calc(var(--radius) * 1.5));
+  overflow: hidden;
 }
 .app-calendar-header,
 .app-calendar-footer,
@@ -440,7 +437,7 @@ const clear = () => {
   .app-calendar-month-grid button.is-selected:hover { background: var(--filter-overlay-primary-background); }
 }
 @media (max-width: 520px) {
-  .app-calendar { padding: var(--filter-sheet-inline-padding-mobile); border-radius: calc(var(--radius-mobile) * 1.5); }
+  .app-calendar { padding: var(--filter-sheet-inline-padding-mobile); }
   .app-calendar-nav button { min-height: var(--range-control-height-mobile); height: var(--range-control-height-mobile); }
 }
 </style>

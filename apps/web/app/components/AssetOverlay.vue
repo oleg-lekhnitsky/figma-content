@@ -224,7 +224,7 @@ const toggleApproval = async () => {
   actionMessage.value = ''
   const approving = asset.value.status !== 'approved'
   const saved = await patchAsset({ status: approving ? 'approved' : 'draft' })
-  if (saved) actionMessage.value = approving ? 'Asset approved.' : 'Approval removed.'
+  if (saved) actionMessage.value = approving ? 'Asset liked.' : 'Asset unliked.'
   approvalBusy.value = false
 }
 const startEditing = () => { resetEditor(); actionError.value = ''; actionMessage.value = ''; editing.value = true }
@@ -712,8 +712,8 @@ watch(() => props.assetId, id => {
               class="button board-picker-trigger" type="button" @click="openBoardPicker">Add</button>
               <button v-if="canApprove" class="button-secondary approval-toggle" type="button"
               :aria-pressed="asset.status === 'approved'"
-              :aria-label="asset.status === 'approved' ? 'Remove approval' : 'Approve asset'"
-              :title="asset.status === 'approved' ? 'Remove approval' : 'Approve asset'" :disabled="approvalBusy"
+              :aria-label="asset.status === 'approved' ? 'Unlike' : 'Like asset'"
+              :title="asset.status === 'approved' ? 'Unlike' : 'Like asset'" :disabled="approvalBusy"
               @click="toggleApproval">
               <Heart :size="20" :weight="asset.status === 'approved' ? 'Filled' : 'Outline'" aria-hidden="true" />
             </button>

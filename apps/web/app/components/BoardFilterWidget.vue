@@ -62,6 +62,7 @@ const emit = defineEmits<{
 }>()
 
 const openQuickFilter = ref('')
+const failedAvatars = ref(new Set<string>())
 const setQuickFilterOpen = (id: string, open: boolean) => { openQuickFilter.value = open ? id : '' }
 const toggleValue = (values: string[], id: string) => values.includes(id)
   ? values.filter(value => value !== id)
@@ -75,14 +76,14 @@ const updateQuickFilter = (kind: QuickFilterKind, id: string) => {
   if (kind === 'tag') emit('update:tagIds', id ? toggleValue(props.tagIds, id) : [])
   if (kind === 'submitter') emit('update:uploadedBys', id ? toggleValue(props.uploadedBys, id) : [])
 }
-const quickFilterOptions = (kind: QuickFilterKind): Array<{ id: string; label: string }> => {
+const quickFilterOptions = (kind: QuickFilterKind): Array<{ id: string; label: string; avatarUrl?: string | null }> => {
   if (kind === 'scope') return [
-    { id: 'approved', label: 'Approved assets' },
-    { id: 'all', label: 'Approved and draft assets' }
+    { id: 'approved', label: 'Liked assets' },
+    { id: 'all', label: 'Liked and draft assets' }
   ]
   if (kind === 'project') return [{ id: '', label: 'All projects' }, ...props.projects.map(option => ({ id: option.id, label: option.name }))]
   if (kind === 'tag') return [{ id: '', label: 'All tags' }, ...props.tags.map(option => ({ id: option.id, label: option.name }))]
-  return [{ id: '', label: 'All submitters' }, ...props.submitters.map(option => ({ id: option.id, label: submitterName(option) }))]
+  return [{ id: '', label: 'All submitters' }, ...props.submitters.map(option => ({ id: option.id, label: submitterName(option), avatarUrl: option.avatar_url }))]
 }
 const quickFilterSelected = (kind: QuickFilterKind, id: string) => {
   if (kind === 'scope') return props.assetScope === id
@@ -147,7 +148,7 @@ const connector = (cue: FilterCue, index: number) => {
 const hasFilters = computed(() => Boolean(
   props.search || props.projectIds.length || props.tagIds.length || props.uploadedBys.length || props.dateFrom || props.dateTo
 ))
-const assetScopeLabel = computed(() => props.assetScope === 'all' ? 'all assets' : 'approved assets')
+const assetScopeLabel = computed(() => props.assetScope === 'all' ? 'all assets' : 'liked assets')
 </script>
 
 <template>
@@ -198,9 +199,15 @@ const assetScopeLabel = computed(() => props.assetScope === 'all' ? 'all assets'
               role="menuitemcheckbox"
               type="button"
               data-menu-close="false"
+              :class="{ 'board-filter-submitter-option': cue.kind === 'submitter' }"
               :aria-checked="quickFilterSelected(cue.kind as QuickFilterKind, option.id)"
               @click="updateQuickFilter(cue.kind as QuickFilterKind, option.id)"
-            >{{ option.label }}</button>
+            >
+              <span v-if="cue.kind === 'submitter' && option.id" class="board-filter-option-avatar" :data-initial="option.label.trim().charAt(0).toLocaleUpperCase()" aria-hidden="true">
+                <img v-if="option.avatarUrl && !failedAvatars.has(option.avatarUrl)" :src="option.avatarUrl" alt="" @error="failedAvatars.add(option.avatarUrl)">
+              </span>
+              <span>{{ option.label }}</span>
+            </button>
           </AppDropdownMenu>
           <AppDatePicker
             v-else-if="interactive && cue.kind === 'date'"
@@ -244,6 +251,36 @@ const assetScopeLabel = computed(() => props.assetScope === 'all' ? 'all assets'
 </template>
 
 <style scoped>
+.board-filter-submitter-option {
+  gap: .5em;
+}
+
+.board-filter-option-avatar {
+  position: relative;
+  margin-inline-start: -.375em;
+  width: 1.5em;
+  height: 1.5em;
+  flex: 0 0 1.5em;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+
+.board-filter-option-avatar::before {
+  content: attr(data-initial);
+  font-size: .72em;
+}
+
+.board-filter-option-avatar img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 button.board-filter-cue {
   min-height: 0;
   cursor: pointer;

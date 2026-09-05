@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Plus, Xmark } from 'reicon-vue'
+import { Xmark } from 'reicon-vue'
 
 interface Workspace {
   id: string
@@ -42,9 +42,9 @@ interface WorkspaceInvitation {
 
 const workspaceRoles: WorkspaceRole[] = ['viewer', 'contributor', 'editor', 'admin']
 const workspaceRoleDescriptions: Record<WorkspaceRole, string> = {
-  viewer: 'View approved assets.',
+  viewer: 'View liked assets.',
   contributor: 'Upload and manage their own assets.',
-  editor: 'Manage, approve, and organize all assets.',
+  editor: 'Manage, like, and organize all assets.',
   admin: 'Full access, including people and workspace settings.'
 }
 const workspaceRoleOptions = workspaceRoles.map(role => ({
@@ -431,7 +431,11 @@ const deleteWorkspace = async () => {
                 <span class="workspace-option-copy"><strong>{{ workspace.name }}</strong><small>{{ workspace.role }}</small></span>
               </button>
               <button class="workspace-create-card" type="button" @click="createWorkspaceDialogOpen = true">
-                <span class="workspace-preview workspace-create-preview" aria-hidden="true"><Plus :size="72" /></span>
+                <span class="workspace-preview workspace-create-preview" aria-hidden="true">
+                  <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M34.7532 14.9446C34.7532 13.5039 33.5853 12.3359 32.1445 12.3359C30.7038 12.3359 29.5358 13.5039 29.5358 14.9446V29.7272H14.7532C13.3125 29.7272 12.1445 30.8952 12.1445 32.3359C12.1445 33.7767 13.3125 34.9446 14.7532 34.9446H29.5358L29.5358 49.7272C29.5358 51.168 30.7038 52.3359 32.1445 52.3359C33.5853 52.3359 34.7532 51.168 34.7532 49.7272V34.9446H49.5358C50.9766 34.9446 52.1445 33.7767 52.1445 32.3359C52.1445 30.8952 50.9766 29.7272 49.5358 29.7272L34.7532 29.7272V14.9446Z" fill="currentColor" />
+                  </svg>
+                </span>
                 <span class="workspace-option-copy"><strong>New workspace</strong></span>
               </button>
             </div>
@@ -460,7 +464,7 @@ const deleteWorkspace = async () => {
           <section v-if="current?.role === 'admin'" class="filter-option-group workspace-management-section">
             <h2 class="filter-overlay-title">Invite to {{ current?.name ?? 'this' }} workspace</h2>
             <div class="workspace-management-grid">
-              <form v-if="inviteComposerOpen" class="workspace-setting-card" @submit.prevent="inviteMember">
+              <form v-if="inviteComposerOpen" class="workspace-setting-card app-person-composer" @submit.prevent="inviteMember">
                 <AppRolePicker
                   :model-value="inviteRole"
                   class="workspace-invite-role"
@@ -690,24 +694,14 @@ const deleteWorkspace = async () => {
   width: clamp(3.5rem, 8vw, 5rem);
   height: clamp(3.5rem, 8vw, 5rem);
   fill: none;
-  stroke: currentColor;
+  stroke: none;
 }
 
 .workspace-management-grid { display: grid; gap: var(--space); }
 .workspace-name-form { min-width: 0; }
 .workspace-invite-role { min-width: 0; }
 
-.workspace-setting-card {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: 7.5rem minmax(0, 1fr);
-  align-items: center;
-  align-content: start;
-      gap: var(--filter-option-gap);
-  padding: 0;
-  color: var(--filter-overlay-panel-color);
-  background: transparent;
-}
+
 
 .workspace-management-message { margin: 0; color: var(--filter-overlay-muted-color); font-size: var(--font-size-caption); letter-spacing: var(--letter-spacing-caption); }
 
@@ -721,7 +715,7 @@ const deleteWorkspace = async () => {
 .workspace-member-list {
   display: grid;
   overflow: hidden;
-  border-radius: calc(var(--radius) * 2.5);
+  /* border-radius: calc(var(--radius) * 2.5); */
   /* background: color-mix(in srgb, var(--filter-overlay-panel-color) 7%, transparent); */
   /* padding: calc(var(--filter-action-gap) / 1 ) calc(var(--filter-action-gap) / 1); */
 }
@@ -752,7 +746,9 @@ const deleteWorkspace = async () => {
   margin: 0;
   color: var(--filter-overlay-muted-color);
   font-size: var(--font-size-label);
+  font-size: var(--filter-title-size);
   line-height: 1.25;
+  line-height: 1.1;
   padding: 0 calc(var(--filter-option-padding) / 2) ;
 }
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }

@@ -94,7 +94,7 @@ export default defineEventHandler(async (event) => {
     return { data: { collection: data } }
   }
   if (parsed.data.action === 'asset-scope') {
-    if (collection.purpose === 'review') throw appError(409, 'REVIEW_ASSET_SCOPE', 'Review boards always show approved and draft assets.')
+    if (collection.purpose === 'review') throw appError(409, 'REVIEW_ASSET_SCOPE', 'Review boards always show liked and draft assets.')
     const { data, error: scopeError } = await db.from('public_collections').update({ asset_scope: parsed.data.assetScope })
       .eq('id', id).eq('organization_id', session.user.organization_id).select('id,asset_scope,updated_at').single()
     if (scopeError) throw databaseError('update board asset scope', scopeError)

@@ -85,6 +85,12 @@
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
 }
+
+strong,
+b {
+  font-weight: inherit;
+}
+
 ::selection {
   color: #000;
   background: var(--color-surface);
@@ -437,23 +443,33 @@ textarea {
 
 
 .app-popover-content {
+  --popover-radius: calc(var(--radius) * 1.5);
+  --popover-shadow: 0 2px 4px rgb(0 0 0 / .04), 0 8px 20px rgb(0 0 0 / .08), 0 16px 32px rgb(0 0 0 / .14);
   position: fixed;
   z-index: 100;
   overflow: auto;
   overscroll-behavior: contain;
+  border-radius: var(--popover-radius);
+  box-shadow: var(--popover-shadow);
+}
+@media (max-width: 520px) {
+  .app-popover-content {
+    --popover-radius: calc(var(--radius-mobile) * 1.5);
+  }
 }
 .app-dropdown-menu-content {
   --menu-inset: calc(var(--space) / 4);
   --menu-row-gap: calc(var(--space) / 15);
   --menu-row-height: calc(var(--control-height) * .75);
-  --menu-radius: calc(var(--radius) * 0.75);
+  --menu-padding: calc(var(--space) / 2.5);
+  --menu-radius: max(0px, calc(var(--popover-radius) - var(--menu-padding)));
   width: 100%;
   min-width: max-content;
   display: grid;
   gap: var(--menu-row-gap);
-  padding: calc(var(--space)/2.5);
+  padding: var(--menu-padding);
   overflow: hidden;
-  border-radius: calc(var(--radius)*1.5);
+  border-radius: var(--popover-radius);
 
 }
 .app-dropdown-menu-content [role^='menuitem'] {
@@ -463,7 +479,7 @@ textarea {
   align-items: center;
   justify-content: flex-start;
   margin: 0;
-  border-radius: calc(calc(var(--radius)*1.5) - var(--menu-inset));
+  border-radius: var(--menu-radius);
   padding: var(--menu-inset) calc(var(--menu-inset) * 3);
   color: inherit;
   background: transparent;

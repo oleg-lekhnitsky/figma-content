@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { BoardAssetScope, BoardLayout } from '@content-library/shared'
-import CopyLinkIcon from '~/components/CopyLinkIcon.vue'
-import OpenLinkIcon from '~/components/OpenLinkIcon.vue'
+import PublicAccessControl from '~/components/PublicAccessControl.vue'
 import { boardLayoutOptions } from '../utils/board-layouts'
 
 interface FilterOption { id: string; name: string }
@@ -52,6 +51,10 @@ const memberRoleOptions = [
   { value: 'contributor', label: 'Contributor', description: 'Add and manage their own assets.' },
   { value: 'editor', label: 'Editor', description: 'Manage the board and all of its assets.' }
 ] as const
+const newMemberRoleOptions = computed(() => memberRoleOptions.filter(option => props.purpose === 'review' || option.value !== 'viewer'))
+watch(newMemberRoleOptions, options => {
+  if (!options.some(option => option.value === memberRole.value)) memberRole.value = 'contributor'
+})
 const availableWorkspaceMembers = computed(() => {
   const assignedIds = new Set(props.members.map(member => member.user_id))
   return props.workspaceMembers.filter(member => !assignedIds.has(member.id) && Boolean(member.email))
@@ -244,31 +247,23 @@ onBeforeUnmount(() => {
     <template v-if="!editingFilters">
     <section class="filter-option-group board-settings-intro">
       <h2 class="filter-overlay-title">{{ title }}</h2>
-      <p class="board-type-summary"><template v-if="projectBacked"><strong>Smart board.</strong> {{ assetScope === 'all' ? 'Approved and draft assets' : 'Approved assets' }} from this project appear automatically.</template><template v-else-if="mode === 'dynamic'"><strong>Smart board.</strong> <br>Matching assets appear automatically based on rules.</template><template v-else>Add and arrange assets yourself.</template></p>
+      <p v-if="projectBacked || mode === 'dynamic'" class="board-type-summary"><template v-if="projectBacked"><strong>Smart board.</strong> {{ assetScope === 'all' ? 'Liked and draft assets' : 'Liked assets' }} from this project appear automatically.</template><template v-else><strong>Smart board.</strong> <br>Matching assets appear automatically based on rules.</template></p>
     </section>
 
-    <BoardAssetScopeControl v-if="purpose !== 'review' && (mode !== 'dynamic' || projectBacked)" :model-value="assetScope" :disabled="!canEdit || busy" :description="assetScope === 'all' ? publicationEnabled ? 'Approved and draft assets are visible here and on the public board. Archived assets stay hidden.' : 'Shows approved and draft assets. Archived assets stay hidden.' : 'Shows approved assets only.'" @update:model-value="$emit('setAssetScope', $event)" />
+    <BoardAssetScopeControl v-if="purpose !== 'review' && (mode !== 'dynamic' || projectBacked)" :model-value="assetScope" :disabled="!canEdit || busy" :description="assetScope === 'all' && publicationEnabled ? 'Liked and draft assets are visible here and on the public board. Archived assets stay hidden.' : ''" @update:model-value="$emit('setAssetScope', $event)" />
 
     <BoardFilterWidget v-if="mode === 'dynamic'" class="board-filter-settings" :search="filterSearch" :project-ids="filterProjectIds" :tag-ids="filterTagIds" :uploaded-bys="filterUploadedBys" :date-from="filterDateFrom" :date-to="filterDateTo" :projects="projects" :tags="tags" :submitters="submitters" :asset-scope="assetScope" :interactive="canEdit && !projectBacked && !busy"
       @update:asset-scope="$emit('setAssetScope', $event)" @update:project-ids="$emit('update:filterProjectIds', $event)" @update:tag-ids="$emit('update:filterTagIds', $event)" @update:uploaded-bys="$emit('update:filterUploadedBys', $event)" @update:date-from="$emit('update:filterDateFrom', $event)" @update:date-to="$emit('update:filterDateTo', $event)" @edit="beginEditingFilters">
       <button v-if="canEdit && !projectBacked" class="panel-secondary-action" type="button" :disabled="busy" @click="beginEditingFilters()">Change filters</button>
     </BoardFilterWidget>
 
-    <section class="filter-option-group board-public-access" role="group" aria-labelledby="board-public-access">
-      <div class="board-public-access-heading">
-        <h2 id="board-public-access" class="filter-overlay-title">Public access</h2>
-        <Transition name="public-access-actions">
-          <span v-if="publicationEnabled && publicUrl" class="public-access-actions">
-            <a class="public-access-icon" :href="publicUrl" target="_blank" rel="noopener" aria-label="Open public page in a new tab" title="Open public page"><OpenLinkIcon aria-hidden="true" /></a>
-            <button class="public-access-icon" type="button" aria-label="Copy public link" title="Copy public link" @click="$emit('copyLink')"><CopyLinkIcon aria-hidden="true" /></button>
-          </span>
-        </Transition>
-      </div>
-      <div class="filter-option-list filter-option-list--segmented">
-        <button type="button" :aria-pressed="!publicationEnabled" :disabled="!canEdit || busy" @click="$emit('setPublication', false)">Unpublished</button>
-        <button type="button" :aria-pressed="publicationEnabled" :disabled="!canEdit || busy" @click="$emit('setPublication', true)">Published</button>
-      </div>
-    </section>
+    <PublicAccessControl
+      :publication-enabled="publicationEnabled"
+      :disabled="!canEdit || busy"
+      :destination-url="publicationEnabled ? publicUrl : ''"
+      @set-publication="$emit('setPublication', $event)"
+      @copy-link="$emit('copyLink')"
+    />
 
     <section v-if="purpose === 'portfolio'" class="filter-option-group portfolio-summary" aria-labelledby="board-portfolio">
       <h2 id="board-portfolio" class="filter-overlay-title">Portfolio</h2>
@@ -289,7 +284,7 @@ onBeforeUnmount(() => {
 
     <section class="filter-option-group board-members" aria-labelledby="board-roles">
       <h2 id="board-roles" class="filter-overlay-title">Board roles</h2>
-      <p class="board-type-summary">{{ purpose === 'review' ? 'Only added members can access this review board.' : 'Everyone in the workspace can view this board. Roles below grant additional permissions.' }}</p>
+      <p class="board-type-summary">{{ purpose === 'review' ? 'Add workspace members to give them access. Workspace admins already have access.' : 'Everyone in the workspace can view this board. Assign Contributor or Editor to let someone add or manage assets.' }}</p>
       <div v-if="members.length" class="board-member-list">
         <AppPersonRow
           v-for="member in members"
@@ -311,30 +306,36 @@ onBeforeUnmount(() => {
       </div>
       <p v-else class="board-type-summary">{{ purpose === 'review' ? 'No board members yet.' : 'No additional board roles yet.' }}</p>
       <Transition name="member-form">
-        <form v-if="canManageMembers && addingMember" class="member-form" @submit.prevent="submitMember">
-          <div class="member-form-field">
-            <h3>Workspace member</h3>
-            <AppRolePicker
-              :model-value="selectedMemberId"
-              :options="workspaceMemberOptions"
-              :open="memberPickerOpen"
-              aria-label="Workspace member"
-              @update:model-value="selectedMemberId = $event"
-              @update:open="memberPickerOpen = $event"
-            />
-          </div>
-          <div class="member-form-field">
-            <h3>Board role</h3>
+        <form v-if="canManageMembers && addingMember" class="member-form app-person-composer" @submit.prevent="submitMember">
           <AppRolePicker
             :model-value="memberRole"
-            :options="memberRoleOptions"
+            :options="newMemberRoleOptions"
             :open="memberRoleOpen"
+            menu-width="content"
             aria-label="Board role"
             @update:model-value="setMemberRole"
             @update:open="memberRoleOpen = $event"
           />
-          </div>
-          <button class="panel-primary-action" type="submit" :disabled="busy">{{ busy ? 'Assigning…' : purpose === 'review' ? 'Add review member' : 'Assign board role' }}</button>
+          <AppInlineActionField
+            :model-value="selectedMemberId"
+            action-label="Add"
+            busy-label="Adding…"
+            :show-action="Boolean(selectedMemberId)"
+            :busy="busy"
+          >
+            <template #field>
+              <AppRolePicker
+                :model-value="selectedMemberId"
+                :options="workspaceMemberOptions"
+                :open="memberPickerOpen"
+                class="member-picker"
+                menu-width="content"
+                aria-label="Workspace member"
+                @update:model-value="selectedMemberId = $event"
+                @update:open="memberPickerOpen = $event"
+              />
+            </template>
+          </AppInlineActionField>
         </form>
       </Transition>
       <p v-if="canManageMembers && !availableWorkspaceMembers.length" class="board-type-summary">All eligible workspace members already have a board role.</p>
@@ -440,139 +441,23 @@ onBeforeUnmount(() => {
   gap: var(--filter-option-gap);
 }
 
-.board-public-access-heading {
-  min-width: 0;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--filter-option-gap);
-}
-
-.board-public-access-heading > .filter-overlay-title {
-  margin: 0;
-}
-
 .board-settings-actions :is(a, button) {
   width: 100%;
   min-height: var(--filter-action-height);
   font-size: var(--filter-action-font-size);
 }
 
-.public-access-actions {
-  display: inline-flex;
-  flex: 0 0 auto;
-  gap: var(--filter-option-gap);
-  margin-inline-end: calc(var(--filter-option-padding) / 2);
-  overflow: hidden;
-}
-
-.public-access-icon {
-  box-sizing: border-box;
-  inline-size: var(--filter-option-height);
-  block-size: var(--filter-option-height);
-  min-inline-size: var(--filter-option-height);
-  min-block-size: var(--filter-option-height);
-  max-inline-size: var(--filter-option-height);
-  max-block-size: var(--filter-option-height);
-  flex: 0 0 var(--filter-option-height);
-  display: inline-grid;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  color: var(--filter-overlay-panel-color);
-  background: color-mix(in srgb, var(--filter-overlay-panel-color) 7%, transparent);
-  line-height: 0;
-  text-decoration: none;
-  cursor: pointer;
-}
-
-.public-access-icon:hover {
-  background: color-mix(in srgb, var(--filter-overlay-panel-color) 11%, transparent);
-}
-
-.public-access-icon:active {
-  transform: scale(.96);
-}
-
-.public-access-icon:focus-visible {
-  outline: 2px solid currentColor;
-  outline-offset: 2px;
-}
-
-.public-access-icon svg {
-  fill: none;
-  stroke: currentColor;
-}
-
-.public-access-icon :deep(:is(.copy-link-icon, .open-link-icon)) {
-  width: 100%;
-  height: 100%;
-}
-
-@media (max-width: 520px) {
-  .board-public-access {
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-  }
-
-  .board-public-access-heading {
-    display: contents;
-  }
-
-  .board-public-access-heading > .filter-overlay-title {
-    grid-column: 1 / -1;
-  }
-
-  .board-public-access > .filter-option-list--segmented {
-    grid-column: 1;
-    grid-row: 2;
-  }
-
-  .public-access-actions {
-    grid-column: 2;
-    grid-row: 2;
-    margin-inline-end: 0;
-  }
-}
-
-.public-access-actions-enter-active,
-.public-access-actions-leave-active {
-  max-width: calc(var(--filter-option-height) * 2 + var(--filter-option-gap));
-  transition:
-    max-width 280ms cubic-bezier(.2, .8, .2, 1),
-    opacity 180ms ease,
-    translate 280ms cubic-bezier(.2, .8, .2, 1);
-}
-
-.public-access-actions-enter-from,
-.public-access-actions-leave-to {
-  max-width: 0;
-  opacity: 0;
-  translate: -.375rem 0;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .public-access-actions-enter-active,
-  .public-access-actions-leave-active { transition: none; }
-}
-
 .board-settings-actions :is(a, button) { display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
 
 .member-form {
   width: 100%;
-  min-width: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--space);
-  padding-top: 0;
-  overflow: hidden;
 }
-
-.member-form-field {
+.member-picker { min-width: 0; }
+.member-picker :deep(.app-role-picker-trigger > span:first-child) {
   min-width: 0;
-  display: grid;
-  gap: var(--filter-option-gap);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .member-form-enter-active,
@@ -591,7 +476,6 @@ onBeforeUnmount(() => {
 .board-member-list {
   display: grid;
   overflow: hidden;
-  border-radius: calc(var(--radius) * 2.5);
 }
 
 .board-member-list :deep(.app-person-row) {

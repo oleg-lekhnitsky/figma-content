@@ -22,7 +22,7 @@ export default defineEventHandler(async (event) => {
   if (assetError) throw databaseError('read board asset', assetError)
   if (!asset) throw appError(403, 'BOARD_ASSET_FORBIDDEN', 'Contributors can add only their own assets.')
   if (asset.status !== 'approved' && collection.asset_scope !== 'all') {
-    throw appError(409, 'BOARD_ASSET_NOT_APPROVED', 'Approve this asset or set the board to show all assets before adding it.')
+    throw appError(409, 'BOARD_ASSET_NOT_APPROVED', 'Like this asset or set the board to show all assets before adding it.')
   }
   const { data: lastItem } = await db.from('public_collection_assets').select('position').eq('collection_id', id)
     .order('position', { ascending: false, nullsFirst: false }).limit(1).maybeSingle()

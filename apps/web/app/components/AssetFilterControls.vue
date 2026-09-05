@@ -112,7 +112,7 @@ const sortOptions = [
       </section>
       <section v-if="showStatus" class="filter-option-group">
         <h2 class="filter-overlay-title">Status</h2>
-        <div class="filter-option-list filter-option-list--segmented"><button type="button" :aria-pressed="status === ''" @click="emit('update:status', '')">All</button><button type="button" :aria-pressed="status === 'approved'" @click="emit('update:status', 'approved')">Approved</button><button type="button" :aria-pressed="status === 'draft'" @click="emit('update:status', 'draft')">Draft</button></div>
+        <div class="filter-option-list filter-option-list--segmented"><button type="button" :aria-pressed="status === ''" @click="emit('update:status', '')">All</button><button type="button" :aria-pressed="status === 'approved'" @click="emit('update:status', 'approved')">Liked</button><button type="button" :aria-pressed="status === 'draft'" @click="emit('update:status', 'draft')">Draft</button></div>
       </section>
       <section v-if="showAssetFilters" class="filter-option-group">
         <h2 class="filter-overlay-title">Projects</h2>
@@ -138,7 +138,7 @@ const sortOptions = [
       </template>
       <template v-else>
       <label v-if="showSearch" class="search-field"><span class="sr-only">Search assets</span><input :value="search" type="search" placeholder="Search" @input="$emit('update:search', ($event.target as HTMLInputElement).value)"></label>
-    <label v-if="showStatus" class="filter-dropdown"><span class="sr-only">Status</span><select class="filter-dropdown-trigger" :value="status" @change="$emit('update:status', ($event.target as HTMLSelectElement).value)"><option value="">All statuses</option><option value="approved">Approved</option><option value="draft">Draft</option></select><span class="filter-dropdown-chevron" aria-hidden="true" /></label>
+    <label v-if="showStatus" class="filter-dropdown"><span class="sr-only">Status</span><select class="filter-dropdown-trigger" :value="status" @change="$emit('update:status', ($event.target as HTMLSelectElement).value)"><option value="">All statuses</option><option value="approved">Liked</option><option value="draft">Draft</option></select><span class="filter-dropdown-chevron" aria-hidden="true" /></label>
     <FilterMultiSelect :model-value="projectIds" label="Projects" :options="projects" @update:model-value="$emit('update:projectIds', $event)" />
     <FilterMultiSelect :model-value="tagIds" label="Tags" :options="tags" @update:model-value="$emit('update:tagIds', $event)" />
     <template v-if="useDatePresets">

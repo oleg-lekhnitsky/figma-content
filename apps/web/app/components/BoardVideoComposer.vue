@@ -3,6 +3,7 @@ import type { AssetMasonryItem } from '~/types/asset-masonry'
 import { ArrowDown, ArrowUp, ChevronLeft, Download3, Eye, EyeOff, Menu4 } from 'reicon-vue'
 import { videoTemplates } from '~/utils/video-templates'
 import { readStoredVideoBackground, storeVideoBackground } from '~/utils/video-background'
+import VideoAssetThumbnail from '~/components/video-composer/VideoAssetThumbnail.vue'
 import VideoCanvasInspector from '~/components/video-composer/VideoCanvasInspector.vue'
 import VideoPreviewStage from '~/components/video-composer/VideoPreviewStage.vue'
 import VideoSceneInspector from '~/components/video-composer/VideoSceneInspector.vue'
@@ -348,7 +349,8 @@ const showAllAssets = () => {
           <li v-for="asset in orderedAssets" :key="asset.id" :class="{ 'is-hidden': hiddenAssetIds.has(asset.id), 'is-dragging': draggedAssetId === asset.id }" @dragenter.prevent="previewAssetDrop(asset.id)" @dragover.prevent="$event.dataTransfer && ($event.dataTransfer.dropEffect = 'move')" @drop.prevent="draggedAssetId = undefined">
             <button class="video-asset-handle" type="button" draggable="true" :aria-label="`Reorder ${asset.title}. Use Alt and arrow keys to move.`" @dragstart="beginAssetDrag($event, asset)" @dragend="draggedAssetId = undefined" @keydown.alt.up.prevent="moveAssetBy(asset.id, -1)" @keydown.alt.down.prevent="moveAssetBy(asset.id, 1)"><Menu4 :size="16" aria-hidden="true" /></button>
             <span class="video-asset-thumbnail" aria-hidden="true">
-              <img v-if="assetPreviewSrc(asset)" :key="assetPreviewSrc(asset)" :src="assetPreviewSrc(asset)" alt="" @error="tryNextAssetPreview(asset)">
+              <VideoAssetThumbnail v-if="asset.mime_type?.startsWith('video/')" :asset-id="asset.id">{{ asset.title.trim().charAt(0) || '·' }}</VideoAssetThumbnail>
+              <img v-else-if="assetPreviewSrc(asset)" :key="assetPreviewSrc(asset)" :src="assetPreviewSrc(asset)" alt="" @error="tryNextAssetPreview(asset)">
               <span v-else>{{ asset.title.trim().charAt(0) || '·' }}</span>
             </span><span>{{ asset.title }}</span>
             <span class="video-asset-mobile-order">
@@ -761,7 +763,7 @@ const showAllAssets = () => {
 
 :deep(.video-template-root) {
   grid-template-columns: 1fr;
-  margin-top: calc(var(--space)*1.5);
+  /* margin-top: calc(var(--space)*1); */
 }
 
 :deep(.video-template-list > .video-template-folder) {
@@ -858,7 +860,8 @@ const showAllAssets = () => {
   gap: .375rem;
   color: var(--video-text-secondary);
   font-size: var(--video-type-body);
-  font-weight: var(--video-weight-strong)
+  font-weight: var(--video-weight-strong);
+  padding: 0 calc(var(--filter-option-padding) / 2);
 }
 
 :deep(.video-choice-row) {
@@ -1147,6 +1150,7 @@ const showAllAssets = () => {
 :deep(.video-inspector label:has(> .video-range-input)) {
   position: relative;
   display: block;
+  padding: 0;
   min-height: var(--video-control-height)
 }
 
@@ -1256,7 +1260,7 @@ const showAllAssets = () => {
   z-index: 3;
   bottom: var(--space);
   display: grid;
-  grid-template-columns: 44px auto minmax(0, 1fr) auto;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
   align-items: center;
   gap: calc(var(--space)*1);
   min-height: 0;
@@ -1280,15 +1284,6 @@ const showAllAssets = () => {
   background: var(--filter-overlay-primary-background)
 }
 
-:deep(.video-timeline-time) {
-  min-width: 9ch;
-  color: var(--video-text-muted);
-  font-size: var(--video-type-body);
-  font-weight: var(--video-weight-strong);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap
-}
-
 :deep(.video-timeline-ruler) {
   position: relative;
   min-width: 0;
@@ -1301,6 +1296,7 @@ const showAllAssets = () => {
   color: var(--video-text-muted);
   font-size: var(--video-type-caption);
   font-weight: var(--video-weight-regular);
+  font-variant-numeric: tabular-nums;
   pointer-events: none
 }
 
@@ -1309,38 +1305,55 @@ const showAllAssets = () => {
   display: block
 }
 
-:deep(.video-timeline-dot) {
-  top: 22px;
-  width: 2px;
-  height: 2px;
-  translate: -50% 0;
-  border-radius: 50%;
-  background: currentColor
+:deep(.video-timeline-tick) {
+  top: 50%;
+  width: 1px;
+  height: 5px;
+  translate: -50% -50%;
+  background: currentColor;
+  opacity: .45
 }
 
 :deep(.video-timeline-label) {
   top: 50%;
   translate: 0 -50%;
-  font-size: var(--video-type-body);
+  font-size: var(--video-type-caption);
   white-space: nowrap
 }
 
 :deep(.video-timeline-playhead) {
   position: absolute;
   z-index: 1;
-  top: 19px;
-  bottom: -14px;
+  top: 32px;
+  bottom: 4px;
   left: var(--timeline-progress);
-  width: 1px;
+  width: 2px;
+  translate: -50% 0;
+  border-radius: 1px;
+  color: var(--filter-overlay-panel-color);
   background: currentColor;
   pointer-events: none
 }
 
+:deep(.video-timeline-playhead::before) {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 8px;
+  height: 6px;
+  translate: -50% 0;
+  border-radius: 2px 2px 4px 4px;
+  background: currentColor
+}
+
 :deep(.video-timeline input) {
+  position: relative;
+  z-index: 2;
   display: block;
   width: 100%;
-  height: 20px;
-  margin: 20px 0 0;
+  height: 44px;
+  margin: 0;
   padding: 0;
   appearance: none;
   border: 0;
@@ -1351,10 +1364,9 @@ const showAllAssets = () => {
   cursor: pointer
 }
 
-:deep(.video-timeline input:focus),
 :deep(.video-timeline input:focus-visible) {
-  border: 0;
-  outline: 0;
+  outline: auto;
+  outline-offset: 2px;
   box-shadow: none
 }
 
@@ -1398,13 +1410,6 @@ const showAllAssets = () => {
   align-items: center;
   min-height: 44px;
   gap: calc(var(--space)/2)
-}
-
-:deep(.video-timeline-actions::before) {
-  content: '';
-  width: 1px;
-  height: 28px;
-  background: rgb(255 255 255/.18)
 }
 
 :deep(.video-timeline-actions p) {
@@ -1807,7 +1812,7 @@ const showAllAssets = () => {
   }
 
   :deep(.video-timeline) {
-    grid-template-columns: auto minmax(48px, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: calc(var(--space)/1);
     border-radius: var(--radius-mobile);
     background: none;
@@ -1874,7 +1879,6 @@ const showAllAssets = () => {
     filter: blur(0)
   }
 
-  :deep(.video-timeline-time),
   :deep(.video-timeline-scale) {
     color: var(--color-muted)
   }

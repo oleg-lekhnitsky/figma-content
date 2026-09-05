@@ -74,7 +74,7 @@ const createPanelDescription = computed(() => props.portfolioOnly
       ? ''
       : usingCurrentFilters.value && mode.value === 'dynamic'
         ? 'Assets matching the current rules appear automatically.'
-        : 'Add and arrange assets yourself.')
+        : '')
 let previousBodyOverflow = ''
 let previousRootOverflow = ''
 let scrollLocked = false
@@ -287,8 +287,8 @@ const createCollection = async () => {
     message.value = response.data.collection.purpose === 'review'
       ? 'Board created. Add contributors so they can submit their work.'
       : response.data.collection.mode === 'static'
-      ? `Board created with ${response.data.collection.itemCount ?? 0} approved items.`
-      : 'Smart board created. New approved assets matching these rules will appear automatically.'
+      ? `Board created with ${response.data.collection.itemCount ?? 0} liked items.`
+      : 'Smart board created. New liked assets matching these rules will appear automatically.'
     close()
   } catch { errorMessage.value = 'Unable to create the board. Check the settings and try again.' }
   finally { busy.value = false }
@@ -371,12 +371,15 @@ type="button"
     <AssetFilterControls
       v-model:search="searchFilter" v-model:project-ids="projectIds" v-model:tag-ids="tagIds"
       v-model:date-range="range" v-model:date-from="dateFrom" v-model:date-to="dateTo"
-      :projects="projects" :tags="tags" :heading="createPanelTitle"
-      :description="createPanelDescription"
+      :projects="projects" :tags="tags"
       :show-asset-filters="!staticOnly && purpose === 'showcase' && mode === 'dynamic'" :use-date-presets="!staticOnly && purpose === 'showcase' && mode === 'dynamic'" expanded
       :actions-visible="true" @submit="createCollection">
       <template #before>
-        <div class="filter-option-group"><label><span class="sr-only">{{ props.portfolioOnly ? 'Portfolio name' : 'Board name' }}</span><input ref="titleInput" v-model="title" class="panel-field" name="title" required maxlength="120" :placeholder="props.portfolioOnly ? 'Portfolio name' : 'Board name'"></label></div>
+        <section class="filter-option-group">
+          <h2 class="filter-overlay-title">{{ createPanelTitle }}</h2>
+          <p v-if="createPanelDescription" class="board-type-summary">{{ createPanelDescription }}</p>
+          <label><span class="sr-only">{{ props.portfolioOnly ? 'Portfolio name' : 'Board name' }}</span><input ref="titleInput" v-model="title" class="panel-field" name="title" required maxlength="120" :placeholder="props.portfolioOnly ? 'Portfolio name' : 'Board name'"></label>
+        </section>
         <section
           v-if="!props.portfolioOnly"
           class="filter-option-group"
@@ -389,12 +392,12 @@ type="button"
             <button type="button" :aria-pressed="!collectsSubmissions" @click="collectsSubmissions = false">Off</button>
             <button type="button" :aria-pressed="collectsSubmissions" @click="collectsSubmissions = true">On</button>
           </div>
-          <p id="create-board-submissions-summary" class="board-type-summary">{{ collectsSubmissions ? 'Invited contributors can add work to this board.' : 'Build the board from approved work in your library.' }}</p>
+          <p id="create-board-submissions-summary" class="board-type-summary">{{ collectsSubmissions ? 'Invited contributors can submit work to this board for review.' : 'This board does not accept submissions.' }}</p>
         </section>
         <section v-if="purpose === 'portfolio' && !props.portfolioOnly" class="filter-option-group" aria-labelledby="create-portfolio-type"><h3 id="create-portfolio-type">Portfolio type</h3><div class="filter-option-list filter-option-list--segmented"><button type="button" :aria-pressed="portfolioKind === 'main'" @click="portfolioKind = 'main'">Main portfolio</button><button type="button" :aria-pressed="portfolioKind === 'client'" @click="portfolioKind = 'client'">Client version</button></div><p class="board-type-summary">{{ portfolioKind === 'main' ? 'Your main selection of work.' : 'A tailored selection for one recipient.' }}</p></section>
         <section v-if="purpose === 'portfolio' && portfolioKind === 'client'" class="filter-option-group"><h3 id="create-client-label">Client or recipient</h3><input v-model="portfolioClient" class="panel-field" name="portfolio-client" required maxlength="120" placeholder="Acme Studio" aria-labelledby="create-client-label"></section>
         <section v-if="purpose === 'portfolio'" class="filter-option-group"><h3 id="create-introduction-label">Introduction</h3><textarea v-model="introduction" class="panel-field" name="introduction" rows="3" maxlength="2000" placeholder="A short note about this selection" aria-labelledby="create-introduction-label" /></section>
-        <section v-if="usingCurrentFilters && purpose === 'showcase'" class="board-setting-group"><p class="board-type-summary"><strong>Starting with current filters</strong><br>{{ currentFilterLabels.join(' · ') || 'All dates' }}<br>{{ props.currentFilters?.status === 'draft' ? 'Draft status is not included because boards contain approved assets only.' : 'Boards contain approved assets only.' }}</p></section>
+        <section v-if="usingCurrentFilters && purpose === 'showcase'" class="board-setting-group"><p class="board-type-summary"><strong>Starting with current filters</strong><br>{{ currentFilterLabels.join(' · ') || 'All dates' }}<br>{{ props.currentFilters?.status === 'draft' ? 'Draft status is not included because boards contain liked assets only.' : 'Boards contain liked assets only.' }}</p></section>
       </template>
       <section v-if="purpose === 'review'" class="filter-option-group" aria-labelledby="create-review-month"><h2 class="filter-overlay-title" id="create-review-month">Submission month</h2><AppDatePicker v-model="reviewMonth" label="Submission month" precision="month" :clearable="false" :show-label="false" surface="field" /></section>
       <section v-if="purpose === 'review'" class="filter-option-group" aria-labelledby="create-review-deadline"><h2 class="filter-overlay-title" id="create-review-deadline">Submission deadline (optional)</h2><AppDatePicker v-model="submissionDeadline" label="Submission deadline (optional)" :show-label="false" surface="field" /></section>

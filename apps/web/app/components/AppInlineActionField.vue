@@ -47,6 +47,7 @@ defineExpose({ focus })
 
 <template>
   <div class="app-inline-action-field">
+    <slot name="field">
     <label>
       <span class="sr-only">{{ label }}</span>
       <input
@@ -63,6 +64,7 @@ defineExpose({ focus })
         @input="emit('update:modelValue', ($event.target as HTMLInputElement).value)"
       >
     </label>
+    </slot>
     <Transition
       name="app-inline-action"
       @enter="measureAction"
@@ -94,7 +96,7 @@ defineExpose({ focus })
 }
 
 .app-inline-action-field:has(.app-inline-action-button) {
-  grid-template-columns: minmax(0, 1fr) var(--app-inline-action-width, 0px);
+  grid-template-columns: minmax(0, 1fr) var(--app-inline-action-width, max-content);
   column-gap: var(--filter-action-gap);
 }
 
