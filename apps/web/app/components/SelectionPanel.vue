@@ -126,7 +126,7 @@ onBeforeUnmount(() => {
 }
 
 .selection-panel--raised {
-  bottom: calc(var(--space) + env(safe-area-inset-bottom, 0px))
+  bottom: max(var(--space), env(safe-area-inset-bottom, 0px))
 }
 
 .selection-panel :slotted(strong) {
