@@ -1352,6 +1352,9 @@ box-shadow:
 
 @media (max-width: 520px) {
   .selection-panel.selection-panel--filter-overlay {
+    top: var(--drawer-viewport-top, 0) !important;
+    bottom: auto !important;
+    height: var(--drawer-viewport-height, 100%);
     display: flex;
     flex-direction: column;
     align-items: end;

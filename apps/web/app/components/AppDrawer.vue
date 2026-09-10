@@ -18,6 +18,7 @@ const dragY = ref(0)
 const dragging = ref(false)
 const dismissing = ref(false)
 const sheetHeight = ref(1)
+const viewportStyle = ref<Record<string, string>>({})
 const backdropOpacity = computed(() => Math.max(0, 1 - dragY.value / sheetHeight.value))
 let touchId: number | undefined
 let pendingDrag = false
@@ -34,11 +35,29 @@ const drawerExitDuration = 120
 let returnFocusTo: HTMLElement | null = null
 let closeTimer: ReturnType<typeof setTimeout> | undefined
 let backgroundInertLocked = false
+let viewportFrame = 0
 
 const sheetContent = () => drawerRoot.value?.querySelector<HTMLElement>('.asset-filter-controls, .video-mobile-panel') ?? null
 
 const updateSheetHeight = () => {
   sheetHeight.value = Math.max(1, sheetContent()?.offsetHeight ?? window.innerHeight)
+}
+
+const updateViewport = () => {
+  viewportFrame = 0
+  const viewport = window.visualViewport
+  viewportStyle.value = viewport
+    ? {
+        '--drawer-viewport-top': `${Math.round(viewport.offsetTop)}px`,
+        '--drawer-viewport-height': `${Math.round(viewport.height)}px`
+      }
+    : {}
+  updateSheetHeight()
+}
+
+const scheduleViewportUpdate = () => {
+  if (viewportFrame) cancelAnimationFrame(viewportFrame)
+  viewportFrame = requestAnimationFrame(updateViewport)
 }
 
 const setBackgroundInert = (inert: boolean) => {
@@ -237,6 +256,10 @@ const cancelDrag = () => {
 
 onMounted(() => {
   window.addEventListener('keydown', handleKeydown)
+  window.visualViewport?.addEventListener('resize', scheduleViewportUpdate)
+  window.visualViewport?.addEventListener('scroll', scheduleViewportUpdate)
+  window.addEventListener('resize', scheduleViewportUpdate)
+  updateViewport()
   if (props.open) {
     returnFocusTo = document.activeElement instanceof HTMLElement ? document.activeElement : null
     pageScrollLock.lock()
@@ -248,6 +271,10 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeydown)
+  window.visualViewport?.removeEventListener('resize', scheduleViewportUpdate)
+  window.visualViewport?.removeEventListener('scroll', scheduleViewportUpdate)
+  window.removeEventListener('resize', scheduleViewportUpdate)
+  if (viewportFrame) cancelAnimationFrame(viewportFrame)
   clearTimeout(closeTimer)
   clearTimeout(suppressClickTimer)
   setBackgroundInert(false)
@@ -271,7 +298,7 @@ onBeforeUnmount(() => {
         aria-modal="true"
         tabindex="-1"
         :aria-label="label"
-        :style="{ '--sheet-drag-y': `${dragY}px`, '--sheet-backdrop-opacity': backdropOpacity, '--sheet-content-opacity': backdropOpacity }"
+        :style="{ ...viewportStyle, '--sheet-drag-y': `${dragY}px`, '--sheet-backdrop-opacity': backdropOpacity, '--sheet-content-opacity': backdropOpacity }"
         @click.capture="handleClick"
         @click.self="requestClose"
         @touchstart.passive="startDrag"
