@@ -66,7 +66,7 @@ const emit = defineEmits<{
         v-if="roleOptions.length"
         :open="roleOpen"
         class="app-person-role"
-        width="anchor"
+        width="content"
         content-class="panel-dropdown-menu"
         @update:open="emit('update:roleOpen', $event)"
       >
