@@ -67,7 +67,7 @@ const emit = defineEmits<{
         :open="roleOpen"
         class="app-person-role"
         width="content"
-        content-class="panel-dropdown-menu"
+        content-class="panel-dropdown-menu app-person-role-menu"
         @update:open="emit('update:roleOpen', $event)"
       >
         <template #trigger="{ triggerProps }">
@@ -123,6 +123,12 @@ const emit = defineEmits<{
   padding: calc(var(--filter-action-gap) / 1 ) 0;
   border-radius: calc(var(--radius) * 1);
   background: color-mix(in srgb, var(--filter-overlay-panel-color) 7%, transparent);
+}
+
+@media (max-width: 520px) {
+  :global(.app-person-role-menu.panel-dropdown-menu) {
+    min-width: min(calc(var(--control-height) * 4), calc(100vw - var(--space) * 2));
+  }
 }
 
 .app-person-avatar {
