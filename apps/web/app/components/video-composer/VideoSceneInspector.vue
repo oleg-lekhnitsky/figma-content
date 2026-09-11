@@ -235,6 +235,7 @@ const resetFlicker = () => emit('update:modelValue', { ...props.modelValue, visi
       </template>
     </template>
     <fieldset v-if="template?.renderer !== 'webgl' && !isFlicker && !isStories && !isScale"><legend>Transition</legend><div class="video-choice-row"><button v-for="value in ['cut','fade']" :key="value" type="button" :aria-pressed="modelValue.transition === value" @click="set('transition', value as 'cut'|'fade')">{{ optionLabel(value) }}</button></div></fieldset>
+    <slot />
     </div>
   </section>
 </template>

@@ -6,6 +6,7 @@ import { videoTemplates } from '~/utils/video-templates'
 import { readStoredVideoBackground, storeVideoBackground } from '~/utils/video-background'
 import VideoAssetThumbnail from '~/components/video-composer/VideoAssetThumbnail.vue'
 import VideoCanvasInspector from '~/components/video-composer/VideoCanvasInspector.vue'
+import VideoProceduralAudio from '~/components/video-composer/VideoProceduralAudio.vue'
 import VideoPreviewStage from '~/components/video-composer/VideoPreviewStage.vue'
 import VideoSceneInspector from '~/components/video-composer/VideoSceneInspector.vue'
 import VideoTemplateBrowser from '~/components/video-composer/VideoTemplateBrowser.vue'
@@ -224,7 +225,9 @@ const orderedAssets = computed(() => {
 const activeAssets = computed(() => orderedAssets.value.filter(asset => !hiddenAssetIds.value.has(asset.id)))
 const assetRef = computed(() => activeAssets.value)
 const titleRef = computed(() => props.boardTitle)
-const { settings, template, playing, exporting, progress, feedback, totalDuration, setCanvas, togglePlayback, seek, renderVideo } = useVideoComposer(assetRef, titleRef, 'flicker-01', { preserveDrawingBuffer:true })
+const { settings, template, playing, exporting, progress, renderedProgress, feedback, totalDuration, setCanvas, togglePlayback, seek, renderVideo } = useVideoComposer(assetRef, titleRef, 'flicker-01', { preserveDrawingBuffer:true })
+const proceduralAudio = ref<InstanceType<typeof VideoProceduralAudio>>()
+const exportVideo = () => renderVideo(() => proceduralAudio.value?.createExportSession())
 const handleStageReady = (canvas: HTMLCanvasElement) => {
   stageMotionReady.value = false
   if (stageMotionFrame !== undefined) cancelAnimationFrame(stageMotionFrame)
@@ -325,7 +328,7 @@ const showAllAssets = () => {
     <header class="video-mobile-header">
       <button class="button-secondary button-icon video-mobile-header-back" type="button" aria-label="Close video editor" @click="emit('close')"><ChevronLeft :size="24" weight="Outline" aria-hidden="true" /></button>
       <h2>Video editor</h2>
-      <button class="button-secondary video-mobile-header-export" type="button" :disabled="exporting || !activeAssets.length" :aria-label="exporting ? 'Rendering video' : 'Export video'" @click="renderVideo"><span>{{ exporting ? 'Rendering…' : 'Export' }}</span></button>
+      <button class="button-secondary video-mobile-header-export" type="button" :disabled="exporting || !activeAssets.length" :aria-label="exporting ? 'Rendering video' : 'Export video'" @click="exportVideo"><span>{{ exporting ? 'Rendering…' : 'Export' }}</span></button>
     </header>
     <main class="video-composer-center">
       <VideoPreviewStage :key="template.renderer" :safe-area="settings.safeArea" :playing="playing" @ready="handleStageReady" @toggle="togglePlayback" />
@@ -338,7 +341,9 @@ const showAllAssets = () => {
     </nav>
     <button v-if="mobilePanel" class="video-mobile-backdrop" type="button" aria-label="Close video settings" data-drawer-gesture-boundary @click="closeMobilePanel" />
     <VideoTemplateBrowser id="video-mobile-templates" v-model="settings.templateId" class="video-mobile-panel" :class="{ 'is-mobile-open': mobilePanel === 'templates' }" :role="mobilePanel === 'templates' ? 'dialog' : undefined" :aria-modal="mobilePanel === 'templates' || undefined" aria-label="Choose a video template" data-drawer-gesture-boundary :templates="videoTemplates" :assets="activeAssets" />
-    <VideoSceneInspector id="video-mobile-scene" v-model="settings" class="video-mobile-panel" :class="{ 'is-mobile-open': mobilePanel === 'scene' }" :role="mobilePanel === 'scene' ? 'dialog' : undefined" :aria-modal="mobilePanel === 'scene' || undefined" aria-label="Video settings" data-drawer-gesture-boundary :template="template" />
+    <VideoSceneInspector id="video-mobile-scene" v-model="settings" class="video-mobile-panel" :class="{ 'is-mobile-open': mobilePanel === 'scene' }" :role="mobilePanel === 'scene' ? 'dialog' : undefined" :aria-modal="mobilePanel === 'scene' || undefined" aria-label="Video settings" data-drawer-gesture-boundary :template="template">
+      <VideoProceduralAudio ref="proceduralAudio" :settings="settings" :template="template" :playing="playing" :progress="renderedProgress" :duration="totalDuration" :asset-count="activeAssets.length" />
+    </VideoSceneInspector>
     <aside class="video-composer-right">
       <VideoCanvasInspector id="video-mobile-canvas" v-model="settings" class="video-mobile-panel" :class="{ 'is-mobile-open': mobilePanel === 'canvas' }" :role="mobilePanel === 'canvas' ? 'dialog' : undefined" :aria-modal="mobilePanel === 'canvas' || undefined" aria-label="Canvas settings" data-drawer-gesture-boundary />
       <section id="video-mobile-assets" class="video-panel video-assets-panel video-mobile-panel" :class="{ 'is-mobile-open': mobilePanel === 'assets' }" :role="mobilePanel === 'assets' ? 'dialog' : undefined" :aria-modal="mobilePanel === 'assets' || undefined" aria-label="Video assets" data-drawer-gesture-boundary>
@@ -369,7 +374,7 @@ const showAllAssets = () => {
     <button v-if="mobilePanel" ref="mobilePanelClose" class="video-mobile-sheet-handle" type="button" aria-label="Close video settings" data-drawer-gesture-boundary @pointerdown="startMobileSheetDrag" @pointermove="moveMobileSheetDrag" @pointerup="finishMobileSheetDrag" @pointercancel="cancelMobileSheetDrag" @click="handleMobileSheetHandleClick"><span aria-hidden="true" /></button>
     <VideoTimeline :progress="progress" :duration="totalDuration" :playing="playing" @seek="seek" @toggle="togglePlayback">
       <p role="status" aria-live="polite">{{ feedback }}</p>
-      <button class="button-primary video-export-button video-export-button--timeline" type="button" :disabled="exporting || !activeAssets.length" :aria-label="exporting ? 'Rendering video' : 'Download video'" :title="exporting ? 'Rendering video' : 'Download video'" @click="renderVideo"><Download3 class="video-export-icon" :size="20" weight="Outline" aria-hidden="true" /><span class="video-export-label">{{ exporting ? 'Rendering…' : 'Export video' }}</span></button>
+      <button class="button-primary video-export-button video-export-button--timeline" type="button" :disabled="exporting || !activeAssets.length" :aria-label="exporting ? 'Rendering video' : 'Download video'" :title="exporting ? 'Rendering video' : 'Download video'" @click="exportVideo"><Download3 class="video-export-icon" :size="20" weight="Outline" aria-hidden="true" /><span class="video-export-label">{{ exporting ? 'Rendering…' : 'Export video' }}</span></button>
     </VideoTimeline>
   </div>
 </template>
@@ -450,7 +455,7 @@ const showAllAssets = () => {
   grid-column: 4;
   grid-row: 1;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 2fr) minmax(8rem, 1fr);
   gap: calc(var(--space)/2);
   height: 100%;
   min-width: 0;
@@ -458,7 +463,8 @@ const showAllAssets = () => {
 }
 
 .video-composer-right :deep(.video-panel:first-child) {
-  height: auto
+  height: 100%;
+  min-height: 0
 }
 
 .video-assets-panel ol {
@@ -960,17 +966,19 @@ const showAllAssets = () => {
   gap: var(--video-inspector-control-gap)
 }
 
-.video-composer-right > :deep(.video-inspector:first-child),
-.video-composer-right > :deep(.video-inspector:first-child > .video-panel-scroll) {
-  overflow: visible
-}
-
 .video-composer-right > :deep(.video-inspector:first-child) {
   position: relative;
   isolation: isolate;
   background: transparent;
   -webkit-backdrop-filter: none;
   backdrop-filter: none
+}
+
+.video-composer-right > :deep(.video-inspector:first-child > .video-panel-scroll) {
+  height: 100%;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto
 }
 
 .video-composer-right > :deep(.video-inspector:first-child)::before {

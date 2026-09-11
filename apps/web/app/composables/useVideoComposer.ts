@@ -34,6 +34,16 @@ interface VideoComposerRuntimeOptions {
   transparentBackground?: boolean
 }
 
+export interface VideoExportAudioSession {
+  stream: MediaStream
+  start: () => void
+  advance: (progress: number) => void
+  tailDurationMs: number
+  dispose: () => void | Promise<void>
+}
+
+export type VideoExportAudioFactory = () => VideoExportAudioSession | undefined | Promise<VideoExportAudioSession | undefined>
+
 export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Ref<string>, initialTemplateId='flicker-01', runtimeOptions:VideoComposerRuntimeOptions={}) => {
   const settings = ref<VideoComposerSettings>({ templateId:initialTemplateId,format:'portrait',fit:'contain',transition:'fade',secondsPerSlide:6,showTitles:false,direction:'up',gap:40,tilt:0,scaleCenter:false,tiltMode:'off',easing:'glide',cornerRadius:0,distance:100,centerScale:1.4,fade:0,offsetX:0,offsetY:0,scaleFocus:'center',solo:false,visibleCount:6,planeSize:100,planeRotation:0,cycles:1,loop:true,staggerFrames:2,delayFrames:0,cycleDegrees:360,orbitRadius:280,perspective:140,rotationX:0,rotationY:0,rotationZ:0,reverse:false,spin:0,spread:0,staggerSeconds:.4,scaleStyle:'bloom',growFrom:'center',imageFit:'fit',flickerEffect:'off',flipMaterial:'lit',flipLightIntensity:100,lightX:-3,lightY:4,lightZ:5,flipRoughness:72,flipGridColumns:1,flipGridRows:1,flipGridGap:4,flipStagger:0,flickerPacing:'equal',scaleDirection:'forward',driftDirection:'up',scaleAmount:30,driftAmount:30,gridMoveDistance:300,gridStaggerCurve:'linear',gridLayout:'flat',gridTubeBend:'outside',gridTubeMotion:'continuous',gridTubeStepRotation:20,gridTubeEmphasisStyle:'stable',gridCameraZoom:100,gridTubeStagger:0,gridScatter:0,gridRotationVariance:0,gridScaleVariance:0,gridEmphasis:'none',gridEmphasisAmount:0,gridEmphasisCurve:'smooth',delaySeconds:0,fps:30,safeArea:false,exportMotionBlur:false,...defaultVideoBackground,globeMinScale:10,globeMaxScale:20,globeAxis:'y',globeMotion:'continuous',globeStops:8,globeShuffle:false,globeFaceCamera:true,globeShowBackfaces:true,globeFlipImage:false,storiesBigScale:115,storiesBigDrift:40,storiesThumbSize:85,storiesThumbAspect:'1:1',storiesContainerOpacity:40,storiesContainerBlur:60,storiesSelectorPad:5,storiesSelectorStroke:2,storiesDimAmount:20,swipeAlternating:true })
   Object.assign(settings.value,videoTemplates.find(item=>item.id===initialTemplateId)?.preset)
@@ -42,6 +52,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
   const playing = ref(false)
   const exporting = ref(false)
   const progress = ref(0)
+  const renderedProgress = ref(0)
   const feedback = ref('')
   const images = new Map<string, HTMLImageElement>()
   const imageRequests = new Map<string, Promise<HTMLImageElement>>()
@@ -1293,6 +1304,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
       else if(template.value.collection==='stories')await drawStories(time,revision)
       else if(template.value.renderer==='webgl')await drawWebgl(time,revision)
       else await draw2d(time,revision)
+      if(revision===renderRevision)renderedProgress.value=time
     } catch {
       if(revision===renderRevision)feedback.value='Preview unavailable. Check that this board still has accessible media.'
     } finally {
@@ -1333,17 +1345,28 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     }
     check()
   })
-  const supportedMimeType=()=>{
-    const mp4=['video/mp4;codecs=avc1.42E01E','video/mp4']
-    const webm=['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm']
+  const supportedMimeType=(withAudio=false)=>{
+    const mp4=withAudio
+      ? ['video/mp4;codecs=avc1.42E01E,mp4a.40.2','video/mp4']
+      : ['video/mp4;codecs=avc1.42E01E','video/mp4']
+    const webm=withAudio
+      ? ['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm']
+      : ['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm']
     const isFirefox=navigator.userAgent.includes('Firefox/')
     return [...(isFirefox?webm:mp4),...(isFirefox?mp4:webm)].find(type=>MediaRecorder.isTypeSupported(type))||''
   }
-  const renderVideo=async()=>{
-    const target=canvas.value,mimeType=supportedMimeType();if(!target||!mimeType||!('captureStream'in target)){feedback.value='Local video export is not supported by this browser.';return}
-    const exportFormat=mimeType.includes('mp4')?'MP4':'WebM'
-    stop();exporting.value=true;feedback.value=`Rendering ${exportFormat} locally…`;progress.value=0
+  const renderVideo=async(createAudioSession?:VideoExportAudioFactory)=>{
+    const target=canvas.value;if(!target||!('captureStream'in target)){feedback.value='Local video export is not supported by this browser.';return}
+    stop();exporting.value=true;feedback.value='Rendering video locally…';progress.value=0
+    let exportAudio:VideoExportAudioSession|undefined
+    let exportStream:MediaStream|undefined
     try{
+      exportAudio=await createAudioSession?.()
+      const hasAudio=Boolean(exportAudio?.stream.getAudioTracks().length)
+      const mimeType=supportedMimeType(hasAudio)
+      if(!mimeType)throw new Error('No supported recording format')
+      const exportFormat=mimeType.includes('mp4')?'MP4':'WebM'
+      feedback.value=`Rendering ${exportFormat}${hasAudio?' with audio':''} locally…`
       const useMotionBlur=settings.value.exportMotionBlur
       const exportCanvas=useMotionBlur?document.createElement('canvas'):target
       if(useMotionBlur){exportCanvas.width=target.width;exportCanvas.height=target.height}
@@ -1357,21 +1380,26 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
       }
       await new Promise<void>(resolve=>requestAnimationFrame(()=>resolve()))
       let stream=exportCanvas.captureStream(useMotionBlur?0:settings.value.fps)
+      exportStream=stream
       let captureTrack=stream.getVideoTracks()[0] as CanvasCaptureMediaStreamTrack|undefined
       if(useMotionBlur&&typeof captureTrack?.requestFrame!=='function'){
         stream.getTracks().forEach(track=>track.stop())
         stream=exportCanvas.captureStream(settings.value.fps)
+        exportStream=stream
         captureTrack=undefined
       }
+      exportAudio?.stream.getAudioTracks().forEach(track=>stream.addTrack(track))
       const chunks:BlobPart[]=[]
-      const recorder=new MediaRecorder(stream,{mimeType,videoBitsPerSecond:8_000_000})
+      const recorder=new MediaRecorder(stream,{mimeType,videoBitsPerSecond:8_000_000,...(hasAudio?{audioBitsPerSecond:192_000}:{})})
       recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)}
       const done=new Promise<void>((resolve,reject)=>{recorder.onstop=()=>resolve();recorder.onerror=()=>reject(new Error())})
       recorder.start(250)
+      exportAudio?.start()
       const started=performance.now(),sampleCount=useMotionBlur?(window.matchMedia('(pointer: coarse)').matches?3:5):1
       await new Promise<void>(resolve=>{
         const frame=async()=>{
           progress.value=Math.min(totalDuration.value,(performance.now()-started)/1000)
+          exportAudio?.advance(progress.value)
           if(exportContext){
             exportContext.clearRect(0,0,exportCanvas.width,exportCanvas.height)
             const shutter=1/Math.max(1,settings.value.fps)
@@ -1393,11 +1421,17 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
         }
         requestAnimationFrame(frame)
       })
-      recorder.stop();await done;stream.getTracks().forEach(track=>track.stop())
+      exportAudio?.advance(totalDuration.value)
+      if(exportAudio?.tailDurationMs)await new Promise(resolve=>setTimeout(resolve,exportAudio?.tailDurationMs))
+      recorder.stop();await done
       const blob=new Blob(chunks,{type:mimeType}),url=URL.createObjectURL(blob),link=document.createElement('a')
       link.href=url;link.download=`${boardTitle.value.trim().replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'').toLowerCase()||'board'}.${exportFormat.toLowerCase()}`;link.click()
       setTimeout(()=>URL.revokeObjectURL(url),1000);feedback.value=`${exportFormat} exported.`
-    }catch{feedback.value='Video export failed. Try another browser or a smaller board.'}finally{exporting.value=false;progress.value=0;void drawAt(0)}
+    }catch{feedback.value='Video export failed. Try another browser or a smaller board.'}finally{
+      exportStream?.getTracks().forEach(track=>track.stop())
+      await exportAudio?.dispose()
+      exporting.value=false;progress.value=0;void drawAt(0)
+    }
   }
   watch(()=>settings.value.templateId,(templateId,previousTemplateId)=>{
     const changeRevision=++templateChangeRevision
@@ -1462,5 +1496,5 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     disposed=true;assetLoadRevision++;renderRevision++;templateChangeRevision++
     stop();cancelAnimationFrame(textureRefreshFrame);disposeRenderer();releaseVideos()
   })
-  return {settings,template,canvas,playing,exporting,progress,feedback,totalDuration,setCanvas,togglePlayback,seek,renderVideo,drawAt,stop}
+  return {settings,template,canvas,playing,exporting,progress,renderedProgress,feedback,totalDuration,setCanvas,togglePlayback,seek,renderVideo,drawAt,stop}
 }
