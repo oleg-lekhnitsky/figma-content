@@ -64,11 +64,12 @@ describe('bottom sheet keyboard viewport', () => {
   it('keeps the baseline through gradual resizing and scrolls an obscured input inside the sheet', async () => {
     const state = await setup()
     state.doc.activeElement = state.field
-    for (const height of [760, 720, 650, 400]) {
+    for (const height of [799, 760, 720, 650, 400]) {
       state.browser.innerHeight = height
       state.viewport.height = height
       state.viewport.dispatchEvent(new Event('resize'))
       await state.flush()
+      expect(state.style.value['--drawer-keyboard-inset']).toBe(`${800 - height}px`)
     }
     expect(state.style.value['--drawer-layout-height']).toBe('800px')
     expect(state.style.value['--drawer-keyboard-inset']).toBe('400px')
@@ -86,6 +87,10 @@ describe('bottom sheet keyboard viewport', () => {
     state.doc.dispatchEvent(new Event('focusout'))
     await state.flush()
     expect(state.style.value['--drawer-keyboard-inset']).toBe('350px')
+    state.viewport.height = 760
+    state.viewport.dispatchEvent(new Event('resize'))
+    await state.flush()
+    expect(state.style.value['--drawer-keyboard-inset']).toBe('40px')
     state.viewport.height = 800
     state.viewport.dispatchEvent(new Event('resize'))
     await state.flush()

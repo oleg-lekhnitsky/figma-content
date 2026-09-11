@@ -30,7 +30,9 @@ export const useDrawerViewport = (root: Ref<HTMLElement | null>, open: () => boo
     }
     const visibleHeight = viewport?.height ?? window.innerHeight
     const visibleTop = viewport?.offsetTop ?? 0
-    keyboardOpen = (editing || keyboardOpen) && layoutHeight - visibleHeight > 80
+    // Follow the keyboard from its first frame through dismissal. A detection
+    // threshold makes the sheet jump once the viewport crosses that threshold.
+    keyboardOpen = (editing || keyboardOpen) && layoutHeight - visibleHeight > 0
     if (!keyboardOpen && !editing) layoutHeight = window.innerHeight
     const inset = keyboardOpen ? Math.max(0, layoutHeight - visibleHeight - visibleTop) : 0
     viewportStyle.value = {

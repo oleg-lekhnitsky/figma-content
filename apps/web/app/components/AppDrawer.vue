@@ -14,6 +14,7 @@ const emit = defineEmits<{ close: []; afterLeave: [] }>()
 const drawerRoot = ref<HTMLElement | null>(null)
 const viewportStyle = useDrawerViewport(drawerRoot, () => props.open)
 const rendered = ref(props.open)
+const entering = ref(props.open)
 const closing = ref(false)
 const dragY = ref(0)
 const dragging = ref(false)
@@ -96,6 +97,7 @@ watch(() => props.open, async (open) => {
   if (open) {
     clearTimeout(closeTimer)
     rendered.value = true
+    entering.value = true
     returnFocusTo = document.activeElement instanceof HTMLElement ? document.activeElement : null
     closing.value = false
     resetGesture()
@@ -106,12 +108,21 @@ watch(() => props.open, async (open) => {
     return
   }
   closing.value = true
+  entering.value = false
   closeTimer = setTimeout(finishClose, drawerExitDuration)
   await nextTick()
 }, { flush: 'sync' })
 
 const requestClose = () => {
   if (props.dismissible) emit('close')
+}
+
+const finishSheetEntry = (event: AnimationEvent) => {
+  // Vue adds a scope suffix to keyframe names in scoped styles.
+  if (event.animationName.startsWith('selection-sheet-in')) entering.value = false
+}
+const handleFocusIn = (event: FocusEvent) => {
+  if (event.target instanceof HTMLElement && event.target.matches('input, textarea, [contenteditable="true"]')) entering.value = false
 }
 
 const handleKeydown = (event: KeyboardEvent) => {
@@ -264,6 +275,7 @@ onBeforeUnmount(() => {
         ref="drawerRoot"
         class="selection-panel selection-panel--wide selection-panel--filter-overlay"
         :class="{
+          'selection-panel--sheet-entering': entering,
           'selection-panel--filter-closing': closing,
           'selection-panel--sheet-dragging': dragging,
           'selection-panel--sheet-dismissing': dismissing
@@ -274,6 +286,8 @@ onBeforeUnmount(() => {
         :aria-label="label"
         :style="{ ...viewportStyle, '--sheet-drag-y': `${dragY}px`, '--sheet-backdrop-opacity': backdropOpacity, '--sheet-content-opacity': backdropOpacity }"
         @click.capture="handleClick"
+        @animationend="finishSheetEntry"
+        @focusin="handleFocusIn"
         @click.self="requestClose"
         @touchstart.passive="startDrag"
         @touchmove="moveDrag"
@@ -298,7 +312,7 @@ onBeforeUnmount(() => {
 .selection-panel-leave-active { transition: none; }
 
 @media (max-width: 520px) {
-  .selection-panel :deep(.asset-filter-controls) {
+  .selection-panel.selection-panel--sheet-entering :deep(.asset-filter-controls) {
     animation: selection-sheet-in var(--filter-overlay-enter-duration) var(--filter-overlay-enter-easing) both;
   }
 
