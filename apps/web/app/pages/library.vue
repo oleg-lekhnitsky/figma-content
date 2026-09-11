@@ -559,11 +559,6 @@ watch(initialContentSettled, (settled) => {
 // Preserve the chosen asset list while allowing replacements to reach the editor.
 // The composer rebuilds media only when its resource identity changes.
 const videoAssets = ref<AssetCard[]>([])
-watch(displayedAssets, latest => {
-  if (!videoExpanded.value) return
-  const byId = new Map(latest.map(asset => [asset.id, asset]))
-  videoAssets.value = videoAssets.value.map(asset => byId.get(asset.id) ?? asset)
-})
 type BoardMotionPhase = 'idle' | 'dragging' | 'settling'
 const boardMotionPhase = ref<BoardMotionPhase>('idle')
 const boardMotionDirection = ref<'forward' | 'backward'>('forward')
@@ -1133,6 +1128,12 @@ watch(() => data.value?.data, (next) => {
   for (const asset of incoming) merged.set(asset.id, reconcileAssetMedia(asset, merged.get(asset.id)))
   assets.value = [...merged.values()]
 }, { immediate: true })
+// Watch sources are evaluated at registration, so assets must be initialized first.
+watch(displayedAssets, latest => {
+  if (!videoExpanded.value) return
+  const byId = new Map(latest.map(asset => [asset.id, asset]))
+  videoAssets.value = videoAssets.value.map(asset => byId.get(asset.id) ?? asset)
+})
 const visibleSubmitters = computed(() => submitters.value.slice(0, 5))
 const submitterName = (submitter: Submitter) => submitter.figma_handle || 'Unknown submitter'
 const submitterInitial = (submitter: Submitter) => submitterName(submitter).trim().charAt(0).toUpperCase() || '?'
