@@ -158,7 +158,7 @@ const assetScopeLabel = computed(() => props.assetScope === 'all' ? 'All assets'
       <AppDropdownMenu
         v-if="interactive"
         :open="openQuickFilter === 'scope'"
-        content-class="panel-dropdown-menu board-filter-quick-menu"
+        content-class="board-filter-quick-menu"
         @update:open="setQuickFilterOpen('scope', $event)"
       >
         <template #trigger="{ triggerProps }">
@@ -180,7 +180,7 @@ const assetScopeLabel = computed(() => props.assetScope === 'all' ? 'All assets'
           <AppDropdownMenu
             v-if="interactive && ['project', 'tag', 'submitter'].includes(cue.kind)"
             :open="openQuickFilter === cue.id"
-            content-class="panel-dropdown-menu board-filter-quick-menu"
+            content-class="board-filter-quick-menu"
             @update:open="setQuickFilterOpen(cue.id, $event)"
           >
             <template #trigger="{ triggerProps }">

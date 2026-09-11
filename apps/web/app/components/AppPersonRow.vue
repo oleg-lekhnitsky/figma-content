@@ -66,8 +66,7 @@ const emit = defineEmits<{
         v-if="roleOptions.length"
         :open="roleOpen"
         class="app-person-role"
-        width="anchor"
-        content-class="panel-dropdown-menu"
+
         @update:open="emit('update:roleOpen', $event)"
       >
         <template #trigger="{ triggerProps }">
@@ -95,7 +94,7 @@ const emit = defineEmits<{
         v-if="actions.length"
         :open="actionsOpen"
         align="end"
-        content-class="panel-dropdown-menu"
+
         @update:open="emit('update:actionsOpen', $event)"
       >
         <template #trigger="{ triggerProps }">
@@ -120,7 +119,7 @@ const emit = defineEmits<{
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--filter-action-gap);
-  
+
   border-radius: calc(var(--radius) * 1);
   background: color-mix(in srgb, var(--filter-overlay-panel-color) 7%, transparent);
 }

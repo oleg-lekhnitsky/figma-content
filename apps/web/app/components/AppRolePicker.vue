@@ -11,12 +11,12 @@ const props = withDefaults(defineProps<{
   options: readonly RolePickerOption[]
   open?: boolean
   ariaLabel?: string
-  menuWidth?: number | 'content' | 'anchor'
+  menuWidth?: number | 'content'
   teleportTo?: string | HTMLElement
 }>(), {
   open: false,
   ariaLabel: 'Role',
-  menuWidth: 'anchor'
+  menuWidth: 'content'
 })
 
 const emit = defineEmits<{
@@ -32,7 +32,7 @@ const selectedOption = computed(() => props.options.find(option => option.value 
     :open="open"
     :width="menuWidth"
     :teleport-to="teleportTo"
-    content-class="panel-dropdown-menu app-role-picker-menu"
+    content-class="app-role-picker-menu"
     @update:open="emit('update:open', $event)"
   >
     <template #trigger="{ triggerProps }">
@@ -64,21 +64,6 @@ const selectedOption = computed(() => props.options.find(option => option.value 
 <style scoped>
 .app-role-picker-trigger { width: 100%; }
 
-:global(.app-role-picker-menu.panel-dropdown-menu) {
-  min-width: 0;
-  max-width: 100%;
-  border-radius: var(--popover-radius);
-  clip-path: none;
-  box-shadow: none;
-}
-
-:global(.app-role-picker-menu.panel-dropdown-menu > button) {
-  min-width: 0;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  border-radius: var(--menu-radius);
-}
-
 .app-role-picker-option {
   min-height: auto;
   padding: var(--filter-option-padding);
@@ -96,7 +81,7 @@ const selectedOption = computed(() => props.options.find(option => option.value 
 }
 
 .app-role-picker-copy strong {
-  font-size: var(--filter-action-font-size);
+  font: inherit;
   font-weight: 500;
   line-height: 1.1;
 }

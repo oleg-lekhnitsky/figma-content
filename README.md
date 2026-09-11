@@ -23,6 +23,8 @@ The final application adds web pages and server endpoints under `apps/web`, the 
 
 ## Architecture
 
+Shared UI ownership, interaction rules, and verification limits are documented in [UI-COMPONENTS.md](UI-COMPONENTS.md).
+
 The browser and plugin call only the Nuxt API. Nuxt validates input with the shared Zod schemas, resolves the application session, checks the allowlisted user and role, scopes queries to their organization, and accesses Supabase with server-only credentials. Supabase Storage's `assets` bucket is private; authorized downloads use short-lived signed URLs. Figma files hold only an asset ID in plugin data and are never treated as the database.
 
 Session and plugin authorization tokens are random application credentials. Only hashes are persisted. OAuth state and plugin exchange codes are short-lived and single-use. The initial migration enables RLS on every application table and deliberately grants no anonymous policies; server authorization remains mandatory even when controls are hidden in the UI.

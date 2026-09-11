@@ -1,14 +1,13 @@
 <script setup lang="ts">
 import { Xmark } from 'reicon-vue'
 
-const _props = withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   visible?: boolean
   label: string
   wide?: boolean
   bare?: boolean
   raised?: boolean
   scrollHidden?: boolean
-  overlay?: boolean
   closeLabel?: string
   closeDisabled?: boolean
 }>(), {
@@ -17,12 +16,11 @@ const _props = withDefaults(defineProps<{
   bare: false,
   raised: false,
   scrollHidden: false,
-  overlay: false,
   closeLabel: '',
   closeDisabled: false
 })
 
-const emit = defineEmits<{ close: []; afterLeave: [] }>()
+defineEmits<{ close: []; afterLeave: [] }>()
 const keyboardOffset = ref(0)
 let keyboardFrame = 0
 
@@ -35,7 +33,7 @@ function activeElementUsesKeyboard() {
 function updateKeyboardOffset() {
   keyboardFrame = 0
   const viewport = window.visualViewport
-  if (!viewport || !activeElementUsesKeyboard()) {
+  if (!props.visible || !viewport || !activeElementUsesKeyboard()) {
     keyboardOffset.value = 0
     return
   }
@@ -68,13 +66,10 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <AppDrawer v-if="overlay" :open="visible" :label="label" :dismissible="!closeDisabled" @close="emit('close')" @after-leave="emit('afterLeave')">
-    <slot />
-  </AppDrawer>
   <Teleport to="body">
     <Transition name="selection-panel" @after-leave="$emit('afterLeave')">
       <div
-        v-if="visible && !overlay" class="selection-panel" :class="{ 'selection-panel--wide': wide, 'selection-panel--bare': bare, 'selection-panel--raised': raised, 'selection-panel--scroll-hidden': scrollHidden }" role="region"
+        v-if="visible" class="selection-panel" :class="{ 'selection-panel--wide': wide, 'selection-panel--bare': bare, 'selection-panel--raised': raised, 'selection-panel--scroll-hidden': scrollHidden }" role="region"
         :aria-label="label" :style="{ '--selection-panel-keyboard-offset': `${keyboardOffset}px` }">
         <slot />
         <button

@@ -23,7 +23,6 @@ const props = defineProps<{
   canManageMembers?: boolean
   busy?: boolean
   publicUrl: string
-  fullSettingsUrl: string
   filterSearch: string
   filterProjectIds: string[]
   filterTagIds: string[]
@@ -269,7 +268,7 @@ onBeforeUnmount(() => {
     <section v-if="purpose === 'portfolio'" class="filter-option-group portfolio-summary" aria-labelledby="board-portfolio">
       <h2 id="board-portfolio" class="filter-overlay-title">Portfolio</h2>
       <p class="board-type-summary">{{ portfolioKind === 'main' ? 'Main portfolio' : portfolioClient ? `Client portfolio · ${portfolioClient}` : 'Client portfolio' }}</p>
-      <NuxtLink class="panel-secondary-action" :to="fullSettingsUrl">Manage portfolio</NuxtLink>
+      <NuxtLink class="panel-secondary-action" :to="{ path: '/portfolio', query: { view: 'details', portfolio: boardId } }">Manage portfolio</NuxtLink>
     </section>
 
     <section class="filter-option-group" role="group" aria-labelledby="board-public-layout">

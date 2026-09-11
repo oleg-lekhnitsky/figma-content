@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { createAppDrawerScrollLock } from '~/utils/app-drawer-scroll-lock'
 import { lockAppDrawerBackground, unlockAppDrawerBackground } from '~/utils/app-drawer-inert'
+import { focusableElements } from '~/utils/focusable-elements'
 
 const props = withDefaults(defineProps<{
   open: boolean
@@ -126,14 +127,17 @@ const handleFocusIn = (event: FocusEvent) => {
 }
 
 const handleKeydown = (event: KeyboardEvent) => {
-  if (!props.open) return
+  if (!props.open || event.defaultPrevented || !drawerRoot.value) return
+  const drawers = document.querySelectorAll('[data-app-drawer]')
+  if (drawers[drawers.length - 1] !== drawerRoot.value) return
+  if (event.target instanceof Element && event.target.closest('dialog[open]')) return
   if (event.key === 'Escape' && props.dismissible) {
     event.preventDefault()
     requestClose()
     return
   }
   if (event.key !== 'Tab' || !drawerRoot.value) return
-  const focusable = [...drawerRoot.value.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])')]
+  const focusable = focusableElements(drawerRoot.value)
   if (!focusable.length) {
     event.preventDefault()
     drawerRoot.value.focus({ preventScroll: true })
@@ -143,10 +147,13 @@ const handleKeydown = (event: KeyboardEvent) => {
   const last = focusable[focusable.length - 1]
   if (event.shiftKey && document.activeElement === first) {
     event.preventDefault()
-    last?.focus()
+    last?.focus({ preventScroll: true })
   } else if (!event.shiftKey && document.activeElement === last) {
     event.preventDefault()
-    first?.focus()
+    first?.focus({ preventScroll: true })
+  } else if (!drawerRoot.value.contains(document.activeElement)) {
+    event.preventDefault()
+    first?.focus({ preventScroll: true })
   }
 }
 
@@ -273,6 +280,7 @@ onBeforeUnmount(() => {
       <div
         v-if="rendered"
         ref="drawerRoot"
+        data-app-drawer
         class="selection-panel selection-panel--wide selection-panel--filter-overlay"
         :class="{
           'selection-panel--sheet-entering': entering,

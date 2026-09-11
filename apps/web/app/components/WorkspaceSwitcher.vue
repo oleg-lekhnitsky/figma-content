@@ -412,7 +412,7 @@ const deleteWorkspace = async () => {
       <span v-if="remainingContributorCount" class="workspace-more" aria-hidden="true">+{{ remainingContributorCount }}</span>
     </button>
 
-    <SelectionPanel :visible="open" label="Choose workspace" wide overlay raised @close="closePanel">
+    <AppDrawer :open="open" label="Choose workspace" @close="closePanel">
       <div class="asset-filter-controls asset-filter-controls--filters asset-filter-controls--expanded workspace-panel">
         <button class="filter-sheet-handle" type="button" aria-label="Close workspaces" @click="closePanel"><span aria-hidden="true" /></button>
         <div class="filter-sheet-content">
@@ -546,7 +546,7 @@ const deleteWorkspace = async () => {
       <button class="filter-panel-toggle is-expanded" type="button" aria-label="Close workspaces" aria-expanded="true" @click="closePanel">
         <Xmark :size="20" :stroke-width="2" aria-hidden="true" />
       </button>
-    </SelectionPanel>
+    </AppDrawer>
     <AppDialog
       v-model:open="createWorkspaceDialogOpen"
       title="New workspace"
@@ -716,7 +716,7 @@ const deleteWorkspace = async () => {
 .workspace-member-list {
   display: grid;
   overflow: hidden;
-  gap: calc(var(--space)*1.25);
+  gap: calc(var(--space)*1.0);
   /* border-radius: calc(var(--radius) * 2.5); */
   /* background: color-mix(in srgb, var(--filter-overlay-panel-color) 7%, transparent); */
   /* padding: calc(var(--filter-action-gap) / 1 ) calc(var(--filter-action-gap) / 1); */

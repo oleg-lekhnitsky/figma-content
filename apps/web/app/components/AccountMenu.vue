@@ -39,7 +39,7 @@ const signOut = async () => {
       <Profile :size="20" weight="Filled" aria-hidden="true" />
     </button>
 
-    <SelectionPanel :visible="open" label="Your account" wide overlay raised @close="close">
+    <AppDrawer :open="open" label="Your account" @close="close">
       <div class="asset-filter-controls asset-filter-controls--expanded account-panel">
         <button class="filter-sheet-handle" type="button" aria-label="Close account" @click="close"><span aria-hidden="true" /></button>
         <div class="filter-sheet-content">
@@ -74,7 +74,7 @@ const signOut = async () => {
       <button class="filter-panel-toggle is-expanded" type="button" aria-label="Close account" aria-expanded="true" @click="close">
         <Xmark :size="20" :stroke-width="2" aria-hidden="true" />
       </button>
-    </SelectionPanel>
+    </AppDrawer>
   </div>
 </template>
 

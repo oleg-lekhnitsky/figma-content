@@ -1,7 +1,7 @@
 <script setup lang="ts">
-const props = withDefaults(defineProps<{
+withDefaults(defineProps<{
   open?: boolean
-  width?: number | 'content' | 'anchor'
+  width?: number | 'content'
   offset?: number
   gutter?: number
   align?: 'start' | 'end'
@@ -46,10 +46,6 @@ const handleMenuKeydown = (event: KeyboardEvent) => {
     focusItem(event.key === 'Home' ? 0 : availableItems.length - 1)
     return
   }
-  if (event.key === 'Tab') {
-    setOpen(false)
-    return
-  }
   if (event.key.length !== 1 || event.ctrlKey || event.metaKey || event.altKey) return
 
   typeahead += event.key.toLocaleLowerCase()
@@ -71,29 +67,13 @@ const handlePointerMove = (event: PointerEvent) => {
   if (item && document.activeElement !== item) item.focus({ preventScroll: true })
 }
 
-const menuTriggerProps = (base: Record<string, unknown>) => ({
-  ...base,
-  'aria-haspopup': 'menu' as const,
-  onKeydown: async (event: KeyboardEvent) => {
-    if (event.key === 'ArrowUp') {
-      event.preventDefault()
-      if (!props.open) setOpen(true)
-      await nextTick()
-      focusItem(items().length - 1)
-      return
-    }
-    const handler = base.onKeydown as ((event: KeyboardEvent) => void | Promise<void>) | undefined
-    await handler?.(event)
-  }
-})
-
 onBeforeUnmount(() => clearTimeout(typeaheadTimer))
 </script>
 
 <template>
   <AppPopover
     :open="open"
-    :width="width === 'anchor' ? 'content' : width"
+    :width="width"
     :offset="offset"
     :gutter="gutter"
     :align="align"
@@ -103,13 +83,13 @@ onBeforeUnmount(() => clearTimeout(typeaheadTimer))
     @update:open="setOpen"
   >
     <template #trigger="{ triggerProps }">
-      <slot name="trigger" :open="open" :trigger-props="menuTriggerProps(triggerProps)" />
+      <slot name="trigger" :open="open" :trigger-props="triggerProps" />
     </template>
     <template #default="{ close }">
       <div
         ref="content"
         role="menu"
-        :class="['app-dropdown-menu-content', 'material-tinted', contentClass]"
+        :class="['app-dropdown-menu-content', contentClass]"
         @keydown="handleMenuKeydown"
         @pointermove="handlePointerMove"
         @click="handleMenuClick($event, close)"
@@ -121,27 +101,70 @@ onBeforeUnmount(() => clearTimeout(typeaheadTimer))
 </template>
 
 <style scoped>
+.app-dropdown-menu-content {
+  --menu-inset: calc(var(--space) / 4);
+  --menu-row-gap: 2px;
+  --menu-row-height: var(--filter-action-height);
+  --menu-padding: calc(var(--space) / 2.5);
+  --menu-radius: max(0px, calc(var(--popover-radius) - var(--menu-padding)));
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  gap: var(--menu-row-gap);
+  padding: var(--menu-padding);
+  border-radius: var(--popover-radius);
+  color: var(--filter-overlay-panel-color);
+  background: var(--filter-overlay-nested-background);
+}
+
+.app-dropdown-menu-content :deep([role^='menuitem']) {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--menu-row-height);
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  margin: 0;
+  border-radius: var(--menu-radius);
+  padding: var(--menu-inset) var(--filter-option-padding);
+  color: inherit;
+  background: transparent;
+  font-size: var(--font-size-control);
+  line-height: 1.25;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: start;
+  opacity: 1;
+}
+
+.app-dropdown-menu-content :deep([role^='menuitem']:is(:hover, :focus-visible)) {
+  background: color-mix(in srgb, var(--filter-overlay-panel-color) 7%, transparent);
+}
+
+.app-dropdown-menu-content :deep([role^='menuitem']:focus-visible) {
+  outline-offset: calc(var(--filter-focus-width) * -1);
+}
+
+.app-dropdown-menu-content :deep([role^='menuitem'][aria-checked='true']) {
+  color: var(--filter-overlay-primary-color);
+  background: var(--filter-overlay-primary-background);
+}
+
+.app-dropdown-menu-content :deep([role^='menuitem']:is(:disabled, [aria-disabled='true'])) {
+  opacity: .45;
+}
+
 @media (max-width: 520px) {
   .app-dropdown-menu-content {
-    --menu-inset: calc(var(--space) * 2 / 3);
-    --menu-row-gap: calc(var(--space) / 6);
-    --menu-row-height: var(--control-height);
     --menu-padding: calc(var(--space) * 2 / 3);
-    padding: var(--menu-padding)
+    --menu-row-height: var(--control-height);
   }
 
   .app-dropdown-menu-content :deep([role^='menuitem']) {
-    border-radius: var(--menu-radius);
     padding-inline: var(--space);
-    font-size: calc(var(--font-size-body) * 1.0625)
-  }
-
-  :global(.app-dropdown-menu-popover) {
-    scrollbar-width: none
-  }
-
-  :global(.app-dropdown-menu-popover::-webkit-scrollbar) {
-    display: none
+    font-size: var(--font-size-body);
   }
 }
 </style>

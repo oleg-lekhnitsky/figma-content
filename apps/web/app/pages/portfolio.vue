@@ -422,7 +422,7 @@ const deleteActiveVersion = async () => {
                   v-if="canEdit && editingBoardId !== board.id"
                   :open="openBoardActionsId === board.id"
                   align="end"
-                  content-class="panel-dropdown-menu"
+
                   @update:open="openBoardActionsId = $event ? board.id : null"
                 >
                   <template #trigger="{ triggerProps }">

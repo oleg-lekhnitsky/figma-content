@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import type { CSSProperties } from 'vue'
+import { focusableElements } from '~/utils/focusable-elements'
 
 const props = withDefaults(defineProps<{
   open?: boolean
-  width?: number | 'content' | 'anchor'
+  width?: number | 'content'
   offset?: number
   gutter?: number
   align?: 'start' | 'end'
@@ -28,6 +29,7 @@ const spaceMeasure = ref<HTMLElement>()
 const contentId = useId()
 const panelStyle = ref<CSSProperties>({ visibility: 'hidden' })
 let resizeObserver: ResizeObserver | undefined
+let requestedFocus: 'first' | 'last' | undefined
 
 const trigger = () => anchor.value?.querySelector<HTMLElement>('[data-popover-trigger]')
 
@@ -47,9 +49,7 @@ const position = () => {
   const availableWidth = Math.max(0, viewportRight - viewportLeft - gutter * 2)
   const panelWidth = typeof props.width === 'number'
     ? Math.min(props.width, availableWidth)
-    : props.width === 'anchor'
-      ? Math.min(triggerRect.width, availableWidth)
-      : Math.min(Math.max(panel.value?.scrollWidth ?? 0, triggerRect.width), availableWidth)
+    : Math.min(Math.max(panel.value?.scrollWidth ?? 0, triggerRect.width), availableWidth)
   const measuredHeight = panel.value?.scrollHeight ?? 0
   const spaceBelow = Math.max(0, viewportBottom - triggerRect.bottom - offset - gutter)
   const spaceAbove = Math.max(0, triggerRect.top - viewportTop - offset - gutter)
@@ -71,26 +71,46 @@ const position = () => {
 
 const close = (restoreFocus = false) => {
   emit('update:open', false)
-  if (restoreFocus) nextTick(() => trigger()?.focus())
+  if (restoreFocus) nextTick(() => trigger()?.focus({ preventScroll: true }))
 }
 
 const toggle = () => emit('update:open', !props.open)
 
-const focusFirst = () => {
-  panel.value?.querySelector<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])')?.focus()
+const handlePanelTab = (event: KeyboardEvent) => {
+  if (props.haspopup !== 'menu') return
+  const button = trigger()
+  if (!button) return
+  const scope = button.closest('[data-app-drawer], dialog[open]') ?? document
+  const available = focusableElements(scope).filter(element => !panel.value?.contains(element))
+  const index = available.indexOf(button)
+  const next = available[index + (event.shiftKey ? -1 : 1)]
+    ?? (event.shiftKey ? available.at(-1) : available[0])
+  event.preventDefault()
+  close()
+  void nextTick(() => next?.focus({ preventScroll: true }))
 }
 
-const handleTriggerKeydown = async (event: KeyboardEvent) => {
+const focusEdge = (edge: 'first' | 'last') => {
+  const available = panel.value ? focusableElements(panel.value) : []
+  const target = edge === 'last' ? available.at(-1) : available[0]
+  target?.focus({ preventScroll: true })
+}
+
+const handleTriggerKeydown = (event: KeyboardEvent) => {
   if (event.key === 'Escape' && props.open) {
     event.preventDefault()
     close(true)
     return
   }
-  if (event.key !== 'ArrowDown') return
+  const menuKey = props.haspopup === 'menu' && ['ArrowUp', 'Enter', ' '].includes(event.key)
+  if (event.key !== 'ArrowDown' && !menuKey) return
   event.preventDefault()
-  if (!props.open) emit('update:open', true)
-  await nextTick()
-  focusFirst()
+  const edge = event.key === 'ArrowUp' ? 'last' : 'first'
+  if (props.open) focusEdge(edge)
+  else {
+    requestedFocus = edge
+    emit('update:open', true)
+  }
 }
 
 const handleDocumentPointerDown = (event: PointerEvent) => {
@@ -100,7 +120,7 @@ const handleDocumentPointerDown = (event: PointerEvent) => {
 }
 
 watch(() => props.open, async (isOpen) => {
-  if (!isOpen) return
+  if (!isOpen) { requestedFocus = undefined; return }
   panelStyle.value = {
     width: props.width === 'content' ? 'max-content' : undefined,
     maxWidth: 'calc(100vw - var(--space) * 2)',
@@ -109,7 +129,11 @@ watch(() => props.open, async (isOpen) => {
   await nextTick()
   if (panel.value) resizeObserver?.observe(panel.value)
   position()
-})
+  // Positioning removes visibility:hidden on the next render. Focus afterward.
+  await nextTick()
+  if (props.open && requestedFocus) focusEdge(requestedFocus)
+  requestedFocus = undefined
+}, { immediate: true })
 
 onMounted(() => {
   document.addEventListener('pointerdown', handleDocumentPointerDown)
@@ -153,9 +177,11 @@ defineExpose({ close, position })
         v-if="open"
         :id="contentId"
         ref="panel"
+        data-drawer-scroll
         :class="['app-popover-content', panelClass]"
         :style="panelStyle"
         @keydown.esc.stop.prevent="close(true)"
+        @keydown.tab="handlePanelTab"
       >
         <slot :close="close" />
       </div>

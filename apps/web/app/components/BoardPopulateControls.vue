@@ -139,7 +139,7 @@ const toggleSubmitter = (submitterId: string) => {
 </script>
 
 <template>
-  <SelectionPanel :visible="visible" label="Add with filters" wide overlay raised @close="emit('close')">
+  <AppDrawer :open="visible" label="Add with filters" @close="emit('close')">
     <Transition name="panel-step" mode="out-in">
       <AssetFilterControls
         v-if="!choosingBehavior"
@@ -239,7 +239,7 @@ const toggleSubmitter = (submitterId: string) => {
     <button class="filter-panel-toggle is-expanded" type="button" aria-label="Close add with filters" aria-expanded="true" @click="emit('close')">
       <Xmark :size="20" :stroke-width="2" aria-hidden="true" />
     </button>
-  </SelectionPanel>
+  </AppDrawer>
 </template>
 
 <style scoped>

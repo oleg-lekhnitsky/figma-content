@@ -213,7 +213,7 @@ defineExpose({ save, busy })
           <AppDropdownMenu
             :open="contactMenuOpen === index"
             align="end"
-            content-class="panel-dropdown-menu"
+
             @update:open="contactMenuOpen = $event ? index : null"
           >
             <template #trigger="{ triggerProps }">

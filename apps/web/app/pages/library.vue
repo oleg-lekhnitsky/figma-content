@@ -1480,7 +1480,7 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <SelectionPanel :visible="libraryPageActive && viewExpanded" label="Library view" wide overlay raised
+      <AppDrawer :open="libraryPageActive && viewExpanded" label="Library view"
         @close="closeView" @after-leave="finishExpandedPanelClose">
         <BoardViewControls :model-value="libraryView" @update:model-value="setLibraryView" />
         <AppStatusToast :message="viewToastMessage" />
@@ -1488,19 +1488,18 @@ onBeforeUnmount(() => {
           aria-expanded="true" @click="closeView">
           <Xmark :size="20" :stroke-width="2" aria-hidden="true" />
         </button>
-      </SelectionPanel>
+      </AppDrawer>
 
-      <SelectionPanel :visible="Boolean(libraryPageActive && selectedBoard && videoExpanded)" label="Create video" wide overlay raised
+      <AppDrawer :open="Boolean(libraryPageActive && selectedBoard && videoExpanded)" label="Create video"
         @close="closeVideo" @after-leave="finishExpandedPanelClose">
         <LazyBoardVideoComposer v-if="selectedBoard && videoExpanded" :assets="videoAssets" :board-title="selectedBoard.title" @close="closeVideo" />
         <button class="filter-panel-toggle is-expanded" type="button" aria-label="Close video creator"
           aria-expanded="true" @click="closeVideo">
           <Xmark :size="20" :stroke-width="2" aria-hidden="true" />
         </button>
-      </SelectionPanel>
+      </AppDrawer>
 
-      <SelectionPanel :visible="Boolean(libraryPageActive && selectedBoard && boardSettingsExpanded)" label="Board settings" wide overlay
-        raised @close="closeBoardSettings" @after-leave="finishExpandedPanelClose">
+      <AppDrawer :open="Boolean(libraryPageActive && selectedBoard && boardSettingsExpanded)" label="Board settings" @close="closeBoardSettings" @after-leave="finishExpandedPanelClose">
         <BoardSettingsControls v-if="selectedBoard" :title="selectedBoard.title" :board-id="selectedBoard.id" :purpose="selectedBoard.purpose"
           :portfolio-kind="selectedBoard.portfolio_kind" :portfolio-client="selectedBoard.portfolio_client"
           :mode="selectedBoard.mode" :asset-scope="selectedBoard.asset_scope" :layout="selectedBoard.layout"
@@ -1508,7 +1507,7 @@ onBeforeUnmount(() => {
           :edit-filters-on-open="boardSettingsEditFilters"
           :publication-enabled="selectedBoard.publication_enabled" :can-edit="canRenameSelectedBoard"
           :can-manage-members="canManageSelectedBoardMembers" :busy="boardSettingsBusy"
-          :public-url="selectedBoardPublicUrl" :full-settings-url="`/portfolio?view=details&portfolio=${encodeURIComponent(selectedBoard.id)}`"
+          :public-url="selectedBoardPublicUrl"
           v-model:filter-search="dynamicBoardFilters.search"
           v-model:filter-project-ids="dynamicBoardFilters.projectIds"
           v-model:filter-tag-ids="dynamicBoardFilters.tagIds"
@@ -1525,7 +1524,7 @@ onBeforeUnmount(() => {
           aria-expanded="true" @click="closeBoardSettings">
           <Xmark :size="20" :stroke-width="2" aria-hidden="true" />
         </button>
-      </SelectionPanel>
+      </AppDrawer>
 
       <BoardPopulateControls
         v-if="selectedStaticBoard"
@@ -1543,7 +1542,7 @@ onBeforeUnmount(() => {
       />
 
       <template v-if="!selectedBoardId">
-        <SelectionPanel :visible="libraryPageActive && filtersExpanded" label="Asset filters" wide overlay raised
+        <AppDrawer :open="libraryPageActive && filtersExpanded" label="Asset filters"
           @close="closeFilters" @after-leave="finishExpandedPanelClose">
           <AssetFilterControls v-model:status="status" v-model:project-ids="projectIds" v-model:tag-ids="tagIds"
             v-model:date-range="dateRange" v-model:date-from="customDateFrom" v-model:date-to="customDateTo"
@@ -1572,7 +1571,7 @@ onBeforeUnmount(() => {
             @click="closeFilters">
             <Xmark :size="20" :stroke-width="2" aria-hidden="true" />
           </button>
-        </SelectionPanel>
+        </AppDrawer>
         <SelectionPanel
           :visible="libraryPageActive && compactFiltersVisible && !filtersExpanded && !viewExpanded && !videoExpanded && !boardSettingsExpanded && !boardPopulateExpanded && !boardCreatorExpanded"
           :scroll-hidden="!toolbarVisible && !searchExpanded" label="Asset filters" bare raised>

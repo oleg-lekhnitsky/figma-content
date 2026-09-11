@@ -983,45 +983,6 @@ button.panel-dropdown-trigger:focus-visible {
   outline-offset: var(--filter-focus-width);
 }
 
-.panel-dropdown-menu > button {
-  width: 100%;
-  min-height: var(--filter-action-height);
-  justify-content: flex-start;
-  color: var(--filter-overlay-panel-color);
-  background: transparent;
-  font-size: var(--filter-action-font-size);
-  text-align: start;
-}
-
-.panel-dropdown-menu.panel-dropdown-menu {
-  gap: 2px;
-  /* padding: 4px; */
-  border-radius: calc(var(--radius) * 1.5);
-  background: var(--filter-overlay-nested-background);
-  box-shadow: none;
-box-shadow:
-  0 2px 4px rgba(0, 0, 0, .06),
-  0 8px 24px rgba(0, 0, 0, 0.1),
-  0 24px 48px rgba(0, 0, 0, 0.38);
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-  overflow: hidden;
-  clip-path: inset(0 round calc(var(--radius) * 1.5));
-}
-
-.panel-dropdown-menu.panel-dropdown-menu > button {
-  border-radius: calc(var(--radius) * 1.5 - 4px);
-}
-
-.panel-dropdown-menu.panel-dropdown-menu > button:is(:hover, :focus-visible) {
-  background: color-mix(in srgb, var(--filter-overlay-panel-color) 7%, transparent);
-}
-
-.panel-dropdown-menu.panel-dropdown-menu > button[aria-checked='true'] {
-  color: var(--filter-overlay-primary-color);
-  background: var(--filter-overlay-primary-background);
-}
-
 .panel-primary-action {
   width: 100%;
   min-height: var(--filter-action-height);

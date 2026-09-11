@@ -366,7 +366,7 @@ type="button"
       </Transition>
     </div>
   </dialog>
-  <SelectionPanel :visible="createPanelOpen" :label="createPanelTitle" wide overlay
+  <AppDrawer :open="createPanelOpen" :label="createPanelTitle"
     @close="close" @after-leave="finishPanelClose">
     <AssetFilterControls
       v-model:search="searchFilter" v-model:project-ids="projectIds" v-model:tag-ids="tagIds"
@@ -407,7 +407,7 @@ type="button"
     <button class="filter-panel-toggle is-expanded" type="button" :aria-label="`Close ${createPanelTitle.toLocaleLowerCase()}`" aria-expanded="true" @click="close">
       <Xmark :size="20" :stroke-width="2" aria-hidden="true" />
     </button>
-  </SelectionPanel>
+  </AppDrawer>
 </template>
 
 <style scoped>
