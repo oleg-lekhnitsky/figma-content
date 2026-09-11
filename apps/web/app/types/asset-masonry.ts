@@ -1,5 +1,7 @@
 export interface AssetMasonryItem {
   id: string
+  version?: number
+  updated_at?: string
   title: string
   description?: string | null
   previewUrl: string

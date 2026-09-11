@@ -4,6 +4,7 @@ import { MIN_VIDEO_DURATION_SECONDS, normalizeVideoDuration, videoFormatDimensio
 import { defaultVideoBackground } from '~/utils/video-background'
 import { videoTemplates } from '~/utils/video-templates'
 import { curvedGridDirection, curvedGridStep } from '~/utils/curved-grid-motion'
+import { videoAssetMediaUrl } from '~/utils/video-asset-media'
 import { gridBuildPhase } from '~/utils/grid-build-phase'
 
 const easingCurves: Record<VideoComposerSettings['easing'], readonly [number, number, number, number]> = {
@@ -111,7 +112,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     : Math.max(1, assets.value.length) * settings.value.secondsPerSlide)
   const urlsFor = (asset: AssetMasonryItem) => {
     if (/^(data|blob):/.test(asset.previewUrl)) return [asset.previewUrl]
-    return ['preview2x','preview','original'].map(variant => `/api/assets/${encodeURIComponent(asset.id)}/media?variant=${variant}`)
+    return (['preview2x','preview','original'] as const).map(variant => videoAssetMediaUrl(asset, variant))
   }
   const loadImageUrl = (url:string) => {
     const cacheKey=url,cached=images.get(cacheKey)
@@ -165,7 +166,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
       const timeout=setTimeout(failed,15000)
       cancelVideoRequests.set(asset.id,failed)
       video.addEventListener('loadeddata',ready,{once:true});video.addEventListener('error',failed,{once:true})
-      if(!cached)video.src=`/api/assets/${encodeURIComponent(asset.id)}/media?variant=original`
+      if(!cached)video.src=videoAssetMediaUrl(asset, 'original')
       video.load()
       // Start muted decoding too: metadata/preload alone may not produce a frame on mobile.
       void video.play().catch(()=>{})
@@ -1444,7 +1445,7 @@ export const useVideoComposer = (assets: Ref<AssetMasonryItem[]>, boardTitle: Re
     ()=>{if(!playing.value)void nextTick(()=>drawAt(progress.value))}
   )
   let initializedAssets = false
-  watch(assets,()=>{
+  watch(()=>JSON.stringify(assets.value.map(asset=>[asset.id, asset.mime_type, videoAssetMediaUrl(asset, 'original')])),()=>{
     const revision=++assetLoadRevision
     const shouldAutoplay=!initializedAssets
     initializedAssets=true

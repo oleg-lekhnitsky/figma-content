@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { videoAssetMediaUrl } from '~/utils/video-asset-media'
 import type { AssetMasonryItem } from '~/types/asset-masonry'
 import { ArrowDown, ArrowUp, ChevronLeft, Download3, Eye, EyeOff, Menu4 } from 'reicon-vue'
 import { videoTemplates } from '~/utils/video-templates'
@@ -207,8 +208,8 @@ watch(() => props.assets.map(asset => `${asset.id}:${asset.previewUrl}:${asset.o
 })
 const assetPreviewCandidates = (asset: AssetMasonryItem) => [...new Set([
   asset.previewUrl,
-  `/api/assets/${encodeURIComponent(asset.id)}/media?variant=preview`,
-  `/api/assets/${encodeURIComponent(asset.id)}/media?variant=original`,
+  videoAssetMediaUrl(asset, 'preview'),
+  videoAssetMediaUrl(asset, 'original'),
   asset.originalUrl
 ].filter((url): url is string => Boolean(url)))]
 const assetPreviewSrc = (asset: AssetMasonryItem) => assetPreviewCandidates(asset)[assetPreviewAttempts.value[asset.id] ?? 0]
@@ -349,7 +350,7 @@ const showAllAssets = () => {
           <li v-for="asset in orderedAssets" :key="asset.id" :class="{ 'is-hidden': hiddenAssetIds.has(asset.id), 'is-dragging': draggedAssetId === asset.id }" @dragenter.prevent="previewAssetDrop(asset.id)" @dragover.prevent="$event.dataTransfer && ($event.dataTransfer.dropEffect = 'move')" @drop.prevent="draggedAssetId = undefined">
             <button class="video-asset-handle" type="button" draggable="true" :aria-label="`Reorder ${asset.title}. Use Alt and arrow keys to move.`" @dragstart="beginAssetDrag($event, asset)" @dragend="draggedAssetId = undefined" @keydown.alt.up.prevent="moveAssetBy(asset.id, -1)" @keydown.alt.down.prevent="moveAssetBy(asset.id, 1)"><Menu4 :size="16" aria-hidden="true" /></button>
             <span class="video-asset-thumbnail" aria-hidden="true">
-              <VideoAssetThumbnail v-if="asset.mime_type?.startsWith('video/')" :asset-id="asset.id">{{ asset.title.trim().charAt(0) || '·' }}</VideoAssetThumbnail>
+              <VideoAssetThumbnail v-if="asset.mime_type?.startsWith('video/')" :src="videoAssetMediaUrl(asset, 'original')">{{ asset.title.trim().charAt(0) || '·' }}</VideoAssetThumbnail>
               <img v-else-if="assetPreviewSrc(asset)" :key="assetPreviewSrc(asset)" :src="assetPreviewSrc(asset)" alt="" @error="tryNextAssetPreview(asset)">
               <span v-else>{{ asset.title.trim().charAt(0) || '·' }}</span>
             </span><span>{{ asset.title }}</span>

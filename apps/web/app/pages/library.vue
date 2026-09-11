@@ -556,9 +556,14 @@ const signalAppContentReady = async () => {
 watch(initialContentSettled, (settled) => {
   if (settled) void signalAppContentReady()
 }, { immediate: true })
-// Keep the composer's input stable while it is open. Background asset refreshes
-// otherwise replace this array and make WebGL dispose and rebuild every texture.
+// Preserve the chosen asset list while allowing replacements to reach the editor.
+// The composer rebuilds media only when its resource identity changes.
 const videoAssets = ref<AssetCard[]>([])
+watch(displayedAssets, latest => {
+  if (!videoExpanded.value) return
+  const byId = new Map(latest.map(asset => [asset.id, asset]))
+  videoAssets.value = videoAssets.value.map(asset => byId.get(asset.id) ?? asset)
+})
 type BoardMotionPhase = 'idle' | 'dragging' | 'settling'
 const boardMotionPhase = ref<BoardMotionPhase>('idle')
 const boardMotionDirection = ref<'forward' | 'backward'>('forward')

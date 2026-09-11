@@ -1,11 +1,12 @@
 <script setup lang="ts">
-const props = defineProps<{ assetId: string }>()
+const props = defineProps<{ src: string }>()
 const root = ref<HTMLElement>()
 const video = ref<HTMLVideoElement>()
 const visible = ref(false)
 const failed = ref(false)
 let observer: IntersectionObserver | undefined
-const src = computed(() => `/api/assets/${encodeURIComponent(props.assetId)}/media?variant=original#t=0.001`)
+const src = computed(() => `${props.src}#t=0.001`)
+watch(src, () => { failed.value = false })
 onMounted(() => {
   observer = new IntersectionObserver(([entry]) => { visible.value = Boolean(entry?.isIntersecting) })
   if (root.value) observer.observe(root.value)

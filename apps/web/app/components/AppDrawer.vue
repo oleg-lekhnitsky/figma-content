@@ -12,6 +12,7 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{ close: []; afterLeave: [] }>()
 const drawerRoot = ref<HTMLElement | null>(null)
+const viewportStyle = useDrawerViewport(drawerRoot, () => props.open)
 const rendered = ref(props.open)
 const closing = ref(false)
 const dragY = ref(0)
@@ -271,7 +272,7 @@ onBeforeUnmount(() => {
         aria-modal="true"
         tabindex="-1"
         :aria-label="label"
-        :style="{ '--sheet-drag-y': `${dragY}px`, '--sheet-backdrop-opacity': backdropOpacity, '--sheet-content-opacity': backdropOpacity }"
+        :style="{ ...viewportStyle, '--sheet-drag-y': `${dragY}px`, '--sheet-backdrop-opacity': backdropOpacity, '--sheet-content-opacity': backdropOpacity }"
         @click.capture="handleClick"
         @click.self="requestClose"
         @touchstart.passive="startDrag"
