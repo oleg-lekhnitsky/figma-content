@@ -2,6 +2,7 @@
 import type { VideoComposerSettings, VideoTemplate } from '~/types/video-composer'
 import type { VideoExportAudioSession } from '~/composables/useVideoComposer'
 import VideoRangeInput from '~/components/video-composer/VideoRangeInput.vue'
+import { requestVideoAudioPlayback, resumeVideoAudioContext } from '~/utils/video-audio-playback'
 
 const props = defineProps<{
   settings: VideoComposerSettings
@@ -91,6 +92,7 @@ type RecipeSound = {
 
 const soundId = ref<SoundId>('tap9yv8r')
 let context: AudioContext | undefined
+let releaseAudioPlayback: (() => void) | undefined
 let previousProgress = 0
 let previousEvent = -1
 
@@ -437,9 +439,14 @@ const eventIndexAt = (progress: number) => {
 }
 
 const ensureContext = async () => {
-  context ??= new AudioContext()
-  if (context.state === 'suspended') await context.resume()
-  return context
+  releaseAudioPlayback ??= requestVideoAudioPlayback()
+  const audio = context ??= new AudioContext()
+  await resumeVideoAudioContext(audio)
+  return audio
+}
+
+const resume = async () => {
+  if (enabled.value) await ensureContext()
 }
 
 const toneFor = (step: number, selectedSound: GeneratedSound, kind: MainSoundKind, outputVolume = volume.value) => {
@@ -632,7 +639,11 @@ const playCycleStart = () => {
 const setEnabled = async (value: boolean) => {
   enabled.value = value
   previousEvent = -1
-  if (!value) return
+  if (!value) {
+    releaseAudioPlayback?.()
+    releaseAudioPlayback = undefined
+    return
+  }
   await ensureContext()
   const event = soundEvents.value[Math.max(0, eventIndexAt(props.progress))]
   if (!props.playing) void playTone(event?.step ?? 0, true, finalAccentEnabled.value ? 'settle' : 'transition')
@@ -729,7 +740,7 @@ const createExportSession = async (): Promise<VideoExportAudioSession | undefine
   if (!enabled.value) return undefined
   const audio = new AudioContext()
   const destination = audio.createMediaStreamDestination()
-  if (audio.state === 'suspended') await audio.resume()
+  await resumeVideoAudioContext(audio)
   const selectedSound = sound.value
   const outputVolume = volume.value
   const accentsKick = kickPattern.value === 'accents'
@@ -769,7 +780,7 @@ const createExportSession = async (): Promise<VideoExportAudioSession | undefine
   }
 }
 
-defineExpose({ createExportSession })
+defineExpose({ createExportSession, resume })
 
 watch(
   () => [props.playing, props.progress, enabled.value, soundEvents.value] as const,
@@ -821,6 +832,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (context) void context.close()
   context = undefined
+  releaseAudioPlayback?.()
+  releaseAudioPlayback = undefined
 })
 </script>
 

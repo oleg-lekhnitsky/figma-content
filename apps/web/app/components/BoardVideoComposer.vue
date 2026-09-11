@@ -228,6 +228,10 @@ const titleRef = computed(() => props.boardTitle)
 const { settings, template, playing, exporting, progress, renderedProgress, feedback, totalDuration, setCanvas, togglePlayback, seek, renderVideo } = useVideoComposer(assetRef, titleRef, 'flicker-01', { preserveDrawingBuffer:true })
 const proceduralAudio = ref<InstanceType<typeof VideoProceduralAudio>>()
 const exportVideo = () => renderVideo(() => proceduralAudio.value?.createExportSession())
+const toggleVideoPlayback = async () => {
+  if (!playing.value) await proceduralAudio.value?.resume()
+  togglePlayback()
+}
 const handleStageReady = (canvas: HTMLCanvasElement) => {
   stageMotionReady.value = false
   if (stageMotionFrame !== undefined) cancelAnimationFrame(stageMotionFrame)
@@ -261,7 +265,7 @@ const handlePlaybackShortcut = (event: KeyboardEvent) => {
   const target = event.target instanceof Element ? event.target : null
   if (target?.closest('button, input, select, textarea, [contenteditable="true"]')) return
   event.preventDefault()
-  togglePlayback()
+  void toggleVideoPlayback()
 }
 onMounted(() => {
   window.addEventListener('keydown', handlePlaybackShortcut)
@@ -331,7 +335,7 @@ const showAllAssets = () => {
       <button class="button-secondary video-mobile-header-export" type="button" :disabled="exporting || !activeAssets.length" :aria-label="exporting ? 'Rendering video' : 'Export video'" @click="exportVideo"><span>{{ exporting ? 'Rendering…' : 'Export' }}</span></button>
     </header>
     <main class="video-composer-center">
-      <VideoPreviewStage :key="template.renderer" :safe-area="settings.safeArea" :playing="playing" @ready="handleStageReady" @toggle="togglePlayback" />
+      <VideoPreviewStage :key="template.renderer" :safe-area="settings.safeArea" :playing="playing" @ready="handleStageReady" @toggle="toggleVideoPlayback" />
     </main>
     <nav class="video-mobile-toolbar" aria-label="Video editing tools">
       <button type="button" aria-controls="video-mobile-templates" :aria-expanded="mobilePanel === 'templates'" @click="openMobilePanel('templates', $event)">Templates</button>
@@ -372,7 +376,7 @@ const showAllAssets = () => {
       </section>
     </aside>
     <button v-if="mobilePanel" ref="mobilePanelClose" class="video-mobile-sheet-handle" type="button" aria-label="Close video settings" data-drawer-gesture-boundary @pointerdown="startMobileSheetDrag" @pointermove="moveMobileSheetDrag" @pointerup="finishMobileSheetDrag" @pointercancel="cancelMobileSheetDrag" @click="handleMobileSheetHandleClick"><span aria-hidden="true" /></button>
-    <VideoTimeline :progress="progress" :duration="totalDuration" :playing="playing" @seek="seek" @toggle="togglePlayback">
+    <VideoTimeline :progress="progress" :duration="totalDuration" :playing="playing" @seek="seek" @toggle="toggleVideoPlayback">
       <p role="status" aria-live="polite">{{ feedback }}</p>
       <button class="button-primary video-export-button video-export-button--timeline" type="button" :disabled="exporting || !activeAssets.length" :aria-label="exporting ? 'Rendering video' : 'Download video'" :title="exporting ? 'Rendering video' : 'Download video'" @click="exportVideo"><Download3 class="video-export-icon" :size="20" weight="Outline" aria-hidden="true" /><span class="video-export-label">{{ exporting ? 'Rendering…' : 'Export video' }}</span></button>
     </VideoTimeline>
