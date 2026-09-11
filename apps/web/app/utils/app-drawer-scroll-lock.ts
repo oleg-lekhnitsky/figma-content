@@ -6,10 +6,6 @@ interface ScrollLockSnapshot {
   bodyOverscrollBehavior: string
   rootOverscrollBehavior: string
   appTouchAction: string
-  bodyPosition: string
-  bodyTop: string
-  bodyLeft: string
-  bodyWidth: string
 }
 
 const owners = new Set<symbol>()
@@ -52,6 +48,11 @@ const blockBackgroundTouch = (event: TouchEvent) => {
   if (event.cancelable) event.preventDefault()
 }
 
+const pinBackgroundScroll = () => {
+  if (!snapshot || (window.scrollX === snapshot.scrollX && window.scrollY === snapshot.scrollY)) return
+  window.scrollTo(snapshot.scrollX, snapshot.scrollY)
+}
+
 const freezeApp = () => {
   appRoot = document.getElementById('__nuxt')
   if (!appRoot) return
@@ -62,41 +63,28 @@ const freezeApp = () => {
     rootOverflow: document.documentElement.style.overflow,
     bodyOverscrollBehavior: document.body.style.overscrollBehavior,
     rootOverscrollBehavior: document.documentElement.style.overscrollBehavior,
-    appTouchAction: appRoot.style.touchAction,
-    bodyPosition: document.body.style.position,
-    bodyTop: document.body.style.top,
-    bodyLeft: document.body.style.left,
-    bodyWidth: document.body.style.width
+    appTouchAction: appRoot.style.touchAction
   }
-  // Hold the background in place without fighting iOS focus scrolling on every
-  // scroll event. Restore the original document position once the last drawer closes.
-  document.body.style.position = 'fixed'
-  document.body.style.top = `${-snapshot.scrollY}px`
-  document.body.style.left = `${-snapshot.scrollX}px`
-  document.body.style.width = '100%'
   document.body.style.overflow = 'hidden'
   document.documentElement.style.overflow = 'hidden'
   document.body.style.overscrollBehavior = 'none'
   document.documentElement.style.overscrollBehavior = 'none'
   appRoot.style.touchAction = 'none'
+  window.addEventListener('scroll', pinBackgroundScroll, { passive: true })
   document.addEventListener('touchstart', startTouch, { capture: true, passive: true })
   document.addEventListener('touchmove', blockBackgroundTouch, { capture: true, passive: false })
 }
 
 const restoreApp = () => {
   if (!snapshot) return
+  window.removeEventListener('scroll', pinBackgroundScroll)
   document.removeEventListener('touchstart', startTouch, { capture: true })
   document.removeEventListener('touchmove', blockBackgroundTouch, { capture: true })
   document.body.style.overflow = snapshot.bodyOverflow
   document.documentElement.style.overflow = snapshot.rootOverflow
   document.body.style.overscrollBehavior = snapshot.bodyOverscrollBehavior
   document.documentElement.style.overscrollBehavior = snapshot.rootOverscrollBehavior
-  document.body.style.position = snapshot.bodyPosition
-  document.body.style.top = snapshot.bodyTop
-  document.body.style.left = snapshot.bodyLeft
-  document.body.style.width = snapshot.bodyWidth
   if (appRoot) appRoot.style.touchAction = snapshot.appTouchAction
-  window.scrollTo(snapshot.scrollX, snapshot.scrollY)
   touchId = undefined
   snapshot = undefined
   appRoot = null
