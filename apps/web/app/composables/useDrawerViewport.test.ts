@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { effectScope, nextTick, ref, watch } from 'vue'
 import { useDrawerViewport } from './useDrawerViewport'
 
-const setup = async () => {
+const setup = async (sheetTop = 80, sheetHeight = 720) => {
   const viewport = Object.assign(new EventTarget(), { height: 800, offsetTop: 0, scale: 1 })
   const browser = Object.assign(new EventTarget(), {
     innerHeight: 800, innerWidth: 390, visualViewport: viewport,
@@ -16,7 +16,7 @@ const setup = async () => {
   }
   const field = new Field()
   const doc = Object.assign(new EventTarget(), { activeElement: null as Field | null })
-  const root = { querySelector: () => ({}), contains: (element: unknown) => element === field }
+  const root = { querySelector: () => ({ offsetTop: sheetTop, offsetHeight: sheetHeight }), contains: (element: unknown) => element === field }
   const cleanups: Array<() => void> = []
   let scheduled: FrameRequestCallback | undefined
   vi.stubGlobal('window', browser)
@@ -44,20 +44,31 @@ const setup = async () => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('bottom sheet keyboard viewport', () => {
-  it('preserves the layout height and moves the sheet above the iOS keyboard', async () => {
+  it('moves a short sheet only enough to retain usable editing space', async () => {
+    const state = await setup(600, 200)
+    state.doc.activeElement = state.field
+    state.viewport.height = 450
+    state.viewport.dispatchEvent(new Event('resize'))
+    await state.flush()
+    expect(state.style.value['--drawer-sheet-top']).toBe('290px')
+    expect(state.style.value['--drawer-sheet-height']).toBe('160px')
+    state.dispose()
+  })
+  it('keeps the top edge fixed while the keyboard reduces the scrollable area', async () => {
     const state = await setup()
     state.doc.activeElement = state.field
     state.viewport.height = 450
     state.viewport.dispatchEvent(new Event('resize'))
     await state.flush()
     expect(state.style.value).toEqual({
-      '--drawer-layout-height': '800px', '--drawer-keyboard-inset': '350px', '--drawer-visible-height': '450px'
+      '--drawer-layout-height': '800px', '--drawer-sheet-position': 'absolute', '--drawer-sheet-top': '80px', '--drawer-sheet-height': '370px'
     })
     // Safari may pan its visual viewport while revealing the focused field.
     state.viewport.offsetTop = 40
     state.viewport.dispatchEvent(new Event('scroll'))
     await state.flush()
-    expect(state.style.value['--drawer-keyboard-inset']).toBe('310px')
+    expect(state.style.value['--drawer-sheet-top']).toBe('80px')
+    expect(state.style.value['--drawer-sheet-height']).toBe('410px')
     state.dispose()
   })
 
@@ -69,10 +80,11 @@ describe('bottom sheet keyboard viewport', () => {
       state.viewport.height = height
       state.viewport.dispatchEvent(new Event('resize'))
       await state.flush()
-      expect(state.style.value['--drawer-keyboard-inset']).toBe(`${800 - height}px`)
+      expect(state.style.value['--drawer-sheet-top']).toBe('80px')
+      expect(state.style.value['--drawer-sheet-height']).toBe(`${height - 80}px`)
     }
     expect(state.style.value['--drawer-layout-height']).toBe('800px')
-    expect(state.style.value['--drawer-keyboard-inset']).toBe('400px')
+    expect(state.style.value['--drawer-sheet-top']).toBe('80px')
     expect(state.scroll.scrollTop).toBe(36)
     state.dispose()
   })
@@ -86,15 +98,16 @@ describe('bottom sheet keyboard viewport', () => {
     state.doc.activeElement = null
     state.doc.dispatchEvent(new Event('focusout'))
     await state.flush()
-    expect(state.style.value['--drawer-keyboard-inset']).toBe('350px')
+    expect(state.style.value['--drawer-sheet-height']).toBe('370px')
     state.viewport.height = 760
     state.viewport.dispatchEvent(new Event('resize'))
     await state.flush()
-    expect(state.style.value['--drawer-keyboard-inset']).toBe('40px')
+    expect(state.style.value['--drawer-sheet-top']).toBe('80px')
+    expect(state.style.value['--drawer-sheet-height']).toBe('680px')
     state.viewport.height = 800
     state.viewport.dispatchEvent(new Event('resize'))
     await state.flush()
-    expect(state.style.value['--drawer-keyboard-inset']).toBe('0px')
+    expect(state.style.value['--drawer-sheet-position']).toBeUndefined()
     state.dispose()
   })
 
@@ -105,7 +118,7 @@ describe('bottom sheet keyboard viewport', () => {
     state.viewport.height = 400
     state.viewport.dispatchEvent(new Event('resize'))
     await state.flush()
-    expect(state.style.value['--drawer-keyboard-inset']).toBe('0px')
+    expect(state.style.value['--drawer-sheet-position']).toBeUndefined()
     state.browser.innerWidth = 844
     state.browser.dispatchEvent(new Event('resize'))
     await state.flush()

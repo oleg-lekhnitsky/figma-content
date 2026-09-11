@@ -93,7 +93,7 @@ onBeforeUnmount(() => clearTimeout(typeaheadTimer))
 <template>
   <AppPopover
     :open="open"
-    :width="width"
+    :width="width === 'anchor' ? 'content' : width"
     :offset="offset"
     :gutter="gutter"
     :align="align"
@@ -127,7 +127,6 @@ onBeforeUnmount(() => clearTimeout(typeaheadTimer))
     --menu-row-gap: calc(var(--space) / 6);
     --menu-row-height: var(--control-height);
     --menu-padding: calc(var(--space) * 2 / 3);
-    min-width: min(calc(var(--control-height) * 5), calc(100vw - var(--space) * 2));
     padding: var(--menu-padding)
   }
 

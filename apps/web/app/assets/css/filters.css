@@ -734,7 +734,7 @@ margin-top: calc(var(--filter-overlay-padding) * -.15);
 }
 
 .selection-panel--filter-overlay .filter-option-group > .filter-overlay-title + p {
-  margin-block-start: calc(var(--space) * -.375);
+  margin-block-start: calc(var(--space) * -1.25);
 }
 
 .selection-panel--filter-overlay .filter-option-group :is(h3, .filter-option-label) {
@@ -948,6 +948,12 @@ margin-top: calc(var(--filter-overlay-padding) * -.15);
 .panel-field::placeholder {
   color: var(--filter-overlay-muted-color);
   opacity: 1;
+}
+
+input.panel-field:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
+textarea.panel-field {
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 textarea.panel-field {
@@ -1351,6 +1357,11 @@ box-shadow:
 }
 
 @media (max-width: 520px) {
+  .selection-panel--filter-overlay :is(input.panel-field, textarea.panel-field, button.panel-dropdown-trigger):focus-visible {
+    /* Keep the full ring inside the field, including at scroll boundaries. */
+    outline-offset: calc(var(--filter-focus-width) * -1);
+  }
+
   .selection-panel.selection-panel--filter-overlay:has(.asset-filter-controls) {
     bottom: auto !important;
     height: var(--drawer-layout-height, 100%);
@@ -1390,11 +1401,12 @@ box-shadow:
     --filter-action-height: var(--range-control-height-mobile);
     --filter-option-font-size: var(--font-size-body);
     --filter-action-font-size: var(--font-size-body);
-    position: relative;
+    position: var(--drawer-sheet-position, relative);
+    top: var(--drawer-sheet-top, auto);
     width: 100%;
     max-width: none;
-    height: var(--filter-sheet-height-mobile);
-    max-height: min(var(--filter-sheet-height-mobile), calc(var(--drawer-visible-height, 100vh) - env(safe-area-inset-top)));
+    height: var(--drawer-sheet-height, var(--filter-sheet-height-mobile));
+    max-height: var(--drawer-sheet-height, var(--filter-sheet-height-mobile));
     margin: 0;
     padding: 0;
     overflow: hidden;
@@ -1405,13 +1417,12 @@ box-shadow:
     backdrop-filter: blur(var(--material-tinted-blur)) saturate(var(--material-tinted-saturation));
     -webkit-overflow-scrolling: touch;
     transform: translate3d(0, var(--sheet-drag-y, 0px), 0);
-    bottom: var(--drawer-keyboard-inset, 0px);
     transition: transform var(--filter-sheet-drag-duration) var(--filter-overlay-enter-easing), opacity var(--filter-sheet-drag-duration) var(--filter-overlay-enter-easing);
   }
 
   .selection-panel--filter-overlay .asset-filter-controls.board-view-controls {
-    height: auto;
-    max-height: min(var(--filter-view-sheet-max-height-mobile), calc(var(--drawer-visible-height, 100vh) - env(safe-area-inset-top)));
+    height: var(--drawer-sheet-height, auto);
+    max-height: var(--drawer-sheet-height, var(--filter-view-sheet-max-height-mobile));
   }
 
   .selection-panel--filter-overlay .asset-filter-controls .filter-option-list--segmented {

@@ -218,6 +218,7 @@ const dismissBoardSettingsFeedback = () => {
 }
 const boardMembers = ref<BoardMember[]>([])
 const boardWorkspaceMembers = ref<BoardWorkspaceMember[]>([])
+const boardMembersLoadedFor = ref('')
 const boardTitleDraft = ref('')
 const boardTitleWords = computed(() => boardTitleDraft.value.trim().split(/\s+/).filter(Boolean))
 const boardTitleInput = ref<HTMLTextAreaElement | null>(null)
@@ -288,6 +289,7 @@ const copySelectedBoardLink = async () => {
   }
 }
 const loadSelectedBoardMembers = async () => {
+  boardMembersLoadedFor.value = ''
   const board = selectedBoard.value
   if (!board) return
   boardMembers.value = []
@@ -297,6 +299,7 @@ const loadSelectedBoardMembers = async () => {
     if (selectedBoardId.value === board.id) {
       boardMembers.value = response.data.members
       boardWorkspaceMembers.value = response.data.workspaceMembers
+      boardMembersLoadedFor.value = board.id
     }
   } catch {
     boardSettingsFeedback.text = 'Unable to load board members.'
@@ -1513,7 +1516,7 @@ onBeforeUnmount(() => {
           v-model:filter-date-from="dynamicBoardFilters.dateFrom"
           v-model:filter-date-to="dynamicBoardFilters.dateTo"
           :projects="projects" :tags="tags" :submitters="submitters"
-          :members="boardMembers" :workspace-members="boardWorkspaceMembers" :feedback="boardSettingsFeedback.text" :error="boardSettingsFeedback.error"
+          :members="boardMembers" :workspace-members="boardWorkspaceMembers" :members-loaded="boardMembersLoadedFor === selectedBoard.id" :feedback="boardSettingsFeedback.text" :error="boardSettingsFeedback.error"
           @set-publication="setSelectedBoardPublication" @set-layout="setSelectedBoardLayout" @set-asset-scope="setSelectedBoardAssetScope"
           @copy-link="copySelectedBoardLink" @save-member="saveSelectedBoardMember"
           @remove-member="removeSelectedBoardMember" @delete-board="deleteBoardDialogOpen = true"

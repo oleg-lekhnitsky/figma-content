@@ -35,6 +35,7 @@ const props = defineProps<{
   submitters: FilterSubmitter[]
   members: Array<{ user_id: string; role: string; allowed_users: { email: string | null; figma_handle: string | null; avatar_url: string | null } | null }>
   workspaceMembers: Array<{ id: string; email: string | null; figma_handle: string | null; avatar_url: string | null; role: string }>
+  membersLoaded: boolean
   feedback?: string
   error?: boolean
 }>()
@@ -304,7 +305,7 @@ onBeforeUnmount(() => {
           @select-action="removeExistingMember(member)"
         />
       </div>
-      <p v-else class="board-type-summary">{{ purpose === 'review' ? 'No board members yet.' : 'No additional board roles yet.' }}</p>
+      <p v-else-if="membersLoaded" class="board-type-summary">{{ purpose === 'review' ? 'No board members yet.' : 'No additional board roles yet.' }}</p>
       <Transition name="member-form">
         <form v-if="canManageMembers && addingMember" class="member-form app-person-composer" @submit.prevent="submitMember">
           <AppRolePicker
@@ -338,7 +339,7 @@ onBeforeUnmount(() => {
           </AppInlineActionField>
         </form>
       </Transition>
-      <p v-if="canManageMembers && !availableWorkspaceMembers.length" class="board-type-summary">All eligible workspace members already have a board role.</p>
+      <p v-if="membersLoaded && canManageMembers && !availableWorkspaceMembers.length" class="board-type-summary">All eligible workspace members already have a board role.</p>
       <button v-if="canManageMembers && availableWorkspaceMembers.length" class="panel-secondary-action" type="button" :aria-expanded="addingMember" @click="toggleMemberForm">{{ addingMember ? 'Cancel' : purpose === 'review' ? 'Add review member' : 'Assign board role' }}</button>
     </section>
 

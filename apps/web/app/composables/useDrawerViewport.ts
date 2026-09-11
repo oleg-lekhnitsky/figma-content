@@ -7,6 +7,8 @@ export const useDrawerViewport = (root: Ref<HTMLElement | null>, open: () => boo
   let layoutHeight = 0
   let layoutWidth = 0
   let keyboardOpen = false
+  let sheetTop = 0
+  let sheetHeight = 0
   let frame = 0
 
   const update = async () => {
@@ -30,15 +32,27 @@ export const useDrawerViewport = (root: Ref<HTMLElement | null>, open: () => boo
     }
     const visibleHeight = viewport?.height ?? window.innerHeight
     const visibleTop = viewport?.offsetTop ?? 0
+    const sheet = root.value.querySelector<HTMLElement>('.asset-filter-controls')!
+    if (!keyboardOpen) {
+      // offsetTop excludes the entrance animation's visual translation.
+      sheetTop = sheet.offsetTop
+      sheetHeight = sheet.offsetHeight
+    }
     // Follow the keyboard from its first frame through dismissal. A detection
     // threshold makes the sheet jump once the viewport crosses that threshold.
     keyboardOpen = (editing || keyboardOpen) && layoutHeight - visibleHeight > 0
     if (!keyboardOpen && !editing) layoutHeight = window.innerHeight
-    const inset = keyboardOpen ? Math.max(0, layoutHeight - visibleHeight - visibleTop) : 0
+    const visibleBottom = visibleTop + visibleHeight
+    // Keep the top edge stationary. Only low, short sheets need to move enough
+    // to leave a usable editing area; never lift the whole sheet by keyboard height.
+    const editingTop = Math.max(visibleTop, Math.min(sheetTop, visibleBottom - Math.min(sheetHeight, 160)))
     viewportStyle.value = {
       '--drawer-layout-height': `${layoutHeight}px`,
-      '--drawer-keyboard-inset': `${inset}px`,
-      '--drawer-visible-height': `${keyboardOpen ? visibleHeight : layoutHeight}px`
+      ...(keyboardOpen ? {
+        '--drawer-sheet-position': 'absolute',
+        '--drawer-sheet-top': `${editingTop}px`,
+        '--drawer-sheet-height': `${Math.max(0, Math.min(sheetHeight, visibleBottom - editingTop))}px`
+      } : {})
     }
     if (!keyboardOpen || !(active instanceof HTMLElement)) return
     await nextTick()
@@ -62,6 +76,7 @@ export const useDrawerViewport = (root: Ref<HTMLElement | null>, open: () => boo
       layoutHeight = window.innerHeight
       layoutWidth = window.innerWidth
       keyboardOpen = false
+      sheetHeight = 0
       schedule()
     }
   })

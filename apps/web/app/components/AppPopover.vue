@@ -39,20 +39,25 @@ const position = () => {
   const gutter = props.gutter ?? space
   const offset = props.offset ?? space / 3
   const triggerRect = triggerElement.getBoundingClientRect()
-  const availableWidth = window.innerWidth - gutter * 2
+  const viewport = window.visualViewport
+  const viewportLeft = viewport?.offsetLeft ?? 0
+  const viewportTop = viewport?.offsetTop ?? 0
+  const viewportRight = viewportLeft + (viewport?.width ?? window.innerWidth)
+  const viewportBottom = viewportTop + (viewport?.height ?? window.innerHeight)
+  const availableWidth = Math.max(0, viewportRight - viewportLeft - gutter * 2)
   const panelWidth = typeof props.width === 'number'
     ? Math.min(props.width, availableWidth)
     : props.width === 'anchor'
       ? Math.min(triggerRect.width, availableWidth)
       : Math.min(Math.max(panel.value?.scrollWidth ?? 0, triggerRect.width), availableWidth)
-  const measuredHeight = panel.value?.offsetHeight ?? 0
-  const spaceBelow = window.innerHeight - triggerRect.bottom - offset - gutter
-  const spaceAbove = triggerRect.top - offset - gutter
+  const measuredHeight = panel.value?.scrollHeight ?? 0
+  const spaceBelow = Math.max(0, viewportBottom - triggerRect.bottom - offset - gutter)
+  const spaceAbove = Math.max(0, triggerRect.top - viewportTop - offset - gutter)
   const placeAbove = measuredHeight > spaceBelow && spaceAbove > spaceBelow
   const desiredLeft = props.align === 'end' ? triggerRect.right - panelWidth : triggerRect.left
-  const left = Math.max(gutter, Math.min(desiredLeft, window.innerWidth - panelWidth - gutter))
+  const left = Math.max(viewportLeft + gutter, Math.min(desiredLeft, viewportRight - panelWidth - gutter))
   const top = placeAbove
-    ? Math.max(gutter, triggerRect.top - offset - measuredHeight)
+    ? Math.max(viewportTop + gutter, triggerRect.top - offset - Math.min(measuredHeight, spaceAbove))
     : triggerRect.bottom + offset
 
   panelStyle.value = {
@@ -109,6 +114,8 @@ watch(() => props.open, async (isOpen) => {
 onMounted(() => {
   document.addEventListener('pointerdown', handleDocumentPointerDown)
   window.addEventListener('resize', position)
+  window.visualViewport?.addEventListener('resize', position)
+  window.visualViewport?.addEventListener('scroll', position)
   window.addEventListener('scroll', position, true)
   resizeObserver = new ResizeObserver(position)
   if (anchor.value) resizeObserver.observe(anchor.value)
@@ -117,6 +124,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', handleDocumentPointerDown)
   window.removeEventListener('resize', position)
+  window.visualViewport?.removeEventListener('resize', position)
+  window.visualViewport?.removeEventListener('scroll', position)
   window.removeEventListener('scroll', position, true)
   resizeObserver?.disconnect()
 })
