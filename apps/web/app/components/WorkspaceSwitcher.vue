@@ -301,6 +301,7 @@ const revokeInvitation = async (invitation: WorkspaceInvitation) => {
 }
 
 const updateMember = async (member: WorkspaceMember, change: Partial<{ role: WorkspaceRole; isActive: boolean }>) => {
+  if (member.is_self && change.role !== undefined) return false
   membersMessage.value = ''
   try {
     const result = await $fetch<{ data: { user: { role: WorkspaceRole; is_active: boolean } } }>(`/api/admin/users/${member.id}`, { method: 'PATCH', body: change })
@@ -520,7 +521,7 @@ const deleteWorkspace = async () => {
                 :badge="member.is_self ? 'You' : ''"
                 :feedback="memberFeedback[member.id]"
                 :role="member.role.charAt(0).toUpperCase() + member.role.slice(1)"
-                :role-options="memberRowRoleOptions"
+                :role-options="member.is_self ? [] : memberRowRoleOptions"
                 :actions="memberActions(member)"
                 :role-open="memberRoleMenuOpen === member.id"
                 :actions-open="memberMenuOpen === member.id"
@@ -715,6 +716,7 @@ const deleteWorkspace = async () => {
 .workspace-member-list {
   display: grid;
   overflow: hidden;
+  gap: calc(var(--space)*1.25);
   /* border-radius: calc(var(--radius) * 2.5); */
   /* background: color-mix(in srgb, var(--filter-overlay-panel-color) 7%, transparent); */
   /* padding: calc(var(--filter-action-gap) / 1 ) calc(var(--filter-action-gap) / 1); */

@@ -12,6 +12,7 @@ export default defineEventHandler(async (event) => {
   if (!id) throw appError(400, 'INVALID_USER_ID', 'User ID is required.')
   const input = await readValidatedBody(event, body => userUpdateSchema.safeParse(body))
   if (!input.success) throw appError(400, 'INVALID_USER', 'Check the user settings.', input.error.flatten())
+  if (id === session.user.id && input.data.role !== undefined && input.data.role !== session.user.role) throw appError(400, 'SELF_ROLE_CHANGE', 'You cannot change your own workspace role. Ask another admin to change it.')
   if (id === session.user.id && input.data.isActive === false) throw appError(400, 'SELF_DISABLE', 'You cannot disable your own account.')
   const update = { ...(input.data.role ? { role: input.data.role } : {}), ...(input.data.isActive !== undefined ? { is_active: input.data.isActive } : {}) }
   const { data, error } = await useSupabaseAdmin().from('allowed_users').update(update).eq('id', id).eq('organization_id', session.user.organization_id).select('*').single()
