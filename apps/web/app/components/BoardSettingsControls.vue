@@ -248,13 +248,13 @@ onBeforeUnmount(() => {
     <template v-if="!editingFilters">
     <section class="filter-option-group board-settings-intro">
       <h2 class="filter-overlay-title">{{ title }}</h2>
-      <p v-if="projectBacked || mode === 'dynamic'" class="board-type-summary"><template v-if="projectBacked"><strong>Smart board.</strong> {{ assetScope === 'all' ? 'Liked and draft assets' : 'Liked assets' }} from this project appear automatically.</template><template v-else><strong>Smart board.</strong> <br>Matching assets appear automatically based on rules.</template></p>
     </section>
 
     <BoardAssetScopeControl v-if="purpose !== 'review' && (mode !== 'dynamic' || projectBacked)" :model-value="assetScope" :disabled="!canEdit || busy" :description="assetScope === 'all' && publicationEnabled ? 'Liked and draft assets are visible here and on the public board. Archived assets stay hidden.' : ''" @update:model-value="$emit('setAssetScope', $event)" />
 
     <BoardFilterWidget v-if="mode === 'dynamic'" class="board-filter-settings" :search="filterSearch" :project-ids="filterProjectIds" :tag-ids="filterTagIds" :uploaded-bys="filterUploadedBys" :date-from="filterDateFrom" :date-to="filterDateTo" :projects="projects" :tags="tags" :submitters="submitters" :asset-scope="assetScope" :interactive="canEdit && !projectBacked && !busy"
       @update:asset-scope="$emit('setAssetScope', $event)" @update:project-ids="$emit('update:filterProjectIds', $event)" @update:tag-ids="$emit('update:filterTagIds', $event)" @update:uploaded-bys="$emit('update:filterUploadedBys', $event)" @update:date-from="$emit('update:filterDateFrom', $event)" @update:date-to="$emit('update:filterDateTo', $event)" @edit="beginEditingFilters">
+      <template #intro><p class="board-type-summary"><template v-if="projectBacked"><strong>Smart board.</strong> {{ assetScope === 'all' ? 'Liked and draft assets' : 'Liked assets' }} from this project appear automatically.</template><template v-else><strong>Smart board.</strong> Matching assets appear automatically based on rules:</template></p></template>
       <button v-if="canEdit && !projectBacked" class="panel-secondary-action" type="button" :disabled="busy" @click="beginEditingFilters()">Change filters</button>
     </BoardFilterWidget>
 
@@ -281,7 +281,7 @@ onBeforeUnmount(() => {
 
     <section class="filter-option-group board-members" aria-labelledby="board-roles">
       <h2 id="board-roles" class="filter-overlay-title">Board roles</h2>
-      <p class="board-type-summary">{{ purpose === 'review' ? 'Add workspace members to give them access. Workspace admins already have access.' : 'Everyone in the workspace can view this board. Assign Contributor or Editor to let someone add or manage assets.' }}</p>
+      <p class="board-type-summary">{{ purpose === 'review' ? 'Add workspace members to give them access. Workspace admins already have access.' : 'Assign Contributor or Editor to let someone add or manage assets.' }}</p>
       <div v-if="members.length" class="board-member-list">
         <AppPersonRow
           v-for="member in members"

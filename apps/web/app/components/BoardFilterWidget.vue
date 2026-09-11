@@ -148,11 +148,12 @@ const connector = (cue: FilterCue, index: number) => {
 const hasFilters = computed(() => Boolean(
   props.search || props.projectIds.length || props.tagIds.length || props.uploadedBys.length || props.dateFrom || props.dateTo
 ))
-const assetScopeLabel = computed(() => props.assetScope === 'all' ? 'all assets' : 'liked assets')
+const assetScopeLabel = computed(() => props.assetScope === 'all' ? 'All assets' : 'Liked assets')
 </script>
 
 <template>
   <section class="filter-option-group board-filter-widget">
+    <slot name="intro" />
     <h2 class="filter-overlay-title board-filter-widget-title" aria-live="polite">
       <AppDropdownMenu
         v-if="interactive"
@@ -161,7 +162,7 @@ const assetScopeLabel = computed(() => props.assetScope === 'all' ? 'all assets'
         @update:open="setQuickFilterOpen('scope', $event)"
       >
         <template #trigger="{ triggerProps }">
-          <button v-bind="triggerProps" class="board-filter-scope-trigger" type="button">Show {{ assetScopeLabel }}</button>
+          <button v-bind="triggerProps" class="board-filter-scope-trigger" type="button">{{ assetScopeLabel }}</button>
         </template>
         <button
           v-for="option in quickFilterOptions('scope')"
@@ -172,7 +173,7 @@ const assetScopeLabel = computed(() => props.assetScope === 'all' ? 'all assets'
           @click="updateQuickFilter('scope', option.id)"
         >{{ option.label }}</button>
       </AppDropdownMenu>
-      <span v-else>Show {{ assetScopeLabel }}</span>
+      <span v-else>{{ assetScopeLabel }}</span>
       <template v-for="(cue, index) in cues" :key="cue.id">
         {{ ' ' }}<span class="board-filter-phrase">
           <span v-if="connector(cue, index)" class="board-filter-connector">{{ connector(cue, index) }}</span>

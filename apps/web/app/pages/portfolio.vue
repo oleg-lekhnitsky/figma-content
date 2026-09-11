@@ -61,6 +61,7 @@ interface PortfolioCollectionsResponse {
 
 const apiFetch = useRequestFetch()
 const route = useRoute()
+const haptics = useAppHaptics()
 const portfolioCollectionsCache = useState<PortfolioCollectionsResponse | null>('portfolio-collections-cache', () => null)
 const { data: fetchedData, error, refresh: refreshCollections, status: collectionsStatus } = await useLazyFetch<PortfolioCollectionsResponse>('/api/shares', {
   query: { previews: 'false' },
@@ -116,6 +117,7 @@ const activePortfolioViewSettings = computed<BoardViewSettings>(() => ({
 const regularBoards = computed(() => data.value?.data.collections.filter(board => board.purpose !== 'portfolio') ?? [])
 const selectedCases = ref<PortfolioCaseSelection[]>([])
 const boardsError = ref(false)
+const boardsLoading = ref(false)
 const busy = ref(false)
 const feedback = ref('')
 const feedbackError = ref(false)
@@ -168,22 +170,29 @@ const canEdit = computed(() => !activePortfolio.value || ['owner', 'editor', 'ad
 const canDeleteActiveVersion = computed(() => activePortfolio.value?.portfolio_kind === 'client'
   && ['owner', 'admin'].includes(activePortfolio.value.role))
 
+let portfolioBoardsRequestId = 0
 const loadPortfolioBoards = async () => {
+  const requestId = ++portfolioBoardsRequestId
   boardsError.value = false
   const portfolio = activePortfolio.value
   if (!portfolio) {
     selectedCases.value = []
+    boardsLoading.value = false
     return
   }
+  boardsLoading.value = true
   try {
     const response = await apiFetch<PortfolioBoardsResponse>(`/api/shares/${portfolio.id}/cases`, {
       query: { linksOnly: 'true', previews: 'true', previewLimit: 8 }
     })
-    if (activePortfolio.value?.id !== portfolio.id) return
+    if (requestId !== portfolioBoardsRequestId || activePortfolio.value?.id !== portfolio.id) return
     selectedCases.value = response.data.selectedCases
   } catch {
+    if (requestId !== portfolioBoardsRequestId || activePortfolio.value?.id !== portfolio.id) return
     selectedCases.value = []
     boardsError.value = true
+  } finally {
+    if (requestId === portfolioBoardsRequestId && activePortfolio.value?.id === portfolio.id) boardsLoading.value = false
   }
 }
 
@@ -236,10 +245,12 @@ const saveBoards = async (nextCases: PortfolioCaseSelection[], message: string) 
     await apiFetch(`/api/shares/${portfolioId}/cases`, { method: 'PUT', body: { cases: nextCases } })
     await loadPortfolioBoards()
     feedback.value = message
+    haptics.success()
     return true
   } catch {
     feedback.value = 'Unable to update the portfolio. Try again.'
     feedbackError.value = true
+    haptics.error()
     return false
   } finally {
     busy.value = false
@@ -287,6 +298,7 @@ const selectPortfolio = async (portfolio: Board) => {
   activePortfolioId.value = portfolio.id
   panelStep.value = 'boards'
   publicationEnabled.value = portfolio.publication_enabled
+  haptics.selection()
   await navigateTo({ path: '/portfolio', query: { portfolio: portfolio.id } }, { replace: true })
 }
 
@@ -341,7 +353,7 @@ const deleteActiveVersion = async () => {
           </section>
 
           <section v-if="portfolios.length" class="filter-option-group" aria-labelledby="portfolio-versions-title">
-            <h2 id="portfolio-versions-title" class="filter-overlay-title">Portfolio versions</h2>
+            <h2 id="portfolio-versions-title" class="filter-overlay-title">Choose portfolio version</h2>
             <div class="panel-choice-list">
               <button
                 v-for="portfolio in portfolios"
@@ -361,7 +373,7 @@ const deleteActiveVersion = async () => {
         <section class="filter-option-group" aria-labelledby="portfolio-selected-title">
           <h2 id="portfolio-selected-title" class="filter-overlay-title">Included boards</h2>
             <p v-if="error || boardsError" class="board-type-summary error" role="alert">Unable to load boards.</p>
-            <p v-else-if="collectionsStatus === 'pending' && !data" class="board-type-summary">Loading boards…</p>
+            <p v-else-if="(collectionsStatus === 'pending' && !data) || boardsLoading" class="board-type-summary">Loading boards…</p>
             <ol v-else-if="selectedBoards.length" class="portfolio-board-list">
             <AppPanelRow
               v-for="(board, index) in selectedBoards"
