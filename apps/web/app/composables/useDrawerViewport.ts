@@ -35,23 +35,24 @@ export const useDrawerViewport = (root: Ref<HTMLElement | null>, open: () => boo
     const sheet = root.value.querySelector<HTMLElement>('.asset-filter-controls')!
     if (!keyboardOpen) {
       // offsetTop excludes the entrance animation's visual translation.
-      sheetTop = sheet.offsetTop
+      sheetTop = sheet.offsetTop - visibleTop
       sheetHeight = sheet.offsetHeight
     }
     // Follow the keyboard from its first frame through dismissal. A detection
     // threshold makes the sheet jump once the viewport crosses that threshold.
     keyboardOpen = (editing || keyboardOpen) && layoutHeight - visibleHeight > 0
     if (!keyboardOpen && !editing) layoutHeight = window.innerHeight
-    const visibleBottom = visibleTop + visibleHeight
     // Keep the top edge stationary. Only low, short sheets need to move enough
     // to leave a usable editing area; never lift the whole sheet by keyboard height.
-    const editingTop = Math.max(visibleTop, Math.min(sheetTop, visibleBottom - Math.min(sheetHeight, 160)))
+    // Store geometry in visual-viewport coordinates. Safari pans offsetTop when
+    // focus changes; that is a coordinate shift, not extra space for the sheet.
+    const editingTop = Math.max(0, Math.min(sheetTop, visibleHeight - Math.min(sheetHeight, 160)))
     viewportStyle.value = {
       '--drawer-layout-height': `${layoutHeight}px`,
       ...(keyboardOpen ? {
         '--drawer-sheet-position': 'absolute',
-        '--drawer-sheet-top': `${editingTop}px`,
-        '--drawer-sheet-height': `${Math.max(0, Math.min(sheetHeight, visibleBottom - editingTop))}px`
+        '--drawer-sheet-top': `${visibleTop + editingTop}px`,
+        '--drawer-sheet-height': `${Math.max(0, Math.min(sheetHeight, visibleHeight - editingTop))}px`
       } : {})
     }
     if (!keyboardOpen || !(active instanceof HTMLElement)) return

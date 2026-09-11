@@ -1508,7 +1508,7 @@ onBeforeUnmount(() => {
           :edit-filters-on-open="boardSettingsEditFilters"
           :publication-enabled="selectedBoard.publication_enabled" :can-edit="canRenameSelectedBoard"
           :can-manage-members="canManageSelectedBoardMembers" :busy="boardSettingsBusy"
-          :public-url="selectedBoardPublicUrl" :full-settings-url="`/boards/${selectedBoard.id}`"
+          :public-url="selectedBoardPublicUrl" :full-settings-url="`/portfolio?view=details&portfolio=${encodeURIComponent(selectedBoard.id)}`"
           v-model:filter-search="dynamicBoardFilters.search"
           v-model:filter-project-ids="dynamicBoardFilters.projectIds"
           v-model:filter-tag-ids="dynamicBoardFilters.tagIds"

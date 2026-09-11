@@ -96,8 +96,8 @@ const unlockPageScroll = () => {
 onBeforeUnmount(unlockPageScroll)
 
 const collectionUrl = (slug: string) => `/s/${slug}`
-const collectionDestination = (collection: Collection) => collection.purpose === 'review' || collection.purpose === 'portfolio'
-  ? `/boards/${collection.id}`
+const collectionDestination = (collection: Collection) => collection.purpose === 'portfolio'
+  ? { path: '/portfolio', query: { view: 'details', portfolio: collection.id } }
   : { path: '/library', query: { board: collection.id } }
 const isoAt = (value: string, end = false) => {
   if (!value) return null
@@ -281,7 +281,7 @@ const createCollection = async () => {
     emit('created', createdCollection.id)
     if (createdCollection.purpose === 'portfolio') {
       close()
-      await navigateTo(`/boards/${createdCollection.id}`)
+      await navigateTo(collectionDestination(createdCollection))
       return
     }
     message.value = response.data.collection.purpose === 'review'

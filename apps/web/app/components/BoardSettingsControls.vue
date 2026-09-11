@@ -272,10 +272,6 @@ onBeforeUnmount(() => {
       <NuxtLink class="panel-secondary-action" :to="fullSettingsUrl">Manage portfolio</NuxtLink>
     </section>
 
-    <div v-else-if="purpose === 'review'" class="board-settings-actions">
-      <NuxtLink class="button" :to="fullSettingsUrl">Open review workspace</NuxtLink>
-    </div>
-
     <section class="filter-option-group" role="group" aria-labelledby="board-public-layout">
       <h2 id="board-public-layout" class="filter-overlay-title">Public layout</h2>
       <div class="filter-option-list filter-option-list--segmented">

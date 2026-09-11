@@ -8,15 +8,16 @@ const setup = async (sheetTop = 80, sheetHeight = 720) => {
     innerHeight: 800, innerWidth: 390, visualViewport: viewport,
     matchMedia: () => ({ matches: browser.innerWidth <= 520 })
   })
-  const scroll = { scrollTop: 0, getBoundingClientRect: () => ({ top: 80, bottom: viewport.height }) }
+  const scroll = { scrollTop: 0, getBoundingClientRect: () => ({ top: viewport.offsetTop + 80, bottom: viewport.offsetTop + viewport.height }) }
   class Field {
+    constructor(private top = 380) {}
     matches() { return true }
     closest() { return scroll }
-    getBoundingClientRect() { return { top: 380, bottom: 424 } }
+    getBoundingClientRect() { return { top: viewport.offsetTop + this.top - scroll.scrollTop, bottom: viewport.offsetTop + this.top + 44 - scroll.scrollTop } }
   }
   const field = new Field()
   const doc = Object.assign(new EventTarget(), { activeElement: null as Field | null })
-  const root = { querySelector: () => ({ offsetTop: sheetTop, offsetHeight: sheetHeight }), contains: (element: unknown) => element === field }
+  const root = { querySelector: () => ({ offsetTop: sheetTop, offsetHeight: sheetHeight }), contains: (element: unknown) => element instanceof Field }
   const cleanups: Array<() => void> = []
   let scheduled: FrameRequestCallback | undefined
   vi.stubGlobal('window', browser)
@@ -38,12 +39,33 @@ const setup = async (sheetTop = 80, sheetHeight = 720) => {
     await nextTick()
   }
   await flush()
-  return { viewport, browser, doc, field, style, flush, scroll, root, dispose: () => { cleanups.forEach(fn => fn()); scope.stop() } }
+  return { viewport, browser, doc, field, createField: (top: number) => new Field(top), style, flush, scroll, root, dispose: () => { cleanups.forEach(fn => fn()); scope.stop() } }
 }
 
 afterEach(() => vi.unstubAllGlobals())
 
 describe('bottom sheet keyboard viewport', () => {
+  it('keeps screen position and height stable when switching inputs pans the viewport', async () => {
+    const state = await setup()
+    state.doc.activeElement = state.field
+    state.viewport.height = 450
+    state.viewport.dispatchEvent(new Event('resize'))
+    await state.flush()
+    for (const offset of [40, 120, 20, 0]) {
+      state.doc.activeElement = null
+      state.doc.dispatchEvent(new Event('focusout'))
+      await state.flush()
+      state.doc.activeElement = state.createField(160)
+      state.doc.dispatchEvent(new Event('focusin'))
+      state.viewport.offsetTop = offset
+      state.viewport.dispatchEvent(new Event('scroll'))
+      await state.flush()
+      expect(parseFloat(state.style.value['--drawer-sheet-top']!) - offset).toBe(80)
+      expect(state.style.value['--drawer-sheet-height']).toBe('370px')
+      expect(state.scroll.scrollTop).toBe(0)
+    }
+    state.dispose()
+  })
   it('moves a short sheet only enough to retain usable editing space', async () => {
     const state = await setup(600, 200)
     state.doc.activeElement = state.field
@@ -67,8 +89,8 @@ describe('bottom sheet keyboard viewport', () => {
     state.viewport.offsetTop = 40
     state.viewport.dispatchEvent(new Event('scroll'))
     await state.flush()
-    expect(state.style.value['--drawer-sheet-top']).toBe('80px')
-    expect(state.style.value['--drawer-sheet-height']).toBe('410px')
+    expect(state.style.value['--drawer-sheet-top']).toBe('120px')
+    expect(state.style.value['--drawer-sheet-height']).toBe('370px')
     state.dispose()
   })
 
