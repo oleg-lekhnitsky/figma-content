@@ -1,8 +1,11 @@
 <script setup lang="ts">
+import { MoreH } from 'reicon-vue'
 import type { VideoComposerSettings, VideoTemplate } from '~/types/video-composer'
 import type { VideoExportAudioSession } from '~/composables/useVideoComposer'
+import AppDropdownMenu from '~/components/AppDropdownMenu.vue'
 import VideoRangeInput from '~/components/video-composer/VideoRangeInput.vue'
 import { requestVideoAudioPlayback, resumeVideoAudioContext } from '~/utils/video-audio-playback'
+import { createVideoAccentEvents, type VideoMainSoundKind as MainSoundKind, type VideoKickKind, type VideoSoundEvent as SoundEvent } from '~/utils/video-accent-events'
 
 const props = defineProps<{
   settings: VideoComposerSettings
@@ -19,6 +22,7 @@ const firstAccentEnabled = ref(true)
 const finalAccentEnabled = ref(true)
 type KickPattern = 'off' | 'accents' | 'four-floor' | 'eight-floor' | 'sixteen-floor'
 const kickPattern = ref<KickPattern>('off')
+const kickPatternOpen = ref(false)
 const kickPatternOptions: ReadonlyArray<{ value: KickPattern, label: string }> = [
   { value: 'off', label: 'Off' },
   { value: 'accents', label: 'Accents' },
@@ -26,6 +30,7 @@ const kickPatternOptions: ReadonlyArray<{ value: KickPattern, label: string }> =
   { value: 'eight-floor', label: '8' },
   { value: 'sixteen-floor', label: '16' },
 ]
+const kickPatternLabel = computed(() => kickPatternOptions.find(option => option.value === kickPattern.value)?.label)
 const kickPatternBeatCounts: Record<KickPattern, number> = {
   off: 0,
   accents: 0,
@@ -91,6 +96,7 @@ type RecipeSound = {
 }
 
 const soundId = ref<SoundId>('tap9yv8r')
+const soundActionsId = ref<SoundId | null>(null)
 let context: AudioContext | undefined
 let releaseAudioPlayback: (() => void) | undefined
 let previousProgress = 0
@@ -399,15 +405,12 @@ const createGeneratedRecipe = (): SoundRecipe => {
   return layers.length === 1 ? layers[0] as RecipeLayer : { layers }
 }
 
-type MainSoundKind = 'start' | 'transition' | 'settle'
-type SoundEvent = { time: number, step: number, kind: MainSoundKind | 'kick' }
 const soundEvents = computed(() => {
-  const events: SoundEvent[] = firstAccentEnabled.value
-    ? [{ time: 0, step: 0, kind: 'start' }]
-    : []
-  if (finalAccentEnabled.value) {
-    events.push(...cueSchedule.value.times.map((time, step): SoundEvent => ({ time, step, kind: 'settle' })))
-  }
+  const events = createVideoAccentEvents(cueSchedule.value.times, {
+    firstAccent: firstAccentEnabled.value,
+    finalAccent: finalAccentEnabled.value,
+    kick: kickPattern.value === 'accents',
+  })
   if (transitionBeats.value > 0) {
     cueSchedule.value.windows.forEach((window, step) => {
       for (let beat = 1; beat <= transitionBeats.value; beat += 1) {
@@ -421,11 +424,11 @@ const soundEvents = computed(() => {
   if (kickBeatsPerCycle > 0) {
     const cycleDuration = props.duration / cycleCount.value
     const kickSpacing = cycleDuration / kickBeatsPerCycle
-    for (let time = kickSpacing, step = 1; time < props.duration - .001; time += kickSpacing, step += 1) {
-      events.push({ time, step, kind: 'kick' })
+    for (let time = 0, step = 0; time < props.duration - .001; time += kickSpacing, step += 1) {
+      events.push({ time, step, kind: 'kick', kickKind: 'rhythm' })
     }
   }
-  return events.sort((left, right) => left.time - right.time || (left.kind === 'transition' ? -1 : 1))
+  return events.sort((left, right) => left.time - right.time || Number(right.kind === 'transition') - Number(left.kind === 'transition'))
 })
 const eventIndexAt = (progress: number) => {
   let low = 0
@@ -549,7 +552,7 @@ const playRecipe = (audio: AudioContext, recipe: SoundRecipe, kind: MainSoundKin
   }
 }
 
-const playKick = (audio: AudioContext, kind: 'start' | 'settle' | 'rhythm', destination: AudioNode = audio.destination, when = audio.currentTime, outputVolume = volume.value) => {
+const playKick = (audio: AudioContext, kind: VideoKickKind, destination: AudioNode = audio.destination, when = audio.currentTime, outputVolume = volume.value) => {
   const now = when
   const duration = kind === 'start' ? .18 : kind === 'rhythm' ? .2 : .22
   const oscillator = audio.createOscillator()
@@ -596,13 +599,12 @@ const scheduleGeneratedTone = (audio: AudioContext, step: number, selectedSound:
   oscillator.stop(when + tone.duration + .01)
 }
 
-const scheduleMainTone = (audio: AudioContext, selectedSound: RecipeSound | GeneratedSound, step: number, kind: MainSoundKind, destination: AudioNode = audio.destination, when = audio.currentTime, outputVolume = volume.value, accentsKick = kickPattern.value === 'accents') => {
+const scheduleMainTone = (audio: AudioContext, selectedSound: RecipeSound | GeneratedSound, step: number, kind: MainSoundKind, destination: AudioNode = audio.destination, when = audio.currentTime, outputVolume = volume.value) => {
   if (selectedSound.kind === 'recipe') {
     playRecipe(audio, selectedSound.recipe, kind, destination, when, outputVolume)
   } else {
     scheduleGeneratedTone(audio, step, selectedSound, kind, destination, when, outputVolume)
   }
-  if (accentsKick && kind !== 'transition') playKick(audio, kind, destination, when, outputVolume)
 }
 
 const playTone = async (step: number, audition = false, kind: MainSoundKind = 'settle') => {
@@ -612,10 +614,10 @@ const playTone = async (step: number, audition = false, kind: MainSoundKind = 's
   scheduleMainTone(audio, sound.value, step, kind)
 }
 
-const playRhythmKick = async () => {
+const playScheduledKick = async (kind: VideoKickKind) => {
   if (!enabled.value || !props.playing) return
   const audio = await ensureContext()
-  if (enabled.value && props.playing) playKick(audio, 'rhythm')
+  if (enabled.value && props.playing) playKick(audio, kind)
 }
 
 const auditionKickPattern = async (value: KickPattern) => {
@@ -627,19 +629,23 @@ const auditionKickPattern = async (value: KickPattern) => {
 }
 
 const playScheduledEvent = (event: SoundEvent) => {
-  if (event.kind === 'kick') void playRhythmKick()
+  if (event.kind === 'kick') void playScheduledKick(event.kickKind)
   else void playTone(event.step, false, event.kind)
 }
 
 const playCycleStart = () => {
-  if (firstAccentEnabled.value) void playTone(0, false, 'start')
-  if (kickPattern.value.endsWith('-floor')) void playRhythmKick()
+  for (const event of soundEvents.value) {
+    if (event.time > 0) break
+    playScheduledEvent(event)
+  }
 }
 
 const setEnabled = async (value: boolean) => {
   enabled.value = value
   previousEvent = -1
   if (!value) {
+    soundActionsId.value = null
+    kickPatternOpen.value = false
     releaseAudioPlayback?.()
     releaseAudioPlayback = undefined
     return
@@ -694,6 +700,16 @@ const persistSavedSounds = () => {
   }
 }
 
+const restoreSoundFocus = (id: SoundId, scrollTop: number) => {
+  soundActionsId.value = null
+  void nextTick(() => {
+    const element = soundOptionsElement.value
+    if (!element) return
+    element.scrollTop = scrollTop
+    element.querySelector<HTMLButtonElement>(`[data-sound-id="${id}"] .video-sound-option-select`)?.focus({ preventScroll: true })
+  })
+}
+
 const saveSound = (generatedSound: RecipeSound | GeneratedSound) => {
   if (!isGeneratedRecipe(generatedSound)) return
   const scrollTop = soundOptionsElement.value?.scrollTop ?? 0
@@ -710,9 +726,7 @@ const saveSound = (generatedSound: RecipeSound | GeneratedSound) => {
   generatedSounds.value = generatedSounds.value.filter(option => option.id !== generatedSound.id)
   soundId.value = savedSound.id
   persistSavedSounds()
-  void nextTick(() => {
-    if (soundOptionsElement.value) soundOptionsElement.value.scrollTop = scrollTop
-  })
+  restoreSoundFocus(savedSound.id, scrollTop)
 }
 
 const deleteSound = (customSound: RecipeSound | GeneratedSound) => {
@@ -727,13 +741,12 @@ const deleteSound = (customSound: RecipeSound | GeneratedSound) => {
     persistSavedSounds()
   }
   const remainingOptions = [...sounds, ...savedSounds.value, ...generatedSounds.value]
+  const nextSound = remainingOptions[Math.min(currentIndex, remainingOptions.length - 1)] ?? tapSound
   if (wasSelected) {
-    soundId.value = (remainingOptions[Math.min(currentIndex, remainingOptions.length - 1)] ?? tapSound).id
+    soundId.value = nextSound.id
     previousEvent = -1
   }
-  void nextTick(() => {
-    if (soundOptionsElement.value) soundOptionsElement.value.scrollTop = scrollTop
-  })
+  restoreSoundFocus(nextSound.id, scrollTop)
 }
 
 const createExportSession = async (): Promise<VideoExportAudioSession | undefined> => {
@@ -743,10 +756,7 @@ const createExportSession = async (): Promise<VideoExportAudioSession | undefine
   await resumeVideoAudioContext(audio)
   const selectedSound = sound.value
   const outputVolume = volume.value
-  const accentsKick = kickPattern.value === 'accents'
   const events = soundEvents.value.map(event => ({ ...event }))
-  if (kickPattern.value.endsWith('-floor')) events.push({ time: 0, step: 0, kind: 'kick' })
-  events.sort((left, right) => left.time - right.time || (left.kind === 'transition' ? -1 : 1))
   let started = false
   let startTime = 0
   let nextEvent = 0
@@ -758,8 +768,8 @@ const createExportSession = async (): Promise<VideoExportAudioSession | undefine
       nextEvent += 1
       if (!event) continue
       const when = Math.max(audio.currentTime + .002, startTime + event.time)
-      if (event.kind === 'kick') playKick(audio, 'rhythm', destination, when, outputVolume)
-      else scheduleMainTone(audio, selectedSound, event.step, event.kind, destination, when, outputVolume, accentsKick)
+      if (event.kind === 'kick') playKick(audio, event.kickKind, destination, when, outputVolume)
+      else scheduleMainTone(audio, selectedSound, event.step, event.kind, destination, when, outputVolume)
     }
   }
 
@@ -847,15 +857,28 @@ onBeforeUnmount(() => {
     <fieldset v-if="enabled" class="video-sound-character">
       <legend>Sound preset</legend>
       <div ref="soundOptionsElement" class="video-sound-options" role="radiogroup" aria-label="Sound preset">
-        <div v-for="option in soundOptions" :key="option.id" class="video-sound-option" :class="{ 'is-selected': soundId === option.id }">
+        <div v-for="option in soundOptions" :key="option.id" :data-sound-id="option.id" class="video-sound-option" :class="{ 'is-selected': soundId === option.id }">
           <button class="video-sound-option-select" type="button" role="radio" :aria-checked="soundId === option.id" @pointerdown="rememberSoundOptionsScroll" @click="selectSound(option.id, $event)">
             <span class="video-sound-glyph" aria-hidden="true"><i /><i /><i /></span>
             <span>{{ option.label }}</span>
           </button>
-          <div v-if="isGeneratedRecipe(option) || isSavedRecipe(option)" class="video-sound-row-actions">
-            <button v-if="isGeneratedRecipe(option)" type="button" :aria-label="`Save ${option.label}`" @click="saveSound(option)">Save</button>
-            <button type="button" :aria-label="`Delete ${option.label}`" @click="deleteSound(option)">Delete</button>
-          </div>
+          <AppDropdownMenu
+            v-if="isGeneratedRecipe(option) || isSavedRecipe(option)"
+            :open="soundActionsId === option.id"
+            class="video-sound-row-actions"
+            align="end"
+            @update:open="soundActionsId = $event ? option.id : null"
+          >
+            <template #trigger="{ triggerProps }">
+              <button v-bind="triggerProps" class="panel-secondary-action panel-icon-action" type="button" :aria-label="`Actions for ${option.label}`">
+                <MoreH :size="18" aria-hidden="true" />
+              </button>
+            </template>
+            <template #default>
+              <button v-if="isGeneratedRecipe(option)" role="menuitem" type="button" @click="saveSound(option)">Save</button>
+              <button role="menuitem" type="button" @click="deleteSound(option)">Delete</button>
+            </template>
+          </AppDropdownMenu>
         </div>
       </div>
       <button class="video-reset video-generate-sound" type="button" @click="generateSound">
@@ -878,11 +901,19 @@ onBeforeUnmount(() => {
     </fieldset>
     <fieldset v-if="enabled" class="video-sound-character">
       <legend>Kick rhythm</legend>
-      <div class="video-choice-row" role="group" aria-label="Low-frequency kick rhythm">
-        <button v-for="option in kickPatternOptions" :key="option.value" type="button" :aria-pressed="kickPattern === option.value" @click="auditionKickPattern(option.value)">
-          {{ option.label }}
-        </button>
-      </div>
+      <AppDropdownMenu v-model:open="kickPatternOpen" class="video-kick-pattern">
+        <template #trigger="{ triggerProps }">
+          <button v-bind="triggerProps" class="panel-field panel-dropdown-trigger" type="button" :aria-label="`Kick rhythm: ${kickPatternLabel}`">
+            <span>{{ kickPatternLabel }}</span>
+            <span class="filter-dropdown-chevron" aria-hidden="true" />
+          </button>
+        </template>
+        <template #default="{ close }">
+          <button v-for="option in kickPatternOptions" :key="option.value" role="menuitemradio" type="button" :aria-checked="kickPattern === option.value" @click="auditionKickPattern(option.value); close(true)">
+            {{ option.label }}
+          </button>
+        </template>
+      </AppDropdownMenu>
     </fieldset>
     <fieldset v-if="enabled" class="video-sound-character">
       <legend>Mouse-wheel rhythm</legend>
@@ -894,7 +925,7 @@ onBeforeUnmount(() => {
     </fieldset>
     <label v-if="enabled">
       <span>Volume <output>{{ volume }}%</output></span>
-      <VideoRangeInput min="0" max="60" :value="volume" @input="volume = Number(($event.target as HTMLInputElement).value)" />
+      <VideoRangeInput min="0" max="100" :value="volume" @input="volume = Number(($event.target as HTMLInputElement).value)" />
     </label>
     <p v-if="enabled">Synced to {{ cycleLabel }} video {{ cycleLabel === '1' ? 'cycle' : 'cycles' }} · included in export.</p>
   </fieldset>
@@ -911,11 +942,15 @@ onBeforeUnmount(() => {
   font-size: var(--video-type-body);
 }
 
+.video-kick-pattern {
+  margin-top: var(--video-inspector-control-gap);
+}
+
 .video-sound-options {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: var(--filter-option-gap);
-  max-height: calc(var(--filter-option-height) * 3.5 + var(--filter-option-gap) * 3 + 8px);
+  max-height: calc(var(--filter-action-height) * 3.5 + var(--filter-option-gap) * 3 + 8px);
   margin-top: var(--video-inspector-control-gap);
   padding: 4px;
   overflow-x: hidden;
@@ -948,23 +983,26 @@ onBeforeUnmount(() => {
 
 .video-sound-option {
   min-width: 0;
-  min-height: var(--filter-option-height);
+  min-height: var(--filter-action-height);
   display: flex;
   align-items: center;
-  border: 1px solid transparent;
+  border: 0;
   border-radius: var(--filter-pill-radius);
   color: var(--video-text-muted);
   background: transparent;
 }
 
 .video-sound-option.is-selected {
-  border-color: color-mix(in srgb, var(--filter-overlay-panel-color) 45%, transparent);
   color: var(--filter-overlay-panel-color);
+}
+
+.video-sound-option:is(:active, .is-selected) {
+  background: color-mix(in srgb, var(--filter-overlay-panel-color) 7%, transparent);
 }
 
 .video-sound-option-select {
   min-width: 0;
-  min-height: calc(var(--filter-option-height) - 2px);
+  min-height: var(--filter-action-height);
   display: flex;
   flex: 1 1 auto;
   align-items: center;
@@ -989,29 +1027,7 @@ onBeforeUnmount(() => {
 }
 
 .video-sound-row-actions {
-  display: flex;
   flex: 0 0 auto;
-  align-items: center;
-  gap: var(--filter-option-gap);
-  padding-right: var(--filter-option-padding);
-  border-left: 1px solid color-mix(in srgb, currentColor 18%, transparent);
-}
-
-.video-sound-row-actions button {
-  min-width: 0;
-  height: auto;
-  padding: 0 0 0 calc(var(--filter-option-padding) / 2);
-  border: 0;
-  border-radius: 0;
-  color: var(--video-text-muted);
-  background: transparent;
-  font-size: var(--video-type-caption);
-  line-height: 1;
-}
-
-.video-sound-row-actions button:is(:hover, :focus-visible) {
-  color: var(--filter-overlay-panel-color);
-  background: transparent;
 }
 
 .video-sound-glyph {

@@ -241,6 +241,7 @@ const handleStageReady = (canvas: HTMLCanvasElement) => {
   })
 }
 const handlePlaybackShortcut = (event: KeyboardEvent) => {
+  if (event.defaultPrevented) return
   if (event.key === 'Escape' && mobilePanel.value) {
     event.preventDefault()
     void closeMobilePanel()
@@ -261,7 +262,7 @@ const handlePlaybackShortcut = (event: KeyboardEvent) => {
     }
     return
   }
-  if (event.code !== 'Space' || event.repeat || event.defaultPrevented) return
+  if (event.code !== 'Space' || event.repeat) return
   const target = event.target instanceof Element ? event.target : null
   if (target?.closest('button, input, select, textarea, [contenteditable="true"]')) return
   event.preventDefault()
