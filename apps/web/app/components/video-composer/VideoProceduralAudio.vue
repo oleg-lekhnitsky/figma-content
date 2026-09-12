@@ -2,10 +2,13 @@
 import { MoreH } from 'reicon-vue'
 import type { VideoComposerSettings, VideoTemplate } from '~/types/video-composer'
 import type { VideoExportAudioSession } from '~/composables/useVideoComposer'
+import type { GeneratedSound, RecipeLayer, RecipeSound, SavedRecipeSoundId, SoundId, SoundPreset, SoundRecipe, SoundWave } from '~/types/video-sound'
 import AppDropdownMenu from '~/components/AppDropdownMenu.vue'
 import VideoRangeInput from '~/components/video-composer/VideoRangeInput.vue'
+import VideoSoundAdvanced from '~/components/video-composer/VideoSoundAdvanced.vue'
 import { requestVideoAudioPlayback, resumeVideoAudioContext } from '~/utils/video-audio-playback'
 import { createVideoAccentEvents, type VideoMainSoundKind as MainSoundKind, type VideoKickKind, type VideoSoundEvent as SoundEvent } from '~/utils/video-accent-events'
+import { isSavedSoundPreset } from '~/utils/video-sound-parameters'
 
 const props = defineProps<{
   settings: VideoComposerSettings
@@ -47,54 +50,6 @@ const transitionBeatOptions: ReadonlyArray<{ value: TransitionBeatCount, label: 
   { value: 8, label: '8' },
   { value: 16, label: '16' },
 ]
-type CuratedRecipeSoundId = 'tap9yv8r' | 'hover5e7n3' | 'hover2hpde' | 'transitionQ95m7' | 'transition2p0j7' | 'tap6031h'
-type GeneratedRecipeSoundId = `generated-${number}`
-type SavedRecipeSoundId = `saved-${string}`
-type RecipeSoundId = CuratedRecipeSoundId | GeneratedRecipeSoundId | SavedRecipeSoundId
-type SoundId = RecipeSoundId | 'soft' | 'glass' | 'pulse' | 'digital'
-type GeneratedSound = {
-  id: Exclude<SoundId, RecipeSoundId>
-  label: string
-  kind: 'generated'
-  wave: OscillatorType
-  frequency: number
-  sweep: number
-  duration: number
-  filter: number
-  resonance: number
-  gain: number
-}
-type RecipeLayer = {
-  source: {
-    type: OscillatorType
-    frequency: number | { start: number, end: number }
-  } | {
-    type: 'noise'
-    color: 'white'
-  }
-  envelope: {
-    attack: number
-    decay: number
-    sustain: number
-    release: number
-    curve?: 'ramp'
-  }
-  delay?: number
-  gain: number
-  filter?: {
-    type: BiquadFilterType
-    frequency: number
-    Q: number
-  }
-}
-type SoundRecipe = RecipeLayer | { layers: RecipeLayer[] }
-type RecipeSound = {
-  id: RecipeSoundId
-  label: string
-  kind: 'recipe'
-  recipe: SoundRecipe
-}
-
 const soundId = ref<SoundId>('tap9yv8r')
 const soundActionsId = ref<SoundId | null>(null)
 let context: AudioContext | undefined
@@ -184,7 +139,8 @@ const sounds: ReadonlyArray<RecipeSound | GeneratedSound> = [
   { id: 'digital', label: 'Digital', kind: 'generated', wave: 'sawtooth', frequency: 1.25, sweep: 1.28, duration: .5, filter: 3400, resonance: 2, gain: .55 },
 ]
 const generatedSounds = shallowRef<RecipeSound[]>([])
-const savedSounds = shallowRef<RecipeSound[]>([])
+const savedSounds = shallowRef<SoundPreset[]>([])
+const soundEdits = shallowRef<Partial<Record<SoundId, SoundPreset>>>({})
 const generatedCount = ref(0)
 const savedSoundsStorageKey = 'figma-content.video-procedural-audio.saved-sounds.v1'
 const soundOptionsElement = ref<HTMLElement | null>(null)
@@ -192,9 +148,16 @@ let soundOptionsScrollBeforePointer = 0
 const soundOptions = computed<ReadonlyArray<RecipeSound | GeneratedSound>>(() => (
   [...sounds, ...savedSounds.value, ...generatedSounds.value]
 ))
-const sound = computed(() => soundOptions.value.find(option => option.id === soundId.value) ?? tapSound)
+const sound = computed(() => soundEdits.value[soundId.value] ?? soundOptions.value.find(option => option.id === soundId.value) ?? tapSound)
 const isGeneratedRecipe = (option: RecipeSound | GeneratedSound): option is RecipeSound => option.kind === 'recipe' && option.id.startsWith('generated-')
-const isSavedRecipe = (option: RecipeSound | GeneratedSound): option is RecipeSound => option.kind === 'recipe' && option.id.startsWith('saved-')
+const isSavedSound = (option: SoundPreset): option is SoundPreset & { id: SavedRecipeSoundId } => option.id.startsWith('saved-')
+const canSaveSound = (option: SoundPreset) => isGeneratedRecipe(option) || !!soundEdits.value[option.id]
+const clearSoundEdit = (id: SoundId) => {
+  soundEdits.value = Object.fromEntries(Object.entries(soundEdits.value).filter(([key]) => key !== id))
+}
+const updateSound = (updated: SoundPreset) => {
+  soundEdits.value = { ...soundEdits.value, [updated.id]: updated }
+}
 
 const clamp = (value: number, minimum: number, maximum: number) => Math.min(maximum, Math.max(minimum, value))
 const cycleCount = computed(() => Math.max(.01, props.settings.cycles))
@@ -368,7 +331,7 @@ const createGeneratedRecipe = (): SoundRecipe => {
   const release = randomBetween(.003, .014)
   const layers: RecipeLayer[] = [{
     source: {
-      type: randomItem<OscillatorType>(['sine', 'triangle']),
+      type: randomItem<SoundWave>(['sine', 'triangle']),
       frequency: { start: rounded(startFrequency), end: rounded(endFrequency) },
     },
     envelope: { attack: rounded(randomBetween(0, .003), 4), decay: rounded(decay, 4), sustain: 0, release: rounded(release, 4), curve: 'ramp' },
@@ -659,12 +622,20 @@ const rememberSoundOptionsScroll = () => {
   soundOptionsScrollBeforePointer = soundOptionsElement.value?.scrollTop ?? 0
 }
 
+const previewSound = () => {
+  const cue = soundEvents.value[Math.max(0, eventIndexAt(props.progress))]
+  void playTone(cue?.step ?? 0, true, finalAccentEnabled.value ? 'settle' : 'transition')
+}
+const resetSound = () => {
+  clearSoundEdit(soundId.value)
+  previewSound()
+}
+
 const selectSound = (id: SoundId, clickEvent: MouseEvent) => {
   const pointerScrollTop = clickEvent.detail > 0 ? soundOptionsScrollBeforePointer : null
   soundId.value = id
   previousEvent = -1
-  const cue = soundEvents.value[Math.max(0, eventIndexAt(props.progress))]
-  void playTone(cue?.step ?? 0, true, finalAccentEnabled.value ? 'settle' : 'transition')
+  previewSound()
   if (pointerScrollTop !== null) {
     void nextTick(() => {
       const element = soundOptionsElement.value
@@ -684,8 +655,7 @@ const generateSound = () => {
   generatedSounds.value = [...generatedSounds.value, generatedSound]
   soundId.value = generatedSound.id
   previousEvent = -1
-  const event = soundEvents.value[Math.max(0, eventIndexAt(props.progress))]
-  void playTone(event?.step ?? 0, true, finalAccentEnabled.value ? 'settle' : 'transition')
+  previewSound()
   void nextTick(() => {
     const element = soundOptionsElement.value
     if (element) element.scrollTop = element.scrollHeight
@@ -710,27 +680,33 @@ const restoreSoundFocus = (id: SoundId, scrollTop: number) => {
   })
 }
 
-const saveSound = (generatedSound: RecipeSound | GeneratedSound) => {
-  if (!isGeneratedRecipe(generatedSound)) return
+const saveSound = (original: SoundPreset, restoreFocus = true) => {
+  if (!canSaveSound(original)) return
+  const edited = soundEdits.value[original.id] ?? original
   const scrollTop = soundOptionsElement.value?.scrollTop ?? 0
   const savedNumber = savedSounds.value.reduce((maximum, option) => {
     const match = option.label.match(/^Saved (\d+)$/)
     return Math.max(maximum, Number(match?.[1] ?? 0))
   }, 0) + 1
-  const savedSound: RecipeSound = {
-    ...generatedSound,
-    id: `saved-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    label: `Saved ${savedNumber}`,
+  const id: SavedRecipeSoundId = isSavedSound(edited) ? edited.id : `saved-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+  const savedSound: SoundPreset = {
+    ...edited,
+    id,
+    label: isSavedSound(edited) ? edited.label : `Saved ${savedNumber}`,
   }
-  savedSounds.value = [...savedSounds.value, savedSound]
-  generatedSounds.value = generatedSounds.value.filter(option => option.id !== generatedSound.id)
+  savedSounds.value = isSavedSound(edited)
+    ? savedSounds.value.map(option => option.id === id ? savedSound : option)
+    : [...savedSounds.value, savedSound]
+  generatedSounds.value = generatedSounds.value.filter(option => option.id !== original.id)
+  clearSoundEdit(original.id)
   soundId.value = savedSound.id
   persistSavedSounds()
-  restoreSoundFocus(savedSound.id, scrollTop)
+  if (restoreFocus) restoreSoundFocus(savedSound.id, scrollTop)
 }
 
 const deleteSound = (customSound: RecipeSound | GeneratedSound) => {
-  if (!isGeneratedRecipe(customSound) && !isSavedRecipe(customSound)) return
+  if (!isGeneratedRecipe(customSound) && !isSavedSound(customSound)) return
+  clearSoundEdit(customSound.id)
   const scrollTop = soundOptionsElement.value?.scrollTop ?? 0
   const wasSelected = soundId.value === customSound.id
   const currentIndex = soundOptions.value.findIndex(option => option.id === customSound.id)
@@ -824,16 +800,7 @@ onMounted(() => {
   try {
     const storedSounds = JSON.parse(localStorage.getItem(savedSoundsStorageKey) ?? '[]') as unknown
     if (!Array.isArray(storedSounds)) return
-    savedSounds.value = storedSounds.filter((option): option is RecipeSound => {
-      if (!option || typeof option !== 'object') return false
-      const candidate = option as Partial<RecipeSound>
-      return typeof candidate.id === 'string'
-        && candidate.id.startsWith('saved-')
-        && typeof candidate.label === 'string'
-        && candidate.kind === 'recipe'
-        && !!candidate.recipe
-        && typeof candidate.recipe === 'object'
-    })
+    savedSounds.value = storedSounds.filter(isSavedSoundPreset)
   } catch {
     savedSounds.value = []
   }
@@ -863,7 +830,7 @@ onBeforeUnmount(() => {
             <span>{{ option.label }}</span>
           </button>
           <AppDropdownMenu
-            v-if="isGeneratedRecipe(option) || isSavedRecipe(option)"
+            v-if="canSaveSound(option) || isSavedSound(option)"
             :open="soundActionsId === option.id"
             class="video-sound-row-actions"
             align="end"
@@ -875,8 +842,8 @@ onBeforeUnmount(() => {
               </button>
             </template>
             <template #default>
-              <button v-if="isGeneratedRecipe(option)" role="menuitem" type="button" @click="saveSound(option)">Save</button>
-              <button role="menuitem" type="button" @click="deleteSound(option)">Delete</button>
+              <button v-if="canSaveSound(option)" role="menuitem" type="button" @click="saveSound(option)">Save</button>
+              <button v-if="isGeneratedRecipe(option) || isSavedSound(option)" role="menuitem" type="button" @click="deleteSound(option)">Delete</button>
             </template>
           </AppDropdownMenu>
         </div>
@@ -884,6 +851,7 @@ onBeforeUnmount(() => {
       <button class="video-reset video-generate-sound" type="button" @click="generateSound">
         {{ generatedSounds.length ? 'Generate next' : 'Generate sound' }}
       </button>
+      <VideoSoundAdvanced :sound="sound" :modified="!!soundEdits[sound.id]" :can-save="canSaveSound(sound)" @update="updateSound" @reset="resetSound" @save="saveSound(sound, false)" @preview="previewSound" />
     </fieldset>
     <fieldset v-if="enabled" class="video-sound-character">
       <legend>First accent</legend>
