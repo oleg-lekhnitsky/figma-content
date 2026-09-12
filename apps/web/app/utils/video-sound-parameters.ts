@@ -1,22 +1,56 @@
-import type { RecipeLayer, RecipeSound, SoundPreset, SoundWave } from '../types/video-sound'
+import type { GeneratedSound, GeneratedSoundLayer, RecipeLayer, RecipeSound, SoundPreset, SoundWave } from '../types/video-sound'
 
 export type SoundParameterKey = 'startFrequency' | 'endFrequency' | 'gain' | 'delay' | 'attack' | 'decay' | 'sustain' | 'release' | 'filter' | 'resonance' | 'frequency' | 'sweep' | 'duration'
 export type SoundParameter = { key: SoundParameterKey, label: string, value: number, min: number, max: number, step: number, unit: string }
 
 export const soundLayers = (sound: RecipeSound) => 'layers' in sound.recipe ? sound.recipe.layers : [sound.recipe]
+export const generatedSoundLayers = (sound: GeneratedSound): GeneratedSoundLayer[] => [
+  { wave: sound.wave, frequency: sound.frequency, sweep: sound.sweep, duration: sound.duration, filter: sound.filter, resonance: sound.resonance, gain: sound.gain },
+  ...sound.additionalLayers ?? [],
+]
+export const soundLayerCount = (sound: SoundPreset) => sound.kind === 'recipe' ? soundLayers(sound).length : generatedSoundLayers(sound).length
+
+const withGeneratedLayers = (sound: GeneratedSound, layers: GeneratedSoundLayer[]): GeneratedSound => ({
+  ...sound,
+  ...layers[0]!,
+  additionalLayers: layers.length > 1 ? layers.slice(1) : undefined,
+})
+
+export const addSoundLayer = (sound: SoundPreset): SoundPreset => {
+  if (sound.kind === 'generated') return withGeneratedLayers(sound, [
+    ...generatedSoundLayers(sound),
+    { wave: 'sine', frequency: 1, sweep: 1, duration: 1, filter: 1800, resonance: .7, gain: .2 },
+  ])
+  return { ...sound, recipe: { layers: [
+    ...soundLayers(sound),
+    { source: { type: 'sine', frequency: 440 }, envelope: { attack: .001, decay: .03, sustain: 0, release: .01 }, gain: .2 },
+  ] } }
+}
+
+export const removeSoundLayer = (sound: SoundPreset, index: number): SoundPreset => {
+  const count = soundLayerCount(sound)
+  if (count <= 1 || !Number.isInteger(index) || index < 0 || index >= count) return sound
+  if (sound.kind === 'generated') return withGeneratedLayers(sound, generatedSoundLayers(sound).filter((_, layerIndex) => layerIndex !== index))
+  return { ...sound, recipe: { layers: soundLayers(sound).filter((_, layerIndex) => layerIndex !== index) } }
+}
+
 const parameter = (key: SoundParameterKey, label: string, value: number, min: number, max: number, step: number, unit = ''): SoundParameter => (
   { key, label, value, min, max: Math.max(max, value), step, unit }
 )
 
 export const soundParameters = (sound: SoundPreset, layerIndex = 0): SoundParameter[] => {
-  if (sound.kind === 'generated') return [
-    parameter('frequency', 'Pitch', sound.frequency, .25, 4, .01, '×'),
-    parameter('sweep', 'Pitch sweep', sound.sweep, .25, 4, .01, '×'),
-    parameter('duration', 'Length', sound.duration, .1, 4, .01, '×'),
-    parameter('gain', 'Gain', sound.gain, 0, 3, .01, '×'),
-    parameter('filter', 'Filter frequency', sound.filter, 20, 16000, 1, 'Hz'),
-    parameter('resonance', 'Resonance', sound.resonance, .1, 50, .1),
-  ]
+  if (sound.kind === 'generated') {
+    const layer = generatedSoundLayers(sound)[layerIndex]
+    if (!layer) return []
+    return [
+      parameter('frequency', 'Pitch', layer.frequency, .25, 4, .01, '×'),
+      parameter('sweep', 'Pitch sweep', layer.sweep, .25, 4, .01, '×'),
+      parameter('duration', 'Length', layer.duration, .1, 4, .01, '×'),
+      parameter('gain', 'Gain', layer.gain, 0, 3, .01, '×'),
+      parameter('filter', 'Filter frequency', layer.filter, 20, 16000, 1, 'Hz'),
+      parameter('resonance', 'Resonance', layer.resonance, .1, 50, .1),
+    ]
+  }
   const layer = soundLayers(sound)[layerIndex]
   if (!layer) return []
   const fields: SoundParameter[] = []
@@ -51,7 +85,7 @@ export const updateSoundParameter = (sound: SoundPreset, layerIndex: number, key
   const field = soundParameters(sound, layerIndex).find(candidate => candidate.key === key)
   if (!field || !Number.isFinite(input)) return sound
   const value = Math.max(field.min, Math.min(field.max, input))
-  if (sound.kind === 'generated') return { ...sound, [key]: value }
+  if (sound.kind === 'generated') return withGeneratedLayers(sound, generatedSoundLayers(sound).map((layer, index) => index === layerIndex ? { ...layer, [key]: value } : layer))
   return updateLayer(sound, layerIndex, layer => {
     if (key === 'gain') return { ...layer, gain: value }
     if (key === 'delay') return { ...layer, delay: value / 1000 }
@@ -72,7 +106,7 @@ export const updateSoundParameter = (sound: SoundPreset, layerIndex: number, key
 }
 
 export const updateSoundWave = (sound: SoundPreset, layerIndex: number, wave: SoundWave | 'noise'): SoundPreset => {
-  if (sound.kind === 'generated') return wave === 'noise' ? sound : { ...sound, wave }
+  if (sound.kind === 'generated') return wave === 'noise' ? sound : withGeneratedLayers(sound, generatedSoundLayers(sound).map((layer, index) => index === layerIndex ? { ...layer, wave } : layer))
   return updateLayer(sound, layerIndex, layer => ({
     ...layer,
     source: wave === 'noise'
@@ -94,6 +128,9 @@ const filters: readonly unknown[] = ['lowpass', 'highpass', 'bandpass', 'notch',
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object'
 const nonnegative = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0
 const positive = (value: unknown): value is number => nonnegative(value) && value > 0
+const validGeneratedLayer = (value: unknown): boolean => record(value) && waves.includes(value.wave)
+  && ['frequency', 'sweep', 'duration'].every(key => positive(value[key]))
+  && ['filter', 'resonance', 'gain'].every(key => nonnegative(value[key]))
 const validLayer = (value: unknown): boolean => {
   if (!record(value) || !record(value.source) || !record(value.envelope) || !nonnegative(value.gain)) return false
   const source = value.source
@@ -107,9 +144,8 @@ const validLayer = (value: unknown): boolean => {
 
 export const isSavedSoundPreset = (value: unknown): value is SoundPreset => {
   if (!record(value) || typeof value.id !== 'string' || !value.id.startsWith('saved-') || typeof value.label !== 'string') return false
-  if (value.kind === 'generated') return waves.includes(value.wave)
-    && ['frequency', 'sweep', 'duration'].every(key => positive(value[key]))
-    && ['filter', 'resonance', 'gain'].every(key => nonnegative(value[key]))
+  if (value.kind === 'generated') return validGeneratedLayer(value)
+    && (value.additionalLayers === undefined || (Array.isArray(value.additionalLayers) && value.additionalLayers.every(validGeneratedLayer)))
   if (value.kind !== 'recipe' || !record(value.recipe)) return false
   return 'layers' in value.recipe
     ? Array.isArray(value.recipe.layers) && value.recipe.layers.length > 0 && value.recipe.layers.every(validLayer)

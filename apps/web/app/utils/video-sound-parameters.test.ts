@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { GeneratedSound, RecipeSound } from '../types/video-sound'
-import { isSavedSoundPreset, soundLayers, soundParameters, updateSoundFilter, updateSoundParameter, updateSoundWave } from './video-sound-parameters'
+import { addSoundLayer, generatedSoundLayers, isSavedSoundPreset, removeSoundLayer, soundLayerCount, soundLayers, soundParameters, updateSoundFilter, updateSoundParameter, updateSoundWave } from './video-sound-parameters'
 
 const recipe: RecipeSound = {
   id: 'tap9yv8r', label: 'Tap', kind: 'recipe', recipe: { layers: [
@@ -75,5 +75,55 @@ describe('sound preset parameter editing', () => {
     expect(isSavedSoundPreset({ id: 'saved-invalid', label: 'Broken', kind: 'recipe', recipe: {} })).toBe(false)
     expect(isSavedSoundPreset({ ...tone, id: 'saved-invalid', frequency: null })).toBe(false)
     expect(isSavedSoundPreset({ ...recipe, id: 'saved-invalid', recipe: { layers: [] } })).toBe(false)
+  })
+
+  it.each([recipe, tone])('adds editable layers to $kind presets without changing the original', (preset) => {
+    const original = JSON.stringify(preset)
+    const count = soundLayerCount(preset)
+    const added = addSoundLayer(preset)
+    expect(soundLayerCount(added)).toBe(count + 1)
+    const edited = updateSoundParameter(updateSoundWave(added, count, 'triangle'), count, 'gain', .35)
+    expect(soundParameters(edited, count).find(field => field.key === 'gain')?.value).toBe(.35)
+    expect(soundParameters(edited, 0)).toEqual(soundParameters(preset, 0))
+    expect(JSON.stringify(preset)).toBe(original)
+    expect(isSavedSoundPreset(JSON.parse(JSON.stringify({ ...edited, id: 'saved-layers' })))).toBe(true)
+  })
+
+  it('can add a layer to a single-layer recipe', () => {
+    const single: RecipeSound = { ...recipe, recipe: soundLayers(recipe)[0]! }
+    const added = addSoundLayer(single) as RecipeSound
+    expect(soundLayers(added)).toHaveLength(2)
+    expect(soundLayers(added)[0]).toEqual(single.recipe)
+    expect(soundLayers(single)).toHaveLength(1)
+  })
+
+  it.each([recipe, tone])('removes the selected $kind layer while preserving the remaining settings', (preset) => {
+    const added = addSoundLayer(preset)
+    const nextLayerFields = soundParameters(added, 1)
+    const removed = removeSoundLayer(added, 0)
+    expect(soundLayerCount(removed)).toBe(soundLayerCount(added) - 1)
+    expect(soundParameters(removed, 0)).toEqual(nextLayerFields)
+    expect(removed.id).toBe(preset.id)
+    expect(isSavedSoundPreset(JSON.parse(JSON.stringify({ ...removed, id: 'saved-removed' })))).toBe(true)
+  })
+
+  it.each([recipe, tone])('keeps one $kind layer and ignores invalid removal indexes', (preset) => {
+    let remaining = preset
+    while (soundLayerCount(remaining) > 1) remaining = removeSoundLayer(remaining, 0)
+    expect(removeSoundLayer(remaining, 0)).toBe(remaining)
+    for (const index of [-1, .5, Number.NaN, 100]) expect(removeSoundLayer(preset, index)).toBe(preset)
+  })
+
+  it('keeps every motion-based layer available to the preview and export scheduler', () => {
+    const added = addSoundLayer(addSoundLayer(tone))
+    const edited = updateSoundParameter(added, 2, 'frequency', 2) as GeneratedSound
+    expect(generatedSoundLayers(edited).map(layer => layer.frequency)).toEqual([.85, 1, 2])
+    const removed = removeSoundLayer(edited, 1) as GeneratedSound
+    expect(generatedSoundLayers(removed).map(layer => layer.frequency)).toEqual([.85, 2])
+  })
+
+  it('rejects invalid extra layers when loading saved presets', () => {
+    expect(isSavedSoundPreset({ ...tone, id: 'saved-invalid', additionalLayers: [{}] })).toBe(false)
+    expect(isSavedSoundPreset({ ...tone, id: 'saved-invalid', additionalLayers: {} })).toBe(false)
   })
 })

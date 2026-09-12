@@ -2,13 +2,13 @@
 import { MoreH } from 'reicon-vue'
 import type { VideoComposerSettings, VideoTemplate } from '~/types/video-composer'
 import type { VideoExportAudioSession } from '~/composables/useVideoComposer'
-import type { GeneratedSound, RecipeLayer, RecipeSound, SavedRecipeSoundId, SoundId, SoundPreset, SoundRecipe, SoundWave } from '~/types/video-sound'
+import type { GeneratedSound, GeneratedSoundLayer, RecipeLayer, RecipeSound, SavedRecipeSoundId, SoundId, SoundPreset, SoundRecipe, SoundWave } from '~/types/video-sound'
 import AppDropdownMenu from '~/components/AppDropdownMenu.vue'
 import VideoRangeInput from '~/components/video-composer/VideoRangeInput.vue'
 import VideoSoundAdvanced from '~/components/video-composer/VideoSoundAdvanced.vue'
 import { requestVideoAudioPlayback, resumeVideoAudioContext } from '~/utils/video-audio-playback'
 import { createVideoAccentEvents, type VideoMainSoundKind as MainSoundKind, type VideoKickKind, type VideoSoundEvent as SoundEvent } from '~/utils/video-accent-events'
-import { isSavedSoundPreset } from '~/utils/video-sound-parameters'
+import { generatedSoundLayers, isSavedSoundPreset } from '~/utils/video-sound-parameters'
 
 const props = defineProps<{
   settings: VideoComposerSettings
@@ -415,7 +415,7 @@ const resume = async () => {
   if (enabled.value) await ensureContext()
 }
 
-const toneFor = (step: number, selectedSound: GeneratedSound, kind: MainSoundKind, outputVolume = volume.value) => {
+const toneFor = (step: number, selectedSound: GeneratedSoundLayer, kind: MainSoundKind, outputVolume = volume.value) => {
   const collection = props.template.collection
   const baseFrequency = {
     flicker: 270,
@@ -539,7 +539,7 @@ const playKick = (audio: AudioContext, kind: VideoKickKind, destination: AudioNo
   oscillator.stop(now + duration + .01)
 }
 
-const scheduleGeneratedTone = (audio: AudioContext, step: number, selectedSound: GeneratedSound, kind: MainSoundKind, destination: AudioNode = audio.destination, when = audio.currentTime, outputVolume = volume.value) => {
+const scheduleGeneratedTone = (audio: AudioContext, step: number, selectedSound: GeneratedSoundLayer, kind: MainSoundKind, destination: AudioNode = audio.destination, when = audio.currentTime, outputVolume = volume.value) => {
   const tone = toneFor(step, selectedSound, kind, outputVolume)
   const oscillator = audio.createOscillator()
   const filter = audio.createBiquadFilter()
@@ -566,7 +566,9 @@ const scheduleMainTone = (audio: AudioContext, selectedSound: RecipeSound | Gene
   if (selectedSound.kind === 'recipe') {
     playRecipe(audio, selectedSound.recipe, kind, destination, when, outputVolume)
   } else {
-    scheduleGeneratedTone(audio, step, selectedSound, kind, destination, when, outputVolume)
+    for (const layer of generatedSoundLayers(selectedSound)) {
+      scheduleGeneratedTone(audio, step, layer, kind, destination, when, outputVolume)
+    }
   }
 }
 

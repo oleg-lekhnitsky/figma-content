@@ -4,10 +4,7 @@ export type SavedRecipeSoundId = `saved-${string}`
 export type RecipeSoundId = CuratedRecipeSoundId | GeneratedRecipeSoundId | SavedRecipeSoundId
 export type SoundId = RecipeSoundId | 'soft' | 'glass' | 'pulse' | 'digital'
 export type SoundWave = 'sine' | 'triangle' | 'square' | 'sawtooth'
-export type GeneratedSound = {
-  id: Exclude<SoundId, RecipeSoundId> | SavedRecipeSoundId
-  label: string
-  kind: 'generated'
+export type GeneratedSoundLayer = {
   wave: SoundWave
   frequency: number
   sweep: number
@@ -15,6 +12,12 @@ export type GeneratedSound = {
   filter: number
   resonance: number
   gain: number
+}
+export type GeneratedSound = GeneratedSoundLayer & {
+  id: Exclude<SoundId, RecipeSoundId> | SavedRecipeSoundId
+  label: string
+  kind: 'generated'
+  additionalLayers?: GeneratedSoundLayer[]
 }
 export type RecipeLayer = {
   source: {
